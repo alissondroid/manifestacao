@@ -51,6 +51,7 @@ export function createRace({ players, send, broadcast, teleport }) {
   function leave(p) {
     if (!race.entrants.has(p.id)) return;
     race.entrants.delete(p.id);
+    p.frozen = false;
     if (race.state === 'running') {
       if (race.entrants.size === 0) finish();
     } else if (race.entrants.size === 0) {

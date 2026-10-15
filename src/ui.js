@@ -1,5 +1,5 @@
 import {
-  SIDES, SHIRTS, SKINS, BODIES, AGES, MODELS, HEIGHTS, BEARDS, PANTS, RACE,
+  SIDES, SHIRTS, SKINS, BODIES, AGES, MODELS, HEIGHTS, BEARDS, PANTS, RACE, SHOP_BY_ID, EMOTES,
 } from '../shared/config.js';
 import { CHARACTERS, modelId } from './models.js';
 
@@ -267,7 +267,9 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
 }
 
 /** HUD: chat, emotes e joystick virtual. */
-export function initHud({ onChat, onEmote, onAttack, onLeave, onSound, soundOn }) {
+export function initHud({
+  onChat, onEmote, onAttack, onReact, onWho, onFireworks, onBillboard, onLeave, onSound, soundOn,
+}) {
   const hud = $('#hud');
   const log = $('#chatlog');
   const input = $('#chatinput');
@@ -296,6 +298,44 @@ export function initHud({ onChat, onEmote, onAttack, onLeave, onSound, soundOn }
     b.addEventListener('click', () => onAttack(b.dataset.attack));
   });
   $('#leave').onclick = onLeave;
+
+  // menu de gestos (os premium aparecem com 🔒 para quem não tem)
+  const menu = $('#emotemenu');
+  let premium = false;
+  const paintMenu = () => {
+    menu.replaceChildren(...EMOTES.map((e) => {
+      const b = document.createElement('button');
+      b.dataset.emote = e.anim;
+      b.title = `${e.name}${e.key ? ` (${e.key})` : ''}${e.premium && !premium ? ' · premium' : ''}`;
+      b.textContent = e.icon;
+      if (e.premium && !premium) b.classList.add('locked');
+      b.addEventListener('click', () => { menu.hidden = true; onEmote(e.anim); });
+      return b;
+    }));
+  };
+  paintMenu();
+  $('#emotebtn').onclick = () => { menu.hidden = !menu.hidden; $('#reacts').hidden = true; };
+  $('#jumpbtn').onclick = () => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
+  $('#fogosbtn').onclick = onFireworks;
+  $('#telaobtn').onclick = onBillboard;
+
+  // reações flutuantes (7 a 0 no teclado)
+  const reacts = $('#reacts');
+  $('#reactbtn').onclick = () => { reacts.hidden = !reacts.hidden; menu.hidden = true; };
+  document.querySelectorAll('[data-react]').forEach((b) => {
+    b.addEventListener('click', () => { onReact(Number(b.dataset.react)); reacts.hidden = true; });
+  });
+
+  // lista de jogadores (Tab)
+  const who = $('#who');
+  let whoTimer = null;
+  const toggleWho = (force) => {
+    const open = force ?? who.hidden;
+    who.hidden = !open;
+    clearInterval(whoTimer);
+    if (open) { onWho(); whoTimer = setInterval(onWho, 3000); }
+  };
+  $('#whobtn').onclick = () => toggleWho();
 
   const sound = $('#sound');
   let on = soundOn;
@@ -339,6 +379,51 @@ export function initHud({ onChat, onEmote, onAttack, onLeave, onSound, soundOn }
       $('#drivebtn').hidden = watching;
     },
     isTyping: () => document.activeElement === input,
+    toggleWho,
+    prefillChat(text) { input.value = text; input.focus(); },
+    /** Itens da loja no HUD: só aparecem para quem tem unidades. */
+    setInventory(inv, canUsePremium) {
+      const f = inv.fogos || 0;
+      const t = inv.telao || 0;
+      $('#fogosbtn').hidden = !f;
+      $('#fogosbtn').textContent = `🎆 Fogos (${f})`;
+      $('#telaobtn').hidden = !t;
+      $('#telaobtn').textContent = `📺 Telão (${t})`;
+      if (premium !== canUsePremium) { premium = canUsePremium; paintMenu(); }
+    },
+    /** Mensagem paga no topo da tela de todo mundo. */
+    showBanner(nick, side, text) {
+      const el = $('#banner');
+      el.replaceChildren();
+      const who = document.createElement('b');
+      who.style.color = SIDES[side]?.color ?? '#fff';
+      who.textContent = `📺 ${nick}`;
+      el.append(who, document.createTextNode(` ${text}`));
+      el.hidden = false;
+      clearTimeout(el.timer);
+      el.timer = setTimeout(() => { el.hidden = true; }, 9000);
+    },
+    setWho(list, total) {
+      const rows = list.map(([nick, side, hits, kos]) => `<div class="row"><i style="background:${SIDES[side]?.color}"></i><span>${esc(nick)}</span><small>👊 ${hits} · ☠️ ${kos}</small></div>`).join('');
+      who.innerHTML = `<h4>Na avenida: ${total}</h4>${rows}`;
+    },
+    /** Barra de vida (só com PvP ligado) e de fôlego. */
+    setVitals({ hp, shield, pvp, stamina, tired }) {
+      const bar = $('#hpbar');
+      bar.hidden = !pvp;
+      bar.classList.toggle('shield', shield);
+      bar.firstElementChild.style.width = `${hp}%`;
+      bar.lastElementChild.textContent = shield ? `🛡 ${Math.round(hp)}` : Math.round(hp);
+      const st = $('#stbar');
+      st.firstElementChild.style.width = `${stamina}%`;
+      st.classList.toggle('tired', tired);
+      st.classList.toggle('full', stamina >= 99.5);
+    },
+    setKo(text) {
+      const el = $('#ko');
+      el.hidden = !text;
+      if (text) el.innerHTML = text;
+    },
     setEmote(anim) {
       document.querySelectorAll('[data-emote]').forEach((b) => b.classList.toggle('on', Number(b.dataset.emote) === anim));
     },
@@ -422,18 +507,33 @@ export function initModes({ onRace, onPvp, onThrow, onDrive }) {
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /** Rótulo flutuante com nome e balão de fala. */
-export function createLabel(nick, color) {
+export function createLabel(nick, color, equip = {}) {
   const el = document.createElement('div');
   el.className = 'label';
   const name = document.createElement('div');
   name.className = 'name';
   const dot = document.createElement('i');
   dot.style.background = color;
-  name.append(dot, document.createTextNode(nick));
+  const badge = document.createElement('span');
+  const text = document.createTextNode(nick);
+  name.append(dot, badge, text);
+  const style = (eq = {}) => {
+    const icon = SHOP_BY_ID[eq.badge]?.icon ?? '';
+    badge.textContent = icon ? `${icon} ` : '';
+    name.classList.toggle('vip', !!eq.vip);
+  };
+  style(equip);
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
   bubble.hidden = true;
-  el.append(bubble, name);
+  const hpbar = document.createElement('div');
+  hpbar.className = 'hpbar';
+  hpbar.hidden = true;
+  hpbar.append(document.createElement('i'));
+  const status = document.createElement('div');
+  status.className = 'status';
+  status.hidden = true;
+  el.append(bubble, name, hpbar, status);
   $('#labels').append(el);
 
   let timer;
@@ -444,6 +544,34 @@ export function createLabel(nick, color) {
       bubble.hidden = false;
       clearTimeout(timer);
       timer = setTimeout(() => { bubble.hidden = true; }, 6000);
+    },
+    setStyle: style,
+    /** Barra de vida sobre a cabeça: só aparece ferido ou protegido. */
+    setHp(hp, shield) {
+      hpbar.hidden = hp >= 100 && !shield;
+      hpbar.classList.toggle('shield', shield);
+      hpbar.firstChild.style.width = `${Math.max(0, hp)}%`;
+    },
+    /** Emoji girando sobre a cabeça (ex.: 💫 no nocaute). Vazio remove. */
+    setStatus(emoji) {
+      status.textContent = emoji || '';
+      status.hidden = !emoji;
+    },
+    /** Número flutuante (dano). */
+    pop(text, color = '#ff5a5a') {
+      const r = document.createElement('span');
+      r.className = 'dmg';
+      r.textContent = text;
+      r.style.color = color;
+      r.addEventListener('animationend', () => r.remove());
+      el.append(r);
+    },
+    react(emoji) {
+      const r = document.createElement('span');
+      r.className = 'react';
+      r.textContent = emoji;
+      r.addEventListener('animationend', () => r.remove());
+      el.append(r);
     },
     place(x, y, show) {
       if (show !== visible) { el.style.display = show ? '' : 'none'; visible = show; }

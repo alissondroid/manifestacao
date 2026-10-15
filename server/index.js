@@ -4,15 +4,24 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import {
-  WORLD, SIDES, SHIRTS, SKINS, HAIRS, HAIR_STYLES, BODIES, AGES, MODELS, HEIGHTS, BEARDS, TOPS, PANTS, FLAGS, ANIMS, MAX_SPEED, LIMITS, MELEE, VEHICLE,
+  WORLD, SIDES, SHIRTS, SKINS, HAIRS, HAIR_STYLES, BODIES, AGES, MODELS, HEIGHTS, BEARDS, TOPS, PANTS, FLAGS, ANIMS, MAX_SPEED, LIMITS, MELEE, VEHICLE, COMBAT, REACTIONS, PREMIUM_ANIMS, BILLBOARD,
 } from '../shared/config.js';
 import { handleApi } from './api.js';
 import { userFromRequest, nickTaken } from './auth.js';
-import { equippedMap, designsOf } from './shop.js';
+import {
+  equippedMap, designsOf, hasPremiumEmotes, inventoryOf, spend,
+} from './shop.js';
 import { filterText } from './moderation.js';
 import { createRace } from './race.js';
 import { PVP } from '../shared/config.js';
+import { createZones } from './zones.js';
 
+process.on('uncaughtException', (err) => console.error('[erro não tratado]', err));
+process.on('unhandledRejection', (err) => console.error('[promessa rejeitada]', err));
+
+const PROD = process.env.NODE_ENV === 'production';
+const TRUST_PROXY = process.env.TRUST_PROXY === '1'; // só confie em X-Forwarded-* atrás de um proxy seu
+const MAX_SPECTATORS = Number(process.env.MAX_SPECTATORS) || 100;
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_PLAYERS = Number(process.env.MAX_PLAYERS) || 300;
 const MAX_PER_IP = Number(process.env.MAX_PER_IP) || 5;
@@ -33,10 +42,23 @@ const MIME = {
   '.glb': 'model/gltf-binary',
   '.mp3': 'audio/mpeg',
   '.ico': 'image/x-icon',
+  '.txt': 'text/plain; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
+  '.webmanifest': 'application/manifest+json',
 };
 
 const server = http.createServer(async (req, res) => {
-  if (await handleApi(req, res, { onEquip: refreshLook })) return;
+  try {
+    await handle(req, res);
+  } catch (err) {
+    console.error('[http]', err);
+    if (!res.headersSent) res.writeHead(400);
+    res.end();
+  }
+});
+
+async function handle(req, res) {
+  if (await handleApi(req, res, { onEquip: refreshLook, onDelete: kickUser })) return;
   if (!fs.existsSync(DIST)) {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
     return res.end('Sem build. Em desenvolvimento use "npm run dev" (cliente em http://localhost:5173).');
@@ -44,25 +66,59 @@ const server = http.createServer(async (req, res) => {
   let file;
   try {
     const { pathname } = new URL(req.url, 'http://localhost');
-    file = path.join(DIST, path.normalize(decodeURIComponent(pathname)));
+    const decoded = decodeURIComponent(pathname);
+    if (decoded.includes('\0')) throw new Error('nul');
+    file = path.join(DIST, path.normalize(decoded));
   } catch {
     res.writeHead(400);
     return res.end();
   }
-  if (!file.startsWith(DIST)) {
+  if (file !== DIST && !file.startsWith(DIST + path.sep)) {
     res.writeHead(403);
     return res.end();
   }
+  const dirIndex = path.join(file, 'index.html');
+  if (file !== DIST && fs.existsSync(dirIndex)) file = dirIndex; // /termos -> /termos/index.html
   fs.stat(file, (err, st) => {
-    if (err || st.isDirectory()) file = path.join(DIST, 'index.html');
-    res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
+    if (err || st.isDirectory()) {
+      // só a página inicial existe; qualquer outro caminho é 404 de verdade (não "soft 404" para os buscadores)
+      if (new URL(req.url, 'http://localhost').pathname !== '/') {
+        res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+        return res.end('Página não encontrada. Volte para https://avenidaonline.com/');
+      }
+      file = path.join(DIST, 'index.html');
+    }
+    const inAssets = file.includes(`${path.sep}assets${path.sep}`);
+    const cache = file.endsWith('index.html') ? 'no-cache'
+      : inAssets ? 'public, max-age=31536000, immutable'
+        : 'public, max-age=86400';
+    res.writeHead(200, {
+      'content-type': MIME[path.extname(file)] || 'application/octet-stream',
+      'x-content-type-options': 'nosniff',
+      'cache-control': cache,
+    });
     fs.createReadStream(file).on('error', () => res.end()).pipe(res);
   });
-});
+}
 
 // ---------- Estado e validação ----------
 
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 2048 });
+// Em produção o WebSocket só aceita a própria origem (ou as de ALLOWED_ORIGINS, separadas por vírgula).
+const allowedHosts = new Set([
+  ...(process.env.PUBLIC_URL ? [new URL(process.env.PUBLIC_URL).host] : []),
+  ...(process.env.ALLOWED_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean).map((o) => { try { return new URL(o).host; } catch { return o; } }),
+]);
+function originOk(req) {
+  if (!PROD) return true;
+  const origin = req.headers.origin;
+  if (!origin) return false;
+  let host;
+  try { host = new URL(origin).host; } catch { return false; }
+  return host === req.headers.host || (TRUST_PROXY && host === req.headers['x-forwarded-host']) || allowedHosts.has(host);
+}
+const wss = new WebSocketServer({
+  server, path: '/ws', maxPayload: 2048, verifyClient: ({ req }) => originOk(req),
+});
 const players = new Map();
 const perIp = new Map();
 let nextId = 1;
@@ -80,7 +136,8 @@ const cleanText = (s, max) => String(s ?? '')
 
 
 // `equip` e `custom` vêm do banco (itens comprados e desenhos), nunca do cliente.
-function cleanLook(look = {}, equip = {}, custom = {}) {
+function cleanLook(rawLook, equip = {}, custom = {}) {
+  const look = rawLook && typeof rawLook === 'object' ? rawLook : {};
   const body = int(look.body, BODIES.length - 1);
   return {
     body,
@@ -95,10 +152,19 @@ function cleanLook(look = {}, equip = {}, custom = {}) {
     top: int(look.top, TOPS.length - 1),
     pants: int(look.pants, PANTS.length - 1),
     flag: int(look.flag, FLAGS.length - 1),
-    sign: cleanText(look.sign, LIMITS.sign),
+    sign: filterText(cleanText(look.sign, LIMITS.sign)),
     equip,
     custom,
   };
+}
+
+/** Conta excluída: tira o jogador da avenida. */
+function kickUser(userId) {
+  for (const p of [...players.values()]) {
+    if (p.userId !== userId) continue;
+    p.ws.close(4001, 'Conta excluída');
+    removePlayer(p);
+  }
 }
 
 /** Itens equipados mudaram na loja: atualiza o avatar de quem está online e avisa quem o vê. */
@@ -106,6 +172,8 @@ function refreshLook(userId) {
   for (const p of players.values()) {
     if (p.userId !== userId) continue;
     p.look = { ...p.look, equip: equippedMap(userId), custom: designsOf(userId) };
+    p.premium = hasPremiumEmotes(userId);
+    send(p.ws, { t: 'inv', inv: inventoryOf(userId), premium: p.premium });
     const msg = JSON.stringify({ t: 'look', id: p.id, look: p.look });
     for (const ws of wss.clients) {
       if (ws.readyState === ws.OPEN && ws.joined && (ws.player === p || ws.known.has(p.id))) ws.send(msg);
@@ -149,6 +217,8 @@ function teleport(p, x, z, ry) {
 
 const race = createRace({ players, send, broadcast: (msg) => broadcast(msg), teleport });
 
+const zones = createZones({ players, broadcast: (msg) => broadcast(msg) });
+
 // ---------- PvP: tomatada ----------
 // O arremesso é resolvido no servidor pela posição e direção do jogador: o tomate voa em linha
 // reta até PVP.range e acerta o primeiro jogador (com PvP ligado) a menos de PVP.radius da linha.
@@ -156,7 +226,7 @@ const race = createRace({ players, send, broadcast: (msg) => broadcast(msg), tel
 const sideScores = SIDES.map(() => 0);
 function pvpScores() {
   const top = [...players.values()].filter((p) => p.hits > 0).sort((a, b) => b.hits - a.hits).slice(0, 5)
-    .map((p) => ({ nick: p.nick, side: p.side, hits: p.hits }));
+    .map((p) => ({ nick: p.nick, side: p.side, hits: p.hits, kos: p.kos }));
   return { t: 'pvp', scores: sideScores, top };
 }
 
@@ -167,16 +237,60 @@ function sendNear(p, msg) {
   }
 }
 
+const spawnPoint = () => [(Math.random() - 0.5) * 12, (Math.random() - 0.5) * 10];
+
+function announceHp(p) {
+  const now = Date.now();
+  sendNear(p, {
+    t: 'hp', id: p.id, hp: Math.round(p.hp), sh: Math.max(0, p.shieldUntil - now), ko: Math.max(0, p.koUntil - now),
+  });
+}
+
+const protectedNow = (p, now) => p.koUntil > now || p.shieldUntil > now;
+
+/** Tira vida do alvo; a zero, nocauteia (some do jogo por um tempo e volta protegido). */
+function damage(target, attacker, kind) {
+  const now = Date.now();
+  target.hp = Math.max(0, target.hp - COMBAT.dmg[kind]);
+  target.lastHurt = now;
+  if (target.hp <= 0) {
+    target.koUntil = now + COMBAT.koMs;
+    target.stunUntil = target.koUntil;
+    attacker.kos += 1;
+    sideScores[attacker.side] += COMBAT.koBonus;
+    send(target.ws, { t: 'ko', by: attacker.nick, ms: COMBAT.koMs });
+    broadcast({ t: 'feed', a: attacker.nick, as: attacker.side, v: target.nick, vs: target.side, k: kind });
+  }
+  announceHp(target);
+}
+
+/** A cada meio segundo: devolve quem terminou o nocaute e regenera a vida de quem não apanha há um tempo. */
+setInterval(() => {
+  const now = Date.now();
+  for (const p of players.values()) {
+    if (p.hp <= 0 && p.koUntil <= now) {
+      p.hp = COMBAT.hp;
+      p.shieldUntil = now + COMBAT.shieldMs;
+      const [x, z] = spawnPoint();
+      teleport(p, x, z, 0);
+      announceHp(p);
+    } else if (p.hp > 0 && p.hp < COMBAT.hp && now - p.lastHurt > COMBAT.regenDelayMs) {
+      p.hp = Math.min(COMBAT.hp, p.hp + COMBAT.regenPerSec / 2);
+      announceHp(p);
+    }
+  }
+}, 500);
+
 function throwTomato(me) {
   const now = Date.now();
-  if (!me.pvp || now - me.lastThrow < PVP.cooldownMs) return;
+  if (!me.pvp || me.koUntil > now || now - me.lastThrow < PVP.cooldownMs) return;
   me.lastThrow = now;
   const dx = Math.sin(me.ry);
   const dz = Math.cos(me.ry);
   let target = null;
   let best = PVP.range;
   for (const p of players.values()) {
-    if (p === me || !p.pvp) continue;
+    if (p === me || !p.pvp || protectedNow(p, Date.now())) continue;
     const ox = p.x - me.x;
     const oz = p.z - me.z;
     const along = ox * dx + oz * dz;
@@ -189,12 +303,13 @@ function throwTomato(me) {
   if (target) {
     me.hits += 1;
     sideScores[me.side] += 1;
+    damage(target, me, 'tomato');
   }
   sendNear(me, {
     t: 'throw', id: me.id, x: round2(me.x), z: round2(me.z), ry: round2(me.ry), dist: round2(best), hit: target ? target.id : null,
   });
   if (target) {
-    send(target.ws, { t: 'hitby', id: me.id, nick: me.nick });
+    send(target.ws, { t: 'hitby', id: me.id, nick: me.nick, hp: Math.round(target.hp) });
     broadcast(pvpScores());
   }
 }
@@ -210,7 +325,7 @@ function hitTarget(me, kind, pushDir) {
   let target = null;
   let best = spec.reach;
   for (const p of players.values()) {
-    if (p === me || !p.pvp) continue;
+    if (p === me || !p.pvp || protectedNow(p, now)) continue;
     const ox = p.x - me.x;
     const oz = p.z - me.z;
     const d = Math.hypot(ox, oz);
@@ -231,24 +346,63 @@ function hitTarget(me, kind, pushDir) {
   teleport(target, nx, nz, target.ry);
   me.hits += 1;
   sideScores[me.side] += 1;
-  send(target.ws, { t: 'hitby', id: me.id, nick: me.nick, kind });
+  damage(target, me, kind);
+  send(target.ws, { t: 'hitby', id: me.id, nick: me.nick, kind, hp: Math.round(target.hp) });
   broadcast(pvpScores());
   return target;
 }
 
 function attack(me, kind) {
-  if (!MELEE[kind] || kind === 'car' || me.a === DRIVE) return;
+  if (!Object.hasOwn(MELEE, kind) || kind === 'car' || me.a === DRIVE) return;
   const now = Date.now();
-  if (now - (me.lastAttack || 0) < MELEE[kind].cooldownMs) return;
+  if (me.koUntil > now || now - (me.lastAttack || 0) < MELEE[kind].cooldownMs) return;
   me.lastAttack = now;
   const target = me.pvp ? hitTarget(me, kind) : null;
   sendNear(me, { t: 'attack', id: me.id, kind, hit: target ? target.id : null });
 }
 
+// ---------- Itens consumíveis (comprados na loja) ----------
+
+const notice = (p, text) => send(p.ws, { t: 'notice', text });
+const stock = (p) => send(p.ws, { t: 'inv', inv: inventoryOf(p.userId), premium: p.premium });
+
+/** Fogos de artifício sobre o jogador, visíveis a quem está por perto. Consome 1 unidade. */
+function useFireworks(me) {
+  const now = Date.now();
+  if (!me.userId) return notice(me, 'Entre numa conta para usar itens da loja.');
+  if (me.koUntil > now) return;
+  if (now - me.lastUse < 4000) return notice(me, 'Espere um pouco para soltar outro.');
+  if (!spend(me.userId, 'fogos')) return notice(me, 'Você não tem fogos. Compre na loja 🛍️.');
+  me.lastUse = now;
+  sendNear(me, { t: 'fx', k: 'fogos', x: round2(me.x), z: round2(me.z), side: me.side });
+  stock(me);
+}
+
+let lastBillboard = 0;
+/** Mensagem no telão: aparece no telão da avenida e no topo da tela de todos. Consome 1 unidade só se for ao ar. */
+function billboard(me, raw) {
+  const now = Date.now();
+  if (!me.userId) return notice(me, 'Entre numa conta para usar o telão.');
+  const text = cleanText(raw, BILLBOARD.max);
+  if (!text) return notice(me, 'Escreva depois do comando: /telao seu texto');
+  if (now - lastBillboard < BILLBOARD.cooldownMs) return notice(me, 'O telão está ocupado. Tente em instantes.');
+  if (!spend(me.userId, 'telao')) return notice(me, 'Você não tem mensagens de telão. Compre na loja 🛍️.');
+  lastBillboard = now;
+  broadcast({ t: 'billboard', nick: me.nick, side: me.side, text });
+  stock(me);
+}
+
+/** Tira o jogador do jogo (quem o conhecia recebe `del` no próximo ciclo de sincronização). */
+function removePlayer(p) {
+  race.onLeave(p);
+  players.delete(p.id);
+  broadcast({ t: 'online', counts: onlineCounts() }, null, true);
+}
+
 // ---------- Conexões ----------
 
 wss.on('connection', (ws, req) => {
-  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
+  const ip = (TRUST_PROXY && req.headers['x-forwarded-for']?.split(',').pop().trim()) || req.socket.remoteAddress;
   const open = perIp.get(ip) || 0;
   if (open >= MAX_PER_IP) return ws.close(1008, 'Muitas conexões');
   perIp.set(ip, open + 1);
@@ -259,8 +413,23 @@ wss.on('connection', (ws, req) => {
   send(ws, { t: 'online', counts: onlineCounts() });
 
   let me = null;
+  let tokens = 60; // limite de mensagens: 40/s com rajada de 60
+  let refillAt = Date.now();
 
   ws.on('message', (raw) => {
+    try {
+      const now = Date.now();
+      tokens = Math.min(60, tokens + ((now - refillAt) / 1000) * 40);
+      refillAt = now;
+      if (tokens < 1) return;
+      tokens -= 1;
+      onMessage(raw);
+    } catch (err) {
+      console.error('[ws]', err);
+    }
+  });
+
+  function onMessage(raw) {
     let m;
     try { m = JSON.parse(raw); } catch { return; }
     if (!m || typeof m.t !== 'string') return;
@@ -268,10 +437,13 @@ wss.on('connection', (ws, req) => {
     // Modo "só assistir": recebe o mundo inteiro, sem avatar e sem chat.
     if (m.t === 'watch') {
       if (ws.joined) return;
+      const watching = [...wss.clients].filter((c) => c.joined && !c.player).length;
+      if (watching >= MAX_SPECTATORS) return send(ws, { t: 'denied', reason: 'Muitos espectadores no momento. Tente entrar na avenida.' });
       ws.joined = true;
       ws.player = null;
       ws.known = new Set();
       send(ws, { t: 'welcome', id: 0, spectator: true, x: 0, z: 0 });
+      send(ws, zones.snapshot());
       return;
     }
 
@@ -279,12 +451,16 @@ wss.on('connection', (ws, req) => {
       if (ws.joined || players.size >= MAX_PLAYERS) return;
       const id = nextId++;
       const account = ws.user; // definido no upgrade pelo cookie de sessão
-      const nick = account ? account.nick : cleanText(m.nick, LIMITS.nick) || `Visitante${id}`;
+      const nick = account ? account.nick : filterText(cleanText(m.nick, LIMITS.nick)) || `Visitante${id}`;
       if (!account && nickTaken(nick)) {
         return send(ws, { t: 'denied', reason: 'Esse apelido pertence a uma conta. Escolha outro ou entre na conta.' });
       }
-      if (account && [...players.values()].some((p) => p.userId === account.id)) {
-        return send(ws, { t: 'denied', reason: 'Essa conta já está na avenida em outra aba.' });
+      if (account) { // a mesma conta entrando de novo (reconexão ou outra aba): a sessão antiga cai
+        for (const old of [...players.values()]) {
+          if (old.userId !== account.id) continue;
+          old.ws.close(4000, 'Entrou em outro lugar');
+          removePlayer(old);
+        }
       }
       me = {
         id,
@@ -293,8 +469,8 @@ wss.on('connection', (ws, req) => {
         nick,
         side: int(m.side, SIDES.length - 1),
         look: cleanLook(m.look, account ? equippedMap(account.id) : {}, account ? designsOf(account.id) : {}),
-        x: (Math.random() - 0.5) * 12,
-        z: (Math.random() - 0.5) * 10,
+        x: 0,
+        z: 0,
         ry: 0,
         a: 0,
         dirty: false,
@@ -307,7 +483,17 @@ wss.on('connection', (ws, req) => {
         stunUntil: 0,
         lastRunOver: 0,
         hits: 0,
+        kos: 0,
+        hp: COMBAT.hp,
+        lastHurt: 0,
+        koUntil: 0,
+        shieldUntil: 0,
+        lastReact: 0,
+        lastWho: 0,
+        lastUse: 0,
+        premium: account ? hasPremiumEmotes(account.id) : false,
       };
+      [me.x, me.z] = spawnPoint();
       players.set(id, me);
       ws.joined = true;
       ws.player = me;
@@ -316,6 +502,8 @@ wss.on('connection', (ws, req) => {
       send(ws, { t: 'welcome', id, x: round2(me.x), z: round2(me.z) });
       send(ws, race.snapshot());
       send(ws, pvpScores());
+      send(ws, zones.snapshot());
+      if (me.userId) stock(me);
       broadcast({ t: 'online', counts: onlineCounts() }, null, true);
       return;
     }
@@ -324,17 +512,19 @@ wss.on('connection', (ws, req) => {
 
     if (m.t === 'move') {
       const now = Date.now();
-      const dt = clamp((now - me.lastMove) / 1000, 0.05, 1);
+      const dt = clamp((now - me.lastMove) / 1000, 0.02, 1);
       const x = num(m.x);
       const z = num(m.z);
       const ry = num(m.ry);
       if (x === null || z === null || ry === null) return;
       if (me.frozen || me.stunUntil > now) return send(ws, { t: 'fix', x: round2(me.x), z: round2(me.z) });
+      if (!Number.isFinite(me.x + me.z)) return;
       const nx = clamp(x, -WORLD.halfWidth, WORLD.halfWidth);
       const nz = clamp(z, -WORLD.halfLength, WORLD.halfLength);
-      const a = int(m.a, ANIMS.length - 1);
+      let a = int(m.a, ANIMS.length - 1);
+      if (PREMIUM_ANIMS.includes(a) && !me.premium) a = 0; // gesto premium sem direito: fica parado
       const limit = a === DRIVE ? VEHICLE.maxSpeed : MAX_SPEED;
-      if (Math.hypot(nx - me.x, nz - me.z) > limit * dt * 1.5 + 0.5) {
+      if (Math.hypot(nx - me.x, nz - me.z) > limit * dt * 1.5 + 0.3) {
         // movimento impossível: devolve a posição aceita
         send(ws, { t: 'fix', x: round2(me.x), z: round2(me.z) });
         return;
@@ -360,26 +550,46 @@ wss.on('connection', (ws, req) => {
       const text = filterText(cleanText(m.text, LIMITS.chat));
       if (!text) return;
       me.lastChat = now;
+      if (/^\/telao(\s|$)/i.test(text)) return billboard(me, text.replace(/^\/telao\s*/i, ''));
+      if (/^\/fogos\b/i.test(text)) return useFireworks(me);
       broadcast({ t: 'chat', id: me.id, nick: me.nick, side: me.side, text });
     } else if (m.t === 'race') {
       if (m.action === 'join') race.join(me);
       else if (m.action === 'leave') race.leave(me);
     } else if (m.t === 'pvp') {
-      me.pvp = !!m.on;
+      const on = !!m.on;
+      const now = Date.now();
+      if (!on && me.pvp && (now - me.lastHurt < COMBAT.leaveLockMs || me.koUntil > now)) {
+        return send(ws, { t: 'pvp', on: true, locked: true });
+      }
+      me.pvp = on;
+      if (!on) { me.hp = COMBAT.hp; me.shieldUntil = 0; announceHp(me); }
       send(ws, { t: 'pvp', on: me.pvp });
+    } else if (m.t === 'use') {
+      if (m.item === 'fogos') useFireworks(me);
+    } else if (m.t === 'react') {
+      const e = Math.trunc(Number(m.e));
+      const now = Date.now();
+      if (!(e >= 0 && e < REACTIONS.length) || now - me.lastReact < 800) return;
+      me.lastReact = now;
+      sendNear(me, { t: 'react', id: me.id, e });
+    } else if (m.t === 'who') {
+      const now = Date.now();
+      if (now - me.lastWho < 1500) return;
+      me.lastWho = now;
+      const list = [...players.values()].sort((a, b) => b.hits - a.hits || b.kos - a.kos).slice(0, 80)
+        .map((p) => [p.nick, p.side, p.hits, p.kos]);
+      send(ws, { t: 'who', list, total: players.size });
     } else if (m.t === 'throw') {
       throwTomato(me);
     } else if (m.t === 'attack') {
       attack(me, String(m.kind));
     }
-  });
+  }
 
   ws.on('close', () => {
     perIp.set(ip, Math.max(0, (perIp.get(ip) || 1) - 1));
-    if (!me) return;
-    race.onLeave(me);
-    players.delete(me.id); // quem o conhecia recebe `del` no próximo ciclo
-    broadcast({ t: 'online', counts: onlineCounts() }, null, true);
+    if (me && players.get(me.id) === me) removePlayer(me);
   });
   ws.on('error', () => {});
 });
@@ -391,6 +601,7 @@ wss.on('connection', (ws, req) => {
 setInterval(() => {
   for (const ws of wss.clients) {
     if (!ws.joined || ws.readyState !== ws.OPEN) continue;
+    if (ws.bufferedAmount > 512 * 1024) { ws.terminate(); continue; } // cliente que não acompanha
     const vp = ws.player; // null = espectador (vê todos)
     const add = [];
     const del = [];

@@ -16,6 +16,9 @@ if (KEY && !isTestKey && !(isLiveKey && process.env.ALLOW_LIVE_PAYMENTS === '1')
 
 export const PROVIDER = isTestKey || (isLiveKey && process.env.ALLOW_LIVE_PAYMENTS === '1') ? 'stripe' : 'simulated';
 export const WEBHOOK_CONFIGURED = !!WEBHOOK_SECRET;
+// O checkout simulado entrega itens sem cobrar: só em desenvolvimento (ou com ALLOW_SIMULATED=1).
+export const PAYMENTS_ENABLED = PROVIDER === 'stripe' || process.env.NODE_ENV !== 'production' || process.env.ALLOW_SIMULATED === '1';
+if (!PAYMENTS_ENABLED) console.warn('[pagamentos] produção sem chave Stripe: a loja fica desativada (defina STRIPE_SECRET_KEY).');
 
 // ---------- Stripe (REST, sem SDK) ----------
 

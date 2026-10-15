@@ -56,6 +56,26 @@ Servidor → cliente: `online {counts}`, `welcome {id, x, z}`, `sync {add, del, 
 
 O servidor limita a velocidade, recorta a posição ao mapa, sanitiza textos e aplica cooldown de chat.
 
+## Hospedagem (VPS Ubuntu)
+
+Precisa de um processo Node 22+ sempre ligado, com WebSocket e disco (não serve Vercel/serverless nem hospedagem compartilhada). Na VPS, como root:
+
+```bash
+apt-get update && apt-get install -y git
+git clone -b main https://github.com/alissondroid/avenida-online.git /opt/avenida   # repositório privado: use um token na URL
+DOMAIN=seu-dominio.com BRANCH=main bash /opt/avenida/deploy/setup.sh               # sem DOMAIN: HTTP no IP, só para testar
+```
+
+O script instala Node 22 e Caddy (HTTPS automático), faz o build, cria o serviço `systemd` `avenida` (usuário sem login, reinício automático), o `.env`, o firewall (22, 80 e 443) e um backup diário do SQLite em `/var/backups/avenida` (14 dias). Depois edite `/opt/avenida/.env` (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) e rode `systemctl restart avenida`. Para atualizar: `bash /opt/avenida/deploy/update.sh`. Logs: `journalctl -u avenida -f`. Em produção sem chave Stripe a loja fica desligada de propósito.
+
+## Termos, privacidade e LGPD
+
+`/termos` e `/privacidade` (páginas estáticas em `public/termos` e `public/privacidade`) são **modelos para revisão com um advogado**: os campos destacados em amarelo precisam ser preenchidos (nome/razão social, CPF/CNPJ, cidade, e-mail de contato, provedor). Na VPS: `bash /opt/avenida/deploy/preencher-legal.sh "NOME" "CPF/CNPJ" "CIDADE/UF" "EMAIL" "Hostinger"` e depois `systemctl restart avenida`. O cadastro exige o aceite (`terms: true`, gravado em `users.terms_at`) e o botão "Excluir conta" (`POST /api/auth/delete`, pede a senha) apaga e-mail, senha, itens, desenhos, sessões e recordes, anonimiza o usuário e mantém só os pedidos pagos (obrigação fiscal). Se passar a usar analytics, anúncios ou cookies de terceiros, atualize a política e adicione um aviso de cookies.
+
+## SEO e identidade
+
+`index.html` traz título, descrição, canonical (`https://avenidaonline.com/`), Open Graph e Twitter Card (`public/og-image.png`, 1200×630), JSON-LD (`WebSite` e `VideoGame`) e um `<noscript>` com texto. Em `public/`: `favicon.svg`, `favicon.ico`, `favicon-32.png`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `site.webmanifest` (instalável como app), `robots.txt` (bloqueia `/api/` e `/pagar/`) e `sitemap.xml` (inclui `/termos` e `/privacidade`). O servidor responde 404 de verdade para caminhos inexistentes e define cache (HTML sem cache, `assets/` imutáveis). Se o domínio mudar, troque `avenidaonline.com` em `index.html`, `robots.txt` e `sitemap.xml`. Depois de publicar, cadastre o site no Google Search Console e envie o `sitemap.xml`.
+
 ## Contas e loja (modo de teste)
 
 - **Conta:** e-mail, apelido único e senha (mín. 8). A sessão fica num cookie `HttpOnly; SameSite=Lax` (30 dias), no banco só o hash do token. Quem tem conta joga com o apelido dela; convidados continuam sem cadastro, mas não podem usar o apelido de uma conta.
@@ -134,6 +154,44 @@ WASD/setas mover · Shift correr · arrastar para girar a câmera (ou Q/E) · En
 - **Golpes** (teclas 4, 5, 6 ou os botões 👊 🦵 🏏): murro, chute e cassetete. Murro e cassetete usam clipes da Universal Animation Library (`strikeNow` → `playOnce` em `src/avatar.js`); o chute é uma pose procedural; o cassetete aparece na mão direita durante o golpe. O cliente anima na hora e manda `{ t: 'attack', kind }`; o servidor (`attack`/`hitTarget` em `server/index.js`) só conta o golpe se os dois estiverem com o PvP ligado: acha o alvo mais perto dentro do alcance e do arco à frente (`MELEE` em `shared/config.js`), empurra-o (`fix`), deixa-o atordoado por alguns décimos (não anda; o cliente também bloqueia o teclado) e soma no placar. Quem leva o golpe cambaleia com um clipe de reação (`staggerNow`; atropelamento usa o de ser jogado para trás).
 - **Carro** (tecla C ou o botão 🚗): o jogador entra num carro da cor do seu lado, no lugar onde está. W/S aceleram e freiam, A/D viram (o giro cresce com a velocidade), a câmera segue atrás. A física é no cliente (`VEHICLE` em `shared/config.js`); o servidor só valida a velocidade máxima (16 m/s em vez de 9) quando o estado é `drive`. Os outros jogadores veem o carro no lugar do avatar (`ANIMS` ganhou `drive`).
 - **Atropelamento:** com PvP ligado e a mais de 3 m/s, o servidor aplica um golpe `car` em quem estiver a 1,6 m do carro (empurrão de 2,8 m, atordoado 1,2 s, no máximo uma vez a cada 1,5 s por vítima). Figurantes da multidão também caem e deslizam quando um carro (meu ou de outro jogador) passa por cima deles, e levantam 3 s depois (`knock` em `src/crowd.js`; só no cliente, a multidão é local).
+
+## Jogabilidade: vida, domínio e extras
+
+- **Vida e nocaute (PvP):** 100 de vida; tomate 12, murro 10, chute 16, cassetete 18, atropelamento 30 (`COMBAT` em `shared/config.js`). A zero, o jogador é nocauteado por 4 s (deitado, sem andar nem atacar), volta ao ponto de entrada com 3 s de escudo e o lado de quem nocauteou ganha +3. Quem está com escudo ou nocauteado não leva golpe. A vida regenera depois de 6 s sem apanhar e não dá para desligar o PvP por 8 s depois de apanhar. Barra de vida no HUD e sobre a cabeça de quem está ferido; aviso de nocaute para todos no chat. Servidor: `damage`, `announceHp` e o laço de 500 ms em `server/index.js`; mensagens `hp {id, hp, sh, ko}`, `ko {by, ms}`, `feed`.
+- **Domínio da Paulista** (`server/zones.js`): 5 trechos (Consolação, MASP, Brigadeiro, Gazeta, Paraíso). O lado com mais gente no trecho (bandeira conta em dobro) vai reduzindo a força do dono até tomá-lo; trecho sem dono precisa de um acúmulo. Cada trecho dominado rende 1 ponto por segundo ao lado. Mensagens `zones {z, scores}` (só quando muda) e `zonecap`.
+- **Minimapa** (`src/radar.js`): faixa da avenida com jogadores por cor de lado, trechos coloridos pelo dono, largada e chegada da corrida, o trecho em que você está e o placar do Domínio.
+- **Fôlego:** correr (Shift, ou o joystick até o fim) gasta; esgotado, só volta a correr com 25%.
+- **Colisão:** barracas, carros, ônibus, postes e totens bloqueiam o jogador (`world.obstacles`, caixas do cenário); o carro bate e perde velocidade.
+- **Reações** (teclas 7 a 0 ou o botão 😀): emojis flutuando sobre o jogador, visíveis a quem está perto (`react {e}`, `REACTIONS`).
+- **Jogadores** (Tab ou o botão 👥): lista de quem está na avenida, com acertos e nocautes (`who`).
+- **Sons:** golpe, nocaute e captura de trecho, sintetizados em `src/audio.js`.
+
+## Reações a golpes
+
+Quem apanha reage conforme o golpe (`staggerNow(kind, hp)` em `src/avatar.js`): soco e cassetete jogam a cabeça para trás, o chute pega no peito, o carro joga a pessoa para trás, o tomate dá um susto rápido; com a vida baixa, soco, chute e cassetete derrubam (clipe `knockback`). Além disso: faíscas de impacto por tipo (`Effects.hit`), número de dano flutuante, som diferente por golpe, tremor de câmera e flash vermelho para quem apanha, empurrão que desliza em vez de teleportar (`me.slide`), tique de confirmação para quem acerta, e no nocaute a queda para trás, o boneco deitado e 💫 girando sobre a cabeça até levantar.
+
+## Monetização e loja
+
+Tudo é cosmético ou de diversão; **nada dá vantagem no PvP** (catálogo em `SHOP`, `shared/config.js`; entrega em `server/shop.js`). Compra só com conta.
+
+| Tipo | Exemplos | Como funciona |
+|---|---|---|
+| **VIP** (`vip`) | Apoiador VIP 30 dias, R$ 9,90 | `users.vip_until` (renova somando 30 dias). Nome dourado, selo ⭐, gestos premium e 3 fogos de brinde |
+| **Pacotes** | Pacote de gestos (`unlock`), Kit manifestante e Kit festa (`bundle`, 30–35% de desconto) | Liberam gestos ou vários itens de uma vez |
+| **Visual** | Cartola, capacete, faixa, coroa, óculos aviador, máscara, mochila, capa, asas, aura do lado/dourada, selos 🔥🥩💎, carro dourado e carro de som, além de camisas, boné, bandeira e cartaz personalizados | Slots `head face shirt back flag sign fx badge car`; aparecem para todos |
+| **Consumíveis** | 5 fogos (R$ 3), 3 mensagens no telão (R$ 4) | Tabela `inventory`. Fogos: botão 🎆 ou `/fogos`, explodem sobre o jogador para quem está perto. Telão: `/telao texto` no chat, passa no telão 3D e no topo da tela de todos (1 a cada 12 s, passa pelo filtro de palavras) |
+| **Apoio** | R$ 5, 10 ou 25 | Dão o selo 💛 |
+
+Repetíveis (`vip`, `consumable`, `donation`) podem ser comprados de novo; os demais só uma vez. Um pedido pendente do mesmo item volta ao mesmo checkout (evita cobrança dupla). O webhook do Stripe confere sessão, valor e moeda, e a entrega vale mesmo se o pedido tinha sido marcado como falho. **Em produção sem chave Stripe a loja fica desligada** (o checkout simulado só funciona em desenvolvimento ou com `ALLOW_SIMULATED=1`). Antes de cobrar de verdade: revisar a legislação eleitoral, impostos, termos e nota fiscal.
+
+## Gestos, pulo e cenário
+
+- **Gestos** (menu 🎭): acenar, dançar e aplaudir são grátis; Dança 2, chamar, concordar e negar são premium (o servidor descarta o gesto de quem não tem direito). **Pulo** com Espaço ou ⤴️ (visível para os outros). O avatar gesticula (`talk`) quando fala no chat; nocauteados ficam deitados.
+- **Cenário** (`src/scenery.js`): faixas e bandeirinhas atravessando a pista, balões que balançam nas calçadas e, em cada trecho do Domínio, coluna de luz, listras no chão e nome flutuando, na cor do lado que domina. Fogos e confete (captura de trecho) em `src/effects.js`.
+
+## Auditoria e correções de segurança
+
+Corrigido: o servidor caía com `look: null`, cookie malformado ou URL inválida (agora há `try/catch` e handlers globais); `attack` aceitava chaves do protótipo (`constructor`) e podia zerar posição e vida de outro jogador; limite de 40 msg/s por conexão e folga menor no anti-teleporte; "Sair da corrida" na contagem deixava o jogador congelado; reconexão de conta expulsava o jogador (agora a sessão antiga cai e a nova entra) e o cliente reinicia corrida, PvP, vida e carro; `X-Forwarded-For` só vale com `TRUST_PROXY=1`; WebSocket confere `Origin` em produção (`PUBLIC_URL` ou `ALLOWED_ORIGINS`); limite de espectadores e corte de clientes que não acompanham; filtro de palavras também no apelido de visitante e no cartaz; checagem de caminho do servidor estático; vazamento de texturas dos esqueletos e do cache de desenhos. Limitação conhecida: o carro é validado só pela velocidade máxima e não há anti-cheat completo (movimento é autoritativo no cliente).
 
 ## Animações
 

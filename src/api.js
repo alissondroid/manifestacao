@@ -14,7 +14,8 @@ async function request(path, { method = 'GET', body } = {}) {
 
 export const api = {
   me: () => request('/api/me'),
-  register: (email, nick, password) => request('/api/auth/register', { method: 'POST', body: { email, nick, password } }),
+  register: (email, nick, password, terms) => request('/api/auth/register', { method: 'POST', body: { email, nick, password, terms } }),
+  deleteAccount: (password) => request('/api/auth/delete', { method: 'POST', body: { password } }),
   login: (email, password) => request('/api/auth/login', { method: 'POST', body: { email, password } }),
   logout: () => request('/api/auth/logout', { method: 'POST', body: {} }),
   checkout: (item) => request('/api/shop/checkout', { method: 'POST', body: { item } }),
