@@ -4,11 +4,75 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#101915" />
-    <meta name="description" content="Entre na Avenida Paulista pelo navegador: escolha seu lado nas eleições, monte seu personagem, converse e participe em tempo real." />
-    <title>Avenida Online · Eleições 2026 na Paulista</title>
+    <meta name="color-scheme" content="dark" />
+    <title>Avenida Online · Jogo multiplayer na Avenida Paulista</title>
+    <meta name="description" content="Jogo multiplayer grátis no navegador: ande pela Avenida Paulista em 3D, monte seu personagem, converse, dispute trechos e corra com outros jogadores." />
+    <meta name="keywords" content="avenida online, jogo online, jogo multiplayer, avenida paulista, jogo 3d no navegador, jogo brasileiro, mmo no navegador, eleições 2026" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="author" content="Avenida Online" />
+    <link rel="canonical" href="https://avenidaonline.com/" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="application-name" content="Avenida Online" />
+    <meta name="apple-mobile-web-app-title" content="Avenida Online" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Avenida Online" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:url" content="https://avenidaonline.com/" />
+    <meta property="og:title" content="Avenida Online · Jogo multiplayer na Avenida Paulista" />
+    <meta property="og:description" content="Entre na Avenida Paulista pelo navegador: monte seu personagem, converse, dispute trechos e corra com outros jogadores. Grátis." />
+    <meta property="og:image" content="https://avenidaonline.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Avenida Online: jogo multiplayer na Avenida Paulista" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Avenida Online · Jogo multiplayer na Avenida Paulista" />
+    <meta name="twitter:description" content="Entre na Avenida Paulista pelo navegador: monte seu personagem, converse, dispute trechos e corra com outros jogadores. Grátis." />
+    <meta name="twitter:image" content="https://avenidaonline.com/og-image.png" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://avenidaonline.com/#site",
+            "url": "https://avenidaonline.com/",
+            "name": "Avenida Online",
+            "inLanguage": "pt-BR"
+          },
+          {
+            "@type": "VideoGame",
+            "@id": "https://avenidaonline.com/#game",
+            "name": "Avenida Online",
+            "url": "https://avenidaonline.com/",
+            "description": "Jogo multiplayer 3D no navegador ambientado na Avenida Paulista: personagem personalizável, chat, corrida, disputa de trechos e loja de itens cosméticos.",
+            "image": "https://avenidaonline.com/og-image.png",
+            "inLanguage": "pt-BR",
+            "genre": ["Multiplayer", "Social", "Simulação"],
+            "gamePlatform": "Navegador web",
+            "applicationCategory": "Game",
+            "operatingSystem": "Qualquer sistema com navegador moderno",
+            "playMode": "MultiPlayer",
+            "isAccessibleForFree": true,
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "BRL" }
+          }
+        ]
+      }
+    </script>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body data-mode="lobby">
+    <noscript>
+      <h1>Avenida Online</h1>
+      <p>Jogo multiplayer grátis na Avenida Paulista, direto no navegador: monte seu personagem, converse, dispute trechos, corra e use itens da loja. Ative o JavaScript para jogar. Projeto independente, sem vínculo com candidatos, partidos ou campanhas.</p>
+    </noscript>
     <canvas id="c"></canvas>
     <div id="loading" class="loading">Carregando personagens…</div>
     <div id="labels"></div>

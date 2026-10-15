@@ -42,6 +42,9 @@ const MIME = {
   '.glb': 'model/gltf-binary',
   '.mp3': 'audio/mpeg',
   '.ico': 'image/x-icon',
+  '.txt': 'text/plain; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
+  '.webmanifest': 'application/manifest+json',
 };
 
 const server = http.createServer(async (req, res) => {
@@ -75,11 +78,22 @@ async function handle(req, res) {
     return res.end();
   }
   fs.stat(file, (err, st) => {
-    if (err || st.isDirectory()) file = path.join(DIST, 'index.html');
+    if (err || st.isDirectory()) {
+      // só a página inicial existe; qualquer outro caminho é 404 de verdade (não "soft 404" para os buscadores)
+      if (new URL(req.url, 'http://localhost').pathname !== '/') {
+        res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+        return res.end('Página não encontrada. Volte para https://avenidaonline.com/');
+      }
+      file = path.join(DIST, 'index.html');
+    }
+    const inAssets = file.includes(`${path.sep}assets${path.sep}`);
+    const cache = file.endsWith('index.html') ? 'no-cache'
+      : inAssets ? 'public, max-age=31536000, immutable'
+        : 'public, max-age=86400';
     res.writeHead(200, {
       'content-type': MIME[path.extname(file)] || 'application/octet-stream',
       'x-content-type-options': 'nosniff',
-      ...(file.includes(`${path.sep}assets${path.sep}`) ? { 'cache-control': 'public, max-age=31536000, immutable' } : {}),
+      'cache-control': cache,
     });
     fs.createReadStream(file).on('error', () => res.end()).pipe(res);
   });

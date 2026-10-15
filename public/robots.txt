@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /pagar/
+
+Sitemap: https://avenidaonline.com/sitemap.xml
