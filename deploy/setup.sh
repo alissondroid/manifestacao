@@ -4,7 +4,7 @@
 #   DOMAIN=seu-dominio.com bash deploy/setup.sh      # com HTTPS automático (o DNS já deve apontar para esta VPS)
 #   bash deploy/setup.sh                              # sem domínio: HTTP no IP (só para testar)
 #
-# Variáveis opcionais: BRANCH (padrão: main), REPO_URL, APP_DIR (padrão: /opt/avenida),
+# Variáveis opcionais: BRANCH (padrão: main), REPO_URL (HTTPS ou git@github.com:... com chave de deploy), APP_DIR (padrão: /opt/avenida),
 # ALLOW_SIMULATED=1 (loja de mentira, entrega itens SEM cobrar: só para testar).
 set -euo pipefail
 
@@ -38,10 +38,13 @@ fi
 
 echo "==> Usuário e código"
 id "$APP_USER" >/dev/null 2>&1 || useradd --system --home "$APP_DIR" --shell /usr/sbin/nologin "$APP_USER"
+export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new"
 if [ -d "$APP_DIR/.git" ]; then
   git -C "$APP_DIR" fetch origin "$BRANCH"
   git -C "$APP_DIR" checkout "$BRANCH"
   git -C "$APP_DIR" pull --ff-only origin "$BRANCH"
+elif [ -f "$APP_DIR/package.json" ]; then
+  echo "Código já está em $APP_DIR (sem Git): usando como está."
 else
   git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
 fi
