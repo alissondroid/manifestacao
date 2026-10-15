@@ -56,6 +56,18 @@ Servidor → cliente: `online {counts}`, `welcome {id, x, z}`, `sync {add, del, 
 
 O servidor limita a velocidade, recorta a posição ao mapa, sanitiza textos e aplica cooldown de chat.
 
+## Hospedagem (VPS Ubuntu)
+
+Precisa de um processo Node 22+ sempre ligado, com WebSocket e disco (não serve Vercel/serverless nem hospedagem compartilhada). Na VPS, como root:
+
+```bash
+apt-get update && apt-get install -y git
+git clone -b main https://github.com/alissondroid/avenida-online.git /opt/avenida   # repositório privado: use um token na URL
+DOMAIN=seu-dominio.com BRANCH=main bash /opt/avenida/deploy/setup.sh               # sem DOMAIN: HTTP no IP, só para testar
+```
+
+O script instala Node 22 e Caddy (HTTPS automático), faz o build, cria o serviço `systemd` `avenida` (usuário sem login, reinício automático), o `.env`, o firewall (22, 80 e 443) e um backup diário do SQLite em `/var/backups/avenida` (14 dias). Depois edite `/opt/avenida/.env` (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) e rode `systemctl restart avenida`. Para atualizar: `bash /opt/avenida/deploy/update.sh`. Logs: `journalctl -u avenida -f`. Em produção sem chave Stripe a loja fica desligada de propósito.
+
 ## Contas e loja (modo de teste)
 
 - **Conta:** e-mail, apelido único e senha (mín. 8). A sessão fica num cookie `HttpOnly; SameSite=Lax` (30 dias), no banco só o hash do token. Quem tem conta joga com o apelido dela; convidados continuam sem cadastro, mas não podem usar o apelido de uma conta.
