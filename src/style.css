@@ -575,7 +575,7 @@ body[data-mode='play'] .lobby-only { display: none !important; }
 /* 2. personagens: 3 por linha, nome inteiro */
 #lobby .presets { grid-template-columns: repeat(3, 1fr); gap: 10px; }
 #lobby .preset { position: relative; padding: 0 0 8px; gap: 6px; }
-#lobby .preset canvas { aspect-ratio: 1 / 1.05; object-fit: cover; object-position: top; }
+#lobby .preset canvas { aspect-ratio: 1 / 0.86; object-fit: cover; object-position: top; }
 #lobby .preset b { font-size: 13px; padding: 0 6px; }
 #lobby .preset.on::after {
   content: '✓'; position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border-radius: 50%;
@@ -620,7 +620,7 @@ body[data-mode='play'] .lobby-only { display: none !important; }
   #lobby .side { padding: 10px; gap: 10px; }
   #lobby .side .num { width: 38px; height: 38px; font-size: 14px; }
   #lobby .presets { gap: 8px; }
-  #lobby .preset canvas { aspect-ratio: 1 / 0.9; }
+  #lobby .preset canvas { aspect-ratio: 1 / 0.78; }
   #lobby .preset b { font-size: 12px; }
   .legal { font-size: 10.5px; }
 }
