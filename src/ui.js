@@ -466,7 +466,7 @@ export function initHud({
       el.timer = setTimeout(() => { el.hidden = true; }, 9000);
     },
     setWho(list, total) {
-      const rows = list.map(([nick, side, hits, kos]) => `<div class="row"><i style="background:${SIDES[side]?.color}"></i><span>${esc(nick)}</span><small>👊 ${hits} · ☠️ ${kos}</small></div>`).join('');
+      const rows = list.map(([nick, side, hits, kos, id]) => `<div class="row"${id && id !== myId ? ` data-id="${id}" data-nick="${esc(nick)}"` : ''}><i style="background:${SIDES[side]?.color}"></i><span>${esc(nick)}</span><small>👊 ${hits} · ☠️ ${kos}</small></div>`).join('');
       who.innerHTML = `<h4>Na avenida: ${total}</h4>${rows}`;
     },
     /** Barra de vida (só com PvP ligado) e de fôlego. */
@@ -505,11 +505,16 @@ export function initHud({
         ? 'W/S acelerar e frear · A/D virar · C sair do carro · arraste para girar a câmera'
         : 'WASD/setas mover · Shift correr · 1-3 gestos · 4-6 golpes · C carro · arraste para girar a câmera · Enter chat';
     },
-    addChat(nick, text, color) {
+    addChat(nick, text, color, id = 0) {
       const row = document.createElement('div');
       const name = document.createElement('b');
       name.style.color = color;
       name.textContent = `${nick}:`;
+      if (id) { // toque no nome abre silenciar/denunciar
+        name.dataset.id = id;
+        name.dataset.nick = nick;
+        name.title = 'Silenciar ou denunciar';
+      }
       row.append(name, document.createTextNode(text));
       log.append(row);
       while (log.children.length > 30) log.firstChild.remove();
@@ -566,6 +571,8 @@ export function initModes({ onRace, onPvp, onThrow, onDrive }) {
   };
 }
 
+let myId = 0;
+export const setMyId = (id) => { myId = id; };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /** Rótulo flutuante com nome e balão de fala. */
@@ -641,4 +648,46 @@ export function createLabel(nick, color, equip = {}) {
     },
     remove() { clearTimeout(timer); el.remove(); },
   };
+}
+
+/** Menu de um jogador (tocar no nome no chat ou na lista): silenciar e denunciar. */
+export function initUserMenu({ isMuted, onMute, onUnmute, onReport }) {
+  const menu = $('#usermenu');
+  const close = () => { menu.hidden = true; };
+  const item = (label, fn) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('role', 'menuitem');
+    b.textContent = label;
+    b.onclick = () => { close(); fn(); };
+    return b;
+  };
+  const open = (nick, id, x, y) => {
+    const head = document.createElement('b');
+    head.textContent = nick;
+    const muted = isMuted(nick);
+    menu.replaceChildren(
+      head,
+      muted ? item('🔊 Reativar', () => onUnmute(nick)) : item('🔇 Silenciar', () => onMute(nick)),
+      item('🚩 Denunciar', () => onReport(id, nick)),
+    );
+    menu.hidden = false;
+    const w = menu.offsetWidth;
+    const h = menu.offsetHeight;
+    menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - w - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - h - 8))}px`;
+    menu.querySelector('button').focus();
+  };
+  document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !menu.contains(e.target)) close(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  // delegação: nomes no chat e linhas da lista "Na avenida"
+  const pick = (e) => {
+    const el = e.target.closest('[data-id][data-nick]');
+    if (!el) return;
+    e.stopPropagation();
+    open(el.dataset.nick, Number(el.dataset.id), e.clientX, e.clientY);
+  };
+  $('#chatlog').addEventListener('click', pick);
+  $('#who').addEventListener('click', pick);
+  return { close };
 }

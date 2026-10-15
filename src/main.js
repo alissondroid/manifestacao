@@ -11,7 +11,7 @@ import { initAccount } from './account.js';
 import { PRESETS, renderPortraits } from './portraits.js';
 import { loadModels, nextPaint } from './models.js';
 import {
-  initLobby, initHud, initModes, createLabel, setOnline, setStatus, showError, loadingScreen,
+  initLobby, initHud, initModes, initUserMenu, setMyId, createLabel, setOnline, setStatus, showError, loadingScreen,
 } from './ui.js';
 import { toast } from './account.js';
 import { initRadar } from './radar.js';
@@ -53,11 +53,48 @@ const saveProfile = () => {
 
 const canvas = $('#c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// Qualidade adaptativa: se o FPS ficar baixo, reduz resolução e sombras (nível guardado para a próxima visita).
+// ?q=0..3 força um nível (0 = máximo).
+const QUALITY_KEY = 'avenida-online:qualidade';
+const QUALITY_MAX = 3;
+const quality = { level: 0, acc: 0, frames: 0, low: 0 };
+const dpr = window.devicePixelRatio || 1;
+const PIXEL_RATIO = [Math.min(dpr, 2), Math.min(dpr, 1.25), 1, 0.75];
+function applyQuality(level, notify = false) {
+  quality.level = level;
+  renderer.setPixelRatio(PIXEL_RATIO[level]);
+  const shadows = level < 2;
+  if (renderer.shadowMap.enabled !== shadows) {
+    renderer.shadowMap.enabled = shadows;
+    scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); });
+  }
+  if (typeof resize === 'function') resize();
+  try { localStorage.setItem(QUALITY_KEY, String(level)); } catch { /* ignore */ }
+  if (notify) toast('Ajustamos os gráficos para o jogo rodar mais fluido.');
+}
+/** Chamado a cada quadro com o tempo real (s) desde o anterior. */
+function watchFps(rawDt) {
+  if (rawDt > 0.25) return; // aba em segundo plano ou travada por carga: não conta
+  quality.acc += rawDt;
+  quality.frames += 1;
+  if (quality.acc < 3) return;
+  const fps = quality.frames / quality.acc;
+  quality.acc = 0;
+  quality.frames = 0;
+  quality.low = fps < 28 ? quality.low + 1 : 0;
+  if (quality.low >= 2 && quality.level < QUALITY_MAX) { quality.low = 0; applyQuality(quality.level + 1, true); }
+}
+const savedQuality = (() => {
+  const q = new URLSearchParams(location.search).get('q');
+  if (q !== null && /^[0-3]$/.test(q)) return Number(q);
+  try { return Math.min(QUALITY_MAX, Math.max(0, Number(localStorage.getItem(QUALITY_KEY)) || 0)); } catch { return 0; }
+})();
+renderer.setPixelRatio(PIXEL_RATIO[savedQuality]);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = savedQuality < 2;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+quality.level = savedQuality;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 900);
 
@@ -325,6 +362,7 @@ const net = new Net({
         break;
       case 'welcome':
         myId = m.id;
+        setMyId(m.id);
         me.x = m.x;
         me.z = m.z;
         clearRemotes();
@@ -347,13 +385,14 @@ const net = new Net({
         break;
       case 'chat': {
         const mine = m.id === myId;
+        if (!mine && muted.has(String(m.nick).toLowerCase())) break; // silenciado por mim
         if (mine) { me.label?.say(m.text); me.avatar.talkNow(); } else {
           const r = remotes.get(m.id);
           r?.label.say(m.text);
           r?.avatar.talkNow();
           sound.pop();
         }
-        hud.addChat(mine ? profile.nick || 'Você' : m.nick, m.text, SIDES[m.side]?.color ?? '#94a3b8');
+        hud.addChat(mine ? profile.nick || 'Você' : m.nick, m.text, SIDES[m.side]?.color ?? '#94a3b8', mine ? 0 : m.id);
         break;
       }
       case 'fix':
@@ -427,6 +466,7 @@ const net = new Net({
         sound.boom();
         break;
       case 'billboard':
+        if (muted.has(String(m.nick).toLowerCase())) break;
         world.ticker.show(m.nick, m.text);
         hud.showBanner(m.nick, m.side, m.text);
         sound.pop();
@@ -633,6 +673,17 @@ const hud = initHud({
   soundOn: sound.enabled,
 });
 
+// Jogadores silenciados por mim (pelo apelido, guardado neste navegador).
+const MUTED_KEY = 'avenida-online:silenciados';
+const muted = new Set((() => { try { return JSON.parse(localStorage.getItem(MUTED_KEY)) || []; } catch { return []; } })());
+const saveMuted = () => { try { localStorage.setItem(MUTED_KEY, JSON.stringify([...muted])); } catch { /* ignore */ } };
+initUserMenu({
+  isMuted: (nick) => muted.has(nick.toLowerCase()),
+  onMute: (nick) => { muted.add(nick.toLowerCase()); saveMuted(); toast(`${nick} silenciado. Você não vê mais as mensagens dele.`); },
+  onUnmute: (nick) => { muted.delete(nick.toLowerCase()); saveMuted(); toast(`${nick} reativado.`); },
+  onReport: (id) => net.send({ t: 'report', id }),
+});
+
 const lobby = initLobby({
   profile,
   presets: PRESETS,
@@ -690,6 +741,7 @@ function leavePlay(reason) {
   if (drive.on) toggleDrive();
   watching = false;
   myId = null;
+  setMyId(0);
   net.joinMsg = null;
   clearRemotes();
   me.label?.remove();
@@ -956,6 +1008,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 function frame() {
   const now = performance.now();
   const dt = Math.min((now - lastFrame) / 1000, 0.1);
+  watchFps((now - lastFrame) / 1000);
   lastFrame = now;
   elapsed += dt;
   const time = elapsed;

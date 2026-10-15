@@ -11,6 +11,14 @@ npm install
 npm run dev      # servidor WebSocket (8787) + Vite (http://localhost:5180)
 ```
 
+Testes (`node --test`, sem dependências extras; o servidor de teste usa banco em memória):
+
+```bash
+npm test         # regras do jogo, loja/conta e servidor real via WebSocket
+```
+
+`GET /healthz` responde `{ok, players, uptime}` (para monitoramento). O servidor trata `SIGTERM`/`SIGINT` fechando as conexões e o banco.
+
 Produção (um único processo serve o build e o WebSocket):
 
 ```bash
@@ -48,13 +56,13 @@ Variáveis do servidor (arquivo `.env`, veja `.env.example`): `PORT`, `MAX_PLAYE
 
 ## Protocolo (JSON sobre WebSocket, `/ws`)
 
-Cliente → servidor: `join {nick, side, look}`, `watch` (espectador), `move {x, z, ry, a}`, `chat {text}`.
+Cliente → servidor: `join {nick, side, look}`, `watch` (espectador), `move {x, z, ry, a}`, `chat {text}`, `report {id}` (denunciar um jogador).
 
 Servidor → cliente: `online {counts}`, `welcome {id, x, z}`, `sync {add, del, s}` (10 Hz), `chat {id, nick, side, text}`, `look {id, look}` (itens equipados mudaram), `denied {reason}` (entrada recusada), `fix {x, z}`.
 
 `sync` é o interesse por área: cada cliente só recebe `add` (jogador entrou no raio, com visual completo), `del` (saiu do raio ou da avenida) e `s` (posições que mudaram, `[id, x, z, ry, anim]`). A saída do raio tem histerese de 10 m para não piscar. Espectadores recebem todos.
 
-O servidor limita a velocidade, recorta a posição ao mapa, sanitiza textos e aplica cooldown de chat.
+O servidor limita a velocidade com um orçamento de deslocamento (`spendMoveBudget` em `server/rules.js`: acumula `limite × tempo real × 1,25`, com teto, e gasta a distância andada; mandar muitas mensagens curtas não aumenta a velocidade), recorta a posição ao mapa, sanitiza textos e aplica cooldown de chat. Tempos de corrida abaixo do mínimo físico não entram no ranking.
 
 ## Hospedagem (VPS Ubuntu)
 
@@ -138,11 +146,11 @@ WASD/setas mover · Shift correr · arrastar para girar a câmera (ou Q/E) · En
 
 - Binário no lugar de JSON no `sync` quando o tráfego pesar.
 - Mais rostos: hoje são 6 modelos (3 homens, 3 mulheres). O domínio `models.readyplayer.me` não resolve mais; novos personagens vêm do Mixamo (veja acima). Falta compressão DRACO/KTX2 e LOD: cada personagem do Mixamo tem ~55 mil triângulos, então só ~18% da multidão os usa; o resto usa os dois corpos leves.
-- Ajuste de qualidade automático (sombras e resolução) em celulares fracos; com os modelos humanos a cena chega a ~1000 draw calls e ~3 milhões de triângulos (75 fps num Mac; celulares fracos vão sofrer).
+- Reduzir o custo da cena: com os modelos humanos chega a ~1000 draw calls e ~3 milhões de triângulos (75 fps num Mac). A qualidade adaptativa (abaixo) ameniza, mas não resolve em celulares fracos.
 - Voz por proximidade (LiveKit ou WebRTC).
 - Contas: verificação de e-mail, recuperação de senha e login social (Google/Kick).
 - Pagamento: recibos/nota fiscal, reembolsos e painel de pedidos; revisar impostos e termos antes de cobrar de verdade.
-- Moderação: denúncia, banimento por conta/IP e filtro de chat mais completo.
+- Moderação: painel para ver denúncias, banimento por conta/IP e filtro de chat mais completo.
 - Áudio real (gravações de multidão, jingles e carros de som) e telão com vídeo.
 - Grade espacial no servidor: o laço de interesse é O(n²) por ciclo, suficiente para ~300 jogadores.
 
@@ -189,9 +197,25 @@ Repetíveis (`vip`, `consumable`, `donation`) podem ser comprados de novo; os de
 - **Gestos** (menu 🎭): acenar, dançar e aplaudir são grátis; Dança 2, chamar, concordar e negar são premium (o servidor descarta o gesto de quem não tem direito). **Pulo** com Espaço ou ⤴️ (visível para os outros). O avatar gesticula (`talk`) quando fala no chat; nocauteados ficam deitados.
 - **Cenário** (`src/scenery.js`): faixas e bandeirinhas atravessando a pista, balões que balançam nas calçadas e, em cada trecho do Domínio, coluna de luz, listras no chão e nome flutuando, na cor do lado que domina. Fogos e confete (captura de trecho) em `src/effects.js`.
 
+## Moderação (silenciar e denunciar)
+
+Tocar no nome de um jogador no chat ou na lista "Na avenida" abre um menu com **Silenciar** (só para você; guardado no navegador, por apelido) e **Denunciar**. A denúncia (`report {id}`) grava na tabela `reports` do SQLite o denunciante, o denunciado e as 5 últimas mensagens dele, com limite de 1 a cada 10 s e 10 por hora por pessoa (conta ou IP), sem repetir o mesmo alvo em 10 min. Com denúncias de **3 pessoas diferentes** em 10 min, o denunciado fica sem falar no chat por 5 min. Para revisar:
+
+```bash
+sqlite3 /opt/avenida/data/avenida.db "SELECT datetime(at/1000,'unixepoch'), target_nick, reporter_nick, context FROM reports ORDER BY id DESC LIMIT 20"
+```
+
+Convidados não podem usar o apelido de quem já está online (recebem `Nome2`) nem nomes como Sistema ou Admin.
+
+## Qualidade adaptativa
+
+O cliente mede o FPS a cada 3 s; com média abaixo de 28 em duas janelas seguidas, desce um nível: 1 = resolução até 1,25×, 2 = 1× e sem sombras, 3 = 0,75×. O nível fica guardado no navegador. `?q=0` a `?q=3` força um nível para testar.
+
 ## Auditoria e correções de segurança
 
 Corrigido: o servidor caía com `look: null`, cookie malformado ou URL inválida (agora há `try/catch` e handlers globais); `attack` aceitava chaves do protótipo (`constructor`) e podia zerar posição e vida de outro jogador; limite de 40 msg/s por conexão e folga menor no anti-teleporte; "Sair da corrida" na contagem deixava o jogador congelado; reconexão de conta expulsava o jogador (agora a sessão antiga cai e a nova entra) e o cliente reinicia corrida, PvP, vida e carro; `X-Forwarded-For` só vale com `TRUST_PROXY=1`; WebSocket confere `Origin` em produção (`PUBLIC_URL` ou `ALLOWED_ORIGINS`); limite de espectadores e corte de clientes que não acompanham; filtro de palavras também no apelido de visitante e no cartaz; checagem de caminho do servidor estático; vazamento de texturas dos esqueletos e do cache de desenhos. Limitação conhecida: o carro é validado só pela velocidade máxima e não há anti-cheat completo (movimento é autoritativo no cliente).
+
+Segunda rodada: o anti-teleporte permitia ~25 m/s a quem mandasse muitas mensagens curtas (a folga fixa de 0,3 m valia por mensagem), o que também fraudava o ranking da corrida; a API usava o primeiro valor de `X-Forwarded-For` (falsificável) no limite de tentativas de login e cadastro, burlando o limite. Agora o IP vem de `server/ip.js` (só confia no proxy com `TRUST_PROXY=1`, usando o último valor).
 
 ## Animações
 

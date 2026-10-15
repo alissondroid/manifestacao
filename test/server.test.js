@@ -59,3 +59,25 @@ test('SIGTERM encerra o servidor com limpeza', async () => {
   const code = await other.stop();
   assert.ok(code === 0 || code === null || code === undefined);
 });
+
+test('denúncia: o servidor registra e responde ao denunciante', async () => {
+  const bad = await connect(srv.port);
+  bad.send({ t: 'join', nick: 'Mal', side: 0, look: {} });
+  const wb = await bad.waitFor((m) => m.t === 'welcome');
+  const reporters = [];
+  for (let i = 0; i < 3; i += 1) {
+    const c = await connect(srv.port);
+    c.send({ t: 'join', nick: `Denunciante${i}`, side: 1, look: {} });
+    await c.waitFor((m) => m.t === 'welcome');
+    reporters.push(c);
+  }
+  reporters[0].send({ t: 'report', id: wb.id });
+  const first = await reporters[0].waitFor((m) => m.t === 'notice');
+  assert.match(first.text, /Denúncia enviada/);
+  // denunciar a si mesmo é ignorado (sem aviso); repetir é recusado
+  reporters[0].send({ t: 'report', id: wb.id });
+  const again = await reporters[0].waitFor((m) => m.t === 'notice' && m !== first);
+  assert.match(again.text, /Espere|já denunciou/);
+  bad.close();
+  reporters.forEach((r) => r.close());
+});

@@ -62,6 +62,17 @@ db.exec(`
     at      INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS reports (
+    id            INTEGER PRIMARY KEY,
+    at            INTEGER NOT NULL,
+    reporter_nick TEXT NOT NULL,
+    reporter_key  TEXT NOT NULL,
+    target_nick   TEXT NOT NULL,
+    target_key    TEXT NOT NULL,
+    context       TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS reports_target ON reports (target_nick, at);
+
   CREATE TABLE IF NOT EXISTS equipped (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     slot    TEXT NOT NULL,

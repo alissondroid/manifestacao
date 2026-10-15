@@ -20,6 +20,7 @@ import {
   cleanText, isReservedNick, uniqueNick, spendMoveBudget,
 } from './rules.js';
 import { db } from './db.js';
+import { REPORT, recordChat, fileReport } from './reports.js';
 
 process.on('uncaughtException', (err) => console.error('[erro não tratado]', err));
 process.on('unhandledRejection', (err) => console.error('[promessa rejeitada]', err));
@@ -369,6 +370,8 @@ function attack(me, kind) {
 // ---------- Itens consumíveis (comprados na loja) ----------
 
 const notice = (p, text) => send(p.ws, { t: 'notice', text });
+/** Identifica a pessoa (conta ou IP) para contar denunciantes diferentes. */
+const playerKey = (p) => (p.userId ? `u${p.userId}` : `ip:${p.ip}`);
 const stock = (p) => send(p.ws, { t: 'inv', inv: inventoryOf(p.userId), premium: p.premium });
 
 /** Fogos de artifício sobre o jogador, visíveis a quem está por perto. Consome 1 unidade. */
@@ -499,6 +502,8 @@ wss.on('connection', (ws, req) => {
         shieldUntil: 0,
         lastReact: 0,
         lastWho: 0,
+        mutedUntil: 0,
+        ip,
         lastUse: 0,
         premium: account ? hasPremiumEmotes(account.id) : false,
       };
@@ -559,9 +564,21 @@ wss.on('connection', (ws, req) => {
       const text = filterText(cleanText(m.text, LIMITS.chat));
       if (!text) return;
       me.lastChat = now;
+      if (me.mutedUntil > now) return notice(me, `Você está silenciado por mais ${Math.ceil((me.mutedUntil - now) / 60000)} min após denúncias de outros jogadores.`);
       if (/^\/telao(\s|$)/i.test(text)) return billboard(me, text.replace(/^\/telao\s*/i, ''));
       if (/^\/fogos\b/i.test(text)) return useFireworks(me);
+      recordChat(playerKey(me), me.nick, text, now);
       broadcast({ t: 'chat', id: me.id, nick: me.nick, side: me.side, text });
+    } else if (m.t === 'report') {
+      const target = players.get(Math.trunc(Number(m.id)));
+      if (!target || target === me) return;
+      const res = fileReport({ key: playerKey(me), nick: me.nick }, { key: playerKey(target), nick: target.nick });
+      if (!res.ok) return notice(me, res.reason);
+      if (res.mute && target.mutedUntil < Date.now()) {
+        target.mutedUntil = Date.now() + REPORT.muteMs;
+        notice(target, 'Você foi silenciado por alguns minutos após denúncias de outros jogadores.');
+      }
+      notice(me, 'Denúncia enviada. Obrigado por ajudar a manter a avenida legal.');
     } else if (m.t === 'race') {
       if (m.action === 'join') race.join(me);
       else if (m.action === 'leave') race.leave(me);
@@ -587,7 +604,7 @@ wss.on('connection', (ws, req) => {
       if (now - me.lastWho < 1500) return;
       me.lastWho = now;
       const list = [...players.values()].sort((a, b) => b.hits - a.hits || b.kos - a.kos).slice(0, 80)
-        .map((p) => [p.nick, p.side, p.hits, p.kos]);
+        .map((p) => [p.nick, p.side, p.hits, p.kos, p.id]);
       send(ws, { t: 'who', list, total: players.size });
     } else if (m.t === 'throw') {
       throwTomato(me);
