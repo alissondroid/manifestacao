@@ -73,6 +73,15 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS reports_target ON reports (target_nick, at);
 
+  CREATE TABLE IF NOT EXISTS bans (
+    id     INTEGER PRIMARY KEY,
+    key    TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    at     INTEGER NOT NULL,
+    until  INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS bans_key ON bans (key);
+
   CREATE TABLE IF NOT EXISTS equipped (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     slot    TEXT NOT NULL,

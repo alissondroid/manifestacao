@@ -178,6 +178,7 @@ let lobbyDragUntil = 0;
 const setMode = (m) => { mode = m; document.body.dataset.mode = m; };
 resize();
 let myId = null;
+let historyShown = false;
 let acct = { user: null, equipped: {}, custom: {} }; // conta atual (preenchida por initAccount)
 const lookOf = (look, side) => ({
   ...look, side, equip: acct.equipped, custom: acct.custom || {},
@@ -395,6 +396,13 @@ const net = new Net({
         hud.addChat(mine ? profile.nick || 'Você' : m.nick, m.text, SIDES[m.side]?.color ?? '#94a3b8', mine ? 0 : m.id);
         break;
       }
+      case 'history': // últimas mensagens, só na primeira entrada (reconexões não repetem)
+        if (historyShown) break;
+        historyShown = true;
+        for (const [nick, side, text] of m.list) {
+          if (!muted.has(String(nick).toLowerCase())) hud.addChat(nick, text, SIDES[side]?.color ?? '#94a3b8', 0, true);
+        }
+        break;
       case 'fix':
         if (me.slide && Math.hypot(m.x - me.slide.tx, m.z - me.slide.tz) < 0.1) break; // o empurrão já está em andamento
         me.slide = null;

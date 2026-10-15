@@ -754,3 +754,4 @@ body[data-mode='lobby'] #topbar { padding-inline: max(14px, calc((100vw - 1180px
 .usermenu button:hover, .usermenu button:focus-visible { background: rgba(255, 255, 255, 0.1); outline: none; }
 #who .row[data-id] { cursor: pointer; }
 #who .row[data-id]:hover { background: rgba(255, 255, 255, 0.07); border-radius: 6px; }
+#chatlog div.past { opacity: 0.7; }

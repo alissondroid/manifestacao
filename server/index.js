@@ -21,6 +21,7 @@ import {
 } from './rules.js';
 import { db } from './db.js';
 import { REPORT, recordChat, fileReport } from './reports.js';
+import { isBanned, keysOf } from './bans.js';
 
 process.on('uncaughtException', (err) => console.error('[erro não tratado]', err));
 process.on('unhandledRejection', (err) => console.error('[promessa rejeitada]', err));
@@ -53,6 +54,33 @@ const MIME = {
   '.webmanifest': 'application/manifest+json',
 };
 
+// Cabeçalhos de segurança das páginas e arquivos estáticos. A CSP só vale para HTML.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'", // o cliente usa style="..." em elementos criados por script
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self' ws: wss: data: blob:",
+  "media-src 'self' data: blob:",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+const HSTS = PROD && (process.env.PUBLIC_URL || '').startsWith('https');
+function securityHeaders(isHtml) {
+  return {
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+    'referrer-policy': 'strict-origin-when-cross-origin',
+    'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+    ...(isHtml ? { 'content-security-policy': CSP } : {}),
+    ...(HSTS ? { 'strict-transport-security': 'max-age=31536000' } : {}),
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     await handle(req, res);
@@ -68,7 +96,7 @@ async function handle(req, res) {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     return res.end(JSON.stringify({ ok: true, players: players.size, uptime: Math.round(process.uptime()) }));
   }
-  if (await handleApi(req, res, { onEquip: refreshLook, onDelete: kickUser })) return;
+  if (await handleApi(req, res, { onEquip: refreshLook, onDelete: kickUser, onBan: kickBanned })) return;
   if (!fs.existsSync(DIST)) {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
     return res.end('Sem build. Em desenvolvimento use "npm run dev" (cliente em http://localhost:5173).');
@@ -104,8 +132,8 @@ async function handle(req, res) {
         : 'public, max-age=86400';
     res.writeHead(200, {
       'content-type': MIME[path.extname(file)] || 'application/octet-stream',
-      'x-content-type-options': 'nosniff',
       'cache-control': cache,
+      ...securityHeaders(file.endsWith('.html')),
     });
     fs.createReadStream(file).on('error', () => res.end()).pipe(res);
   });
@@ -171,6 +199,16 @@ function kickUser(userId) {
   }
 }
 
+/** Banimento novo: derruba quem estiver online com essa chave (conta `u12` ou IP `ip:...`). */
+function kickBanned(key) {
+  for (const ws of wss.clients) {
+    const keys = keysOf({ ip: ws.ip, userId: ws.user?.id });
+    if (!keys.includes(key)) continue;
+    if (ws.player) removePlayer(ws.player);
+    ws.close(4003, 'Banido');
+  }
+}
+
 /** Itens equipados mudaram na loja: atualiza o avatar de quem está online e avisa quem o vê. */
 function refreshLook(userId) {
   for (const p of players.values()) {
@@ -201,6 +239,10 @@ function broadcast(obj, exceptWs, everyone = false) {
     if (everyone || client.joined) client.send(data);
   }
 }
+
+// Últimas mensagens do chat: quem entra vê o contexto da conversa.
+const chatLog = [];
+const HISTORY_MS = 10 * 60_000;
 
 function onlineCounts() {
   const counts = SIDES.map(() => 0);
@@ -411,12 +453,14 @@ function removePlayer(p) {
 
 wss.on('connection', (ws, req) => {
   const ip = clientIp(req);
+  ws.ip = ip;
+  ws.user = userFromRequest(req);
+  if (isBanned(keysOf({ ip, userId: ws.user?.id }))) return ws.close(4003, 'Banido');
   const open = perIp.get(ip) || 0;
   if (open >= MAX_PER_IP) return ws.close(1008, 'Muitas conexões');
   perIp.set(ip, open + 1);
 
   ws.isAlive = true;
-  ws.user = userFromRequest(req);
   ws.on('pong', () => { ws.isAlive = true; });
   send(ws, { t: 'online', counts: onlineCounts() });
 
@@ -517,6 +561,8 @@ wss.on('connection', (ws, req) => {
       send(ws, race.snapshot());
       send(ws, pvpScores());
       send(ws, zones.snapshot());
+      const recent = chatLog.filter((c) => Date.now() - c.at < HISTORY_MS).slice(-12);
+      if (recent.length) send(ws, { t: 'history', list: recent.map((c) => [c.nick, c.side, c.text]) });
       if (me.userId) stock(me);
       broadcast({ t: 'online', counts: onlineCounts() }, null, true);
       return;
@@ -567,7 +613,10 @@ wss.on('connection', (ws, req) => {
       if (me.mutedUntil > now) return notice(me, `Você está silenciado por mais ${Math.ceil((me.mutedUntil - now) / 60000)} min após denúncias de outros jogadores.`);
       if (/^\/telao(\s|$)/i.test(text)) return billboard(me, text.replace(/^\/telao\s*/i, ''));
       if (/^\/fogos\b/i.test(text)) return useFireworks(me);
+      if (/^\/ajuda\b/i.test(text)) return notice(me, 'Comandos: /telao <texto> (gasta 1 mensagem de telão), /fogos (gasta 1 fogos) e /ajuda. Toque no nome de alguém para silenciar ou denunciar.');
       recordChat(playerKey(me), me.nick, text, now);
+      chatLog.push({ nick: me.nick, side: me.side, text, at: now });
+      if (chatLog.length > 30) chatLog.shift();
       broadcast({ t: 'chat', id: me.id, nick: me.nick, side: me.side, text });
     } else if (m.t === 'report') {
       const target = players.get(Math.trunc(Number(m.id)));

@@ -207,6 +207,31 @@ sqlite3 /opt/avenida/data/avenida.db "SELECT datetime(at/1000,'unixepoch'), targ
 
 Convidados não podem usar o apelido de quem já está online (recebem `Nome2`) nem nomes como Sistema ou Admin.
 
+### Administração (denúncias e banimentos)
+
+Defina `ADMIN_TOKEN` no `.env` (16+ caracteres; `openssl rand -hex 24`). Sem ele a API `/api/admin/*` nem existe (404). Com ele, use `Authorization: Bearer <token>`:
+
+```bash
+T=seu-token; H=https://seu-dominio.com
+curl -H "Authorization: Bearer $T" $H/api/admin/reports?limit=20          # denúncias com as últimas mensagens
+curl -H "Authorization: Bearer $T" -H 'content-type: application/json' \
+  -d '{"nick":"Fulano","minutes":1440,"reason":"spam"}' $H/api/admin/ban   # por apelido (conta, ou convidado já denunciado)
+curl -H "Authorization: Bearer $T" -H 'content-type: application/json' \
+  -d '{"key":"ip:1.2.3.4"}' $H/api/admin/ban                               # por chave: u12 (conta) ou ip:... (permanente sem "minutes")
+curl -H "Authorization: Bearer $T" $H/api/admin/bans                       # banimentos ativos
+curl -H "Authorization: Bearer $T" -d '{"id":3}' -H 'content-type: application/json' $H/api/admin/unban
+```
+
+Banir derruba quem está online com essa chave e recusa novas conexões (`4003 Banido`). Convidados são identificados pelo IP; atrás de proxy lembre de `TRUST_PROXY=1`.
+
+## Chat: histórico e comandos
+
+Quem entra na avenida recebe as últimas mensagens (até 12, dos últimos 10 min) em tom mais claro, só na primeira entrada (a reconexão não repete). Comandos no chat: `/telao <texto>`, `/fogos` e `/ajuda`.
+
+## Cabeçalhos de segurança
+
+As páginas servidas pelo Node levam `Content-Security-Policy` (scripts só do próprio site; `connect-src` com `ws:`/`wss:` para o jogo; `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy` e, com `PUBLIC_URL` https em produção, `Strict-Transport-Security`. A página de pagamento simulado e as respostas da API não recebem CSP. Ao adicionar scripts ou estilos de outro domínio, atualize a lista em `server/index.js`.
+
 ## Qualidade adaptativa
 
 O cliente mede o FPS a cada 3 s; com média abaixo de 28 em duas janelas seguidas, desce um nível: 1 = resolução até 1,25×, 2 = 1× e sem sombras, 3 = 0,75×. O nível fica guardado no navegador. `?q=0` a `?q=3` força um nível para testar.

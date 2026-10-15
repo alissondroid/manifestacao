@@ -505,8 +505,9 @@ export function initHud({
         ? 'W/S acelerar e frear · A/D virar · C sair do carro · arraste para girar a câmera'
         : 'WASD/setas mover · Shift correr · 1-3 gestos · 4-6 golpes · C carro · arraste para girar a câmera · Enter chat';
     },
-    addChat(nick, text, color, id = 0) {
+    addChat(nick, text, color, id = 0, past = false) {
       const row = document.createElement('div');
+      if (past) row.className = 'past';
       const name = document.createElement('b');
       name.style.color = color;
       name.textContent = `${nick}:`;
@@ -518,7 +519,7 @@ export function initHud({
       row.append(name, document.createTextNode(text));
       log.append(row);
       while (log.children.length > 30) log.firstChild.remove();
-      setTimeout(() => row.remove(), 25000);
+      setTimeout(() => row.remove(), past ? 40000 : 25000);
     },
   };
 }
