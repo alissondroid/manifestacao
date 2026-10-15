@@ -5,6 +5,7 @@ APP_DIR="${APP_DIR:-/opt/avenida}"
 BRANCH="${BRANCH:-main}"
 cd "$APP_DIR"
 export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new"
+git config --global --get-all safe.directory | grep -qx "$APP_DIR" || git config --global --add safe.directory "$APP_DIR"
 if [ -d .git ]; then
   git fetch origin "$BRANCH"
   git checkout "$BRANCH"
