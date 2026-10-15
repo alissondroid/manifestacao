@@ -303,10 +303,10 @@ body[data-mode='play'] .lobby-only { display: none !important; }
   padding: 12px 8px 8px;
   pointer-events: none;
 }
-.hero .eyebrow { color: var(--accent); }
+.hero .eyebrow { color: var(--accent); background: rgba(8, 14, 11, 0.62); padding: 5px 12px; border-radius: 999px; backdrop-filter: blur(6px); }
 .hero h1 {
   margin: 6px 0 0; font-size: clamp(28px, 4.2vw, 50px); line-height: 1; letter-spacing: -0.02em;
-  text-transform: uppercase; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
+  text-transform: uppercase; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 3px 22px rgba(0, 0, 0, 0.85);
   max-width: 14ch;
 }
 .herobottom { display: grid; gap: 8px; justify-items: center; margin-top: auto; }
