@@ -1,7 +1,7 @@
 import { db } from './db.js';
 import {
   hashPassword, verifyPassword, burnPasswordTime, createSession, destroySession,
-  userFromRequest, tokenFromRequest, sessionCookie, clearCookie, rateLimit,
+  userFromRequest, tokenFromRequest, sessionCookie, clearCookie, rateLimit, deleteAccount,
   validEmail, validNick, validPassword,
 } from './auth.js';
 import {
@@ -125,6 +125,7 @@ export async function handleApi(req, res, hooks = {}) {
       const email = String(body.email ?? '').trim();
       const nick = String(body.nick ?? '').trim();
       const password = body.password;
+      if (body.terms !== true) return json(res, 400, { error: 'Aceite os Termos de uso e a Política de privacidade para criar a conta.' }), true;
       if (!validEmail(email)) return json(res, 400, { error: 'E-mail inválido.' }), true;
       if (!validNick(nick)) return json(res, 400, { error: 'Apelido: 3 a 16 caracteres (letras, números, espaço, _ . -).' }), true;
       if (!validPassword(password)) return json(res, 400, { error: 'A senha precisa ter pelo menos 8 caracteres.' }), true;
@@ -134,8 +135,8 @@ export async function handleApi(req, res, hooks = {}) {
       const passHash = await hashPassword(password);
       let id;
       try {
-        id = Number(db.prepare('INSERT INTO users (email, nick, pass_hash, created_at) VALUES (?, ?, ?, ?)')
-          .run(email, nick, passHash, Date.now()).lastInsertRowid);
+        id = Number(db.prepare('INSERT INTO users (email, nick, pass_hash, created_at, terms_at) VALUES (?, ?, ?, ?, ?)')
+          .run(email, nick, passHash, Date.now(), Date.now()).lastInsertRowid);
       } catch {
         return json(res, 409, { error: 'E-mail ou apelido já em uso.' }), true; // corrida entre duas contas
       }
@@ -160,6 +161,20 @@ export async function handleApi(req, res, hooks = {}) {
 
     if (method === 'POST' && pathname === '/api/auth/logout') {
       destroySession(tokenFromRequest(req));
+      return json(res, 200, { ok: true }, { 'set-cookie': clearCookie({ secure }) }), true;
+    }
+
+    // Exclusão da conta (LGPD): anonimiza o usuário e apaga itens, desenhos e sessões; os pedidos ficam (obrigação fiscal).
+    if (method === 'POST' && pathname === '/api/auth/delete') {
+      if (!user) return json(res, 401, { error: 'Entre na sua conta.' }), true;
+      if (!rateLimit(`delete:${user.id}`, 5, 10 * 60_000)) return json(res, 429, { error: 'Muitas tentativas. Aguarde um pouco.' }), true;
+      const body = await readJson(req);
+      const row = db.prepare('SELECT pass_hash FROM users WHERE id = ?').get(user.id);
+      if (typeof body.password !== 'string' || !row || !(await verifyPassword(body.password, row.pass_hash))) {
+        return json(res, 403, { error: 'Senha incorreta.' }), true;
+      }
+      deleteAccount(user.id);
+      hooks.onDelete?.(user.id);
       return json(res, 200, { ok: true }, { 'set-cookie': clearCookie({ secure }) }), true;
     }
 

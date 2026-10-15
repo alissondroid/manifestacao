@@ -68,9 +68,13 @@ DOMAIN=seu-dominio.com BRANCH=main bash /opt/avenida/deploy/setup.sh            
 
 O script instala Node 22 e Caddy (HTTPS automático), faz o build, cria o serviço `systemd` `avenida` (usuário sem login, reinício automático), o `.env`, o firewall (22, 80 e 443) e um backup diário do SQLite em `/var/backups/avenida` (14 dias). Depois edite `/opt/avenida/.env` (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) e rode `systemctl restart avenida`. Para atualizar: `bash /opt/avenida/deploy/update.sh`. Logs: `journalctl -u avenida -f`. Em produção sem chave Stripe a loja fica desligada de propósito.
 
+## Termos, privacidade e LGPD
+
+`/termos` e `/privacidade` (páginas estáticas em `public/termos` e `public/privacidade`) são **modelos para revisão com um advogado**: os campos destacados em amarelo precisam ser preenchidos (nome/razão social, CPF/CNPJ, cidade, e-mail de contato, provedor). Na VPS: `bash /opt/avenida/deploy/preencher-legal.sh "NOME" "CPF/CNPJ" "CIDADE/UF" "EMAIL" "Hostinger"` e depois `systemctl restart avenida`. O cadastro exige o aceite (`terms: true`, gravado em `users.terms_at`) e o botão "Excluir conta" (`POST /api/auth/delete`, pede a senha) apaga e-mail, senha, itens, desenhos, sessões e recordes, anonimiza o usuário e mantém só os pedidos pagos (obrigação fiscal). Se passar a usar analytics, anúncios ou cookies de terceiros, atualize a política e adicione um aviso de cookies.
+
 ## SEO e identidade
 
-`index.html` traz título, descrição, canonical (`https://avenidaonline.com/`), Open Graph e Twitter Card (`public/og-image.png`, 1200×630), JSON-LD (`WebSite` e `VideoGame`) e um `<noscript>` com texto. Em `public/`: `favicon.svg`, `favicon.ico`, `favicon-32.png`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `site.webmanifest` (instalável como app), `robots.txt` (bloqueia `/api/` e `/pagar/`) e `sitemap.xml`. O servidor responde 404 de verdade para caminhos inexistentes e define cache (HTML sem cache, `assets/` imutáveis). Se o domínio mudar, troque `avenidaonline.com` em `index.html`, `robots.txt` e `sitemap.xml`. Depois de publicar, cadastre o site no Google Search Console e envie o `sitemap.xml`.
+`index.html` traz título, descrição, canonical (`https://avenidaonline.com/`), Open Graph e Twitter Card (`public/og-image.png`, 1200×630), JSON-LD (`WebSite` e `VideoGame`) e um `<noscript>` com texto. Em `public/`: `favicon.svg`, `favicon.ico`, `favicon-32.png`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `site.webmanifest` (instalável como app), `robots.txt` (bloqueia `/api/` e `/pagar/`) e `sitemap.xml` (inclui `/termos` e `/privacidade`). O servidor responde 404 de verdade para caminhos inexistentes e define cache (HTML sem cache, `assets/` imutáveis). Se o domínio mudar, troque `avenidaonline.com` em `index.html`, `robots.txt` e `sitemap.xml`. Depois de publicar, cadastre o site no Google Search Console e envie o `sitemap.xml`.
 
 ## Contas e loja (modo de teste)
 

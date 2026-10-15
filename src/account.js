@@ -74,6 +74,7 @@ export function initAccount({ onChange }) {
         h('span', { class: 'who' }, `👤 ${account.user.nick}`),
         h('button', { class: 'chip', type: 'button', onclick: () => openShop() }, '🛍️ Loja'),
         h('button', { class: 'link', type: 'button', onclick: logout }, 'Sair da conta'),
+        h('button', { class: 'link', type: 'button', onclick: deleteAccount }, 'Excluir conta'),
       );
     }
   }
@@ -82,6 +83,19 @@ export function initAccount({ onChange }) {
     try { await api.logout(); } catch { /* segue mesmo assim */ }
     apply({ user: null, owned: [], equipped: {} }, 'logout');
     toast('Você saiu da conta.');
+  }
+
+  async function deleteAccount() {
+    if (!window.confirm('Excluir a conta apaga seus itens, desenhos e dados pessoais e não pode ser desfeito. Continuar?')) return;
+    const password = window.prompt('Digite sua senha para confirmar a exclusão:');
+    if (!password) return;
+    try {
+      await api.deleteAccount(password);
+      apply({ user: null, owned: [], equipped: {} }, 'logout');
+      toast('Conta excluída. Seus dados pessoais foram apagados.', 'ok');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
   }
 
   // ---------- Login / cadastro ----------
@@ -94,6 +108,7 @@ export function initAccount({ onChange }) {
     const pass = h('input', {
       type: 'password', autocomplete: isRegister ? 'new-password' : 'current-password', required: true, minlength: 8, maxlength: 200, placeholder: 'Mínimo de 8 caracteres',
     });
+    const terms = h('input', { type: 'checkbox', required: true });
     const submit = h('button', { class: 'primary', type: 'submit' }, isRegister ? 'Criar conta' : 'Entrar');
 
     const form = h(
@@ -106,7 +121,7 @@ export function initAccount({ onChange }) {
           submit.disabled = true;
           try {
             const data = isRegister
-              ? await api.register(email.value, nick.value.trim(), pass.value)
+              ? await api.register(email.value, nick.value.trim(), pass.value, terms.checked)
               : await api.login(email.value, pass.value);
             closeModal();
             apply(data, 'login');
@@ -122,6 +137,12 @@ export function initAccount({ onChange }) {
       h('label', { class: 'field' }, h('span', {}, 'E-mail'), email),
       isRegister && h('label', { class: 'field' }, h('span', {}, 'Apelido'), nick),
       h('label', { class: 'field' }, h('span', {}, 'Senha'), pass),
+      isRegister && h(
+        'label',
+        { class: 'terms' },
+        terms,
+        h('span', {}, 'Li e aceito os ', h('a', { href: '/termos', target: '_blank', rel: 'noopener' }, 'Termos de uso'), ' e a ', h('a', { href: '/privacidade', target: '_blank', rel: 'noopener' }, 'Política de privacidade'), '.'),
+      ),
       error,
       submit,
     );

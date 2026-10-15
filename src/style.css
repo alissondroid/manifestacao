@@ -632,3 +632,9 @@ body[data-mode='play'] .lobby-only { display: none !important; }
 .shopitem .desc { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; }
 .shopitem.vip { grid-column: 1 / -1; border-color: #f5c518; background: linear-gradient(135deg, rgba(245,197,24,0.14), transparent); }
 .slotrow { flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+
+.terms { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--muted); }
+.terms input { width: auto; margin-top: 3px; }
+.terms a, .legal a { color: var(--accent); }
+.legal-links { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; margin: 0; }
+.legal-links a { color: var(--muted); }

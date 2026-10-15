@@ -58,7 +58,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 async function handle(req, res) {
-  if (await handleApi(req, res, { onEquip: refreshLook })) return;
+  if (await handleApi(req, res, { onEquip: refreshLook, onDelete: kickUser })) return;
   if (!fs.existsSync(DIST)) {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
     return res.end('Sem build. Em desenvolvimento use "npm run dev" (cliente em http://localhost:5173).');
@@ -77,6 +77,8 @@ async function handle(req, res) {
     res.writeHead(403);
     return res.end();
   }
+  const dirIndex = path.join(file, 'index.html');
+  if (file !== DIST && fs.existsSync(dirIndex)) file = dirIndex; // /termos -> /termos/index.html
   fs.stat(file, (err, st) => {
     if (err || st.isDirectory()) {
       // só a página inicial existe; qualquer outro caminho é 404 de verdade (não "soft 404" para os buscadores)
@@ -154,6 +156,15 @@ function cleanLook(rawLook, equip = {}, custom = {}) {
     equip,
     custom,
   };
+}
+
+/** Conta excluída: tira o jogador da avenida. */
+function kickUser(userId) {
+  for (const p of [...players.values()]) {
+    if (p.userId !== userId) continue;
+    p.ws.close(4001, 'Conta excluída');
+    removePlayer(p);
+  }
 }
 
 /** Itens equipados mudaram na loja: atualiza o avatar de quem está online e avisa quem o vê. */

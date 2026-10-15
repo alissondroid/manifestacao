@@ -47,6 +47,24 @@ export function destroySession(token) {
   if (token) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(sha256(token));
 }
 
+/** Exclui os dados pessoais da conta. O usuário vira "Excluído<id>" (os pedidos pagos são mantidos por obrigação fiscal). */
+export function deleteAccount(userId) {
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const old = db.prepare('SELECT nick FROM users WHERE id = ?').get(userId);
+    if (old) db.prepare('DELETE FROM race_times WHERE nick = ?').run(old.nick); // recordes públicos com o apelido da conta
+    for (const table of ['sessions', 'owned', 'equipped', 'designs', 'inventory']) {
+      db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).run(userId);
+    }
+    db.prepare("UPDATE users SET email = ?, nick = ?, pass_hash = '', vip_until = 0, terms_at = NULL WHERE id = ?")
+      .run(`excluido-${userId}@invalid.local`, `Excluído${userId}`, userId);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
 export function userFromToken(token) {
   if (!token) return null;
   const row = db.prepare(`

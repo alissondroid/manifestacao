@@ -82,6 +82,9 @@ if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'vip_un
   db.exec('ALTER TABLE users ADD COLUMN vip_until INTEGER NOT NULL DEFAULT 0');
 }
 
+if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'terms_at')) {
+  db.exec('ALTER TABLE users ADD COLUMN terms_at INTEGER'); // quando aceitou os Termos e a Política (LGPD: prova do consentimento)
+}
 if (!db.prepare('PRAGMA table_info(orders)').all().some((c) => c.name === 'pay_url')) {
   db.exec('ALTER TABLE orders ADD COLUMN pay_url TEXT');
 }
