@@ -509,7 +509,10 @@ export function createLabel(nick, color, equip = {}) {
   hpbar.className = 'hpbar';
   hpbar.hidden = true;
   hpbar.append(document.createElement('i'));
-  el.append(bubble, name, hpbar);
+  const status = document.createElement('div');
+  status.className = 'status';
+  status.hidden = true;
+  el.append(bubble, name, hpbar, status);
   $('#labels').append(el);
 
   let timer;
@@ -527,6 +530,20 @@ export function createLabel(nick, color, equip = {}) {
       hpbar.hidden = hp >= 100 && !shield;
       hpbar.classList.toggle('shield', shield);
       hpbar.firstChild.style.width = `${Math.max(0, hp)}%`;
+    },
+    /** Emoji girando sobre a cabeça (ex.: 💫 no nocaute). Vazio remove. */
+    setStatus(emoji) {
+      status.textContent = emoji || '';
+      status.hidden = !emoji;
+    },
+    /** Número flutuante (dano). */
+    pop(text, color = '#ff5a5a') {
+      const r = document.createElement('span');
+      r.className = 'dmg';
+      r.textContent = text;
+      r.style.color = color;
+      r.addEventListener('animationend', () => r.remove());
+      el.append(r);
     },
     react(emoji) {
       const r = document.createElement('span');

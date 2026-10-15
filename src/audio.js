@@ -78,11 +78,33 @@ export class Ambience {
     this.tone(660, t, 0.12, 'sine', 0.08);
   }
 
-  hit() {
+  /** Pancada: grave e seca no soco, estalo no cassetete, baque pesado no carro, "splat" no tomate. */
+  hit(kind = 'punch') {
     if (!this.ctx || !this.enabled) return;
     const t = this.ctx.currentTime;
-    this.tone(160, t, 0.16, 'square', 0.1);
-    this.tone(90, t + 0.03, 0.2, 'sawtooth', 0.08);
+    if (kind === 'baton') {
+      this.tone(520, t, 0.05, 'square', 0.1);
+      this.tone(140, t + 0.02, 0.18, 'sawtooth', 0.09);
+    } else if (kind === 'kick') {
+      this.tone(120, t, 0.2, 'sawtooth', 0.12);
+      this.tone(70, t + 0.04, 0.22, 'sine', 0.14);
+    } else if (kind === 'car') {
+      this.tone(60, t, 0.45, 'sawtooth', 0.16);
+      this.tone(45, t + 0.05, 0.5, 'sine', 0.2);
+      this.tone(300, t, 0.08, 'square', 0.08);
+    } else if (kind === 'tomato') {
+      this.tone(220, t, 0.1, 'triangle', 0.1);
+      this.tone(110, t + 0.03, 0.16, 'sine', 0.1);
+    } else {
+      this.tone(160, t, 0.14, 'square', 0.1);
+      this.tone(90, t + 0.03, 0.18, 'sawtooth', 0.09);
+    }
+  }
+
+  /** Golpe que você acertou: tique curto de confirmação. */
+  land() {
+    if (!this.ctx || !this.enabled) return;
+    this.tone(880, this.ctx.currentTime, 0.06, 'triangle', 0.05);
   }
 
   ko() {

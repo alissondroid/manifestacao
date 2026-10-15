@@ -166,6 +166,10 @@ WASD/setas mover · Shift correr · arrastar para girar a câmera (ou Q/E) · En
 - **Jogadores** (Tab ou o botão 👥): lista de quem está na avenida, com acertos e nocautes (`who`).
 - **Sons:** golpe, nocaute e captura de trecho, sintetizados em `src/audio.js`.
 
+## Reações a golpes
+
+Quem apanha reage conforme o golpe (`staggerNow(kind, hp)` em `src/avatar.js`): soco e cassetete jogam a cabeça para trás, o chute pega no peito, o carro joga a pessoa para trás, o tomate dá um susto rápido; com a vida baixa, soco, chute e cassetete derrubam (clipe `knockback`). Além disso: faíscas de impacto por tipo (`Effects.hit`), número de dano flutuante, som diferente por golpe, tremor de câmera e flash vermelho para quem apanha, empurrão que desliza em vez de teleportar (`me.slide`), tique de confirmação para quem acerta, e no nocaute a queda para trás, o boneco deitado e 💫 girando sobre a cabeça até levantar.
+
 ## Monetização e loja
 
 Tudo é cosmético ou de diversão; **nada dá vantagem no PvP** (catálogo em `SHOP`, `shared/config.js`; entrega em `server/shop.js`). Compra só com conta.

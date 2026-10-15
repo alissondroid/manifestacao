@@ -638,3 +638,12 @@ body[data-mode='play'] .lobby-only { display: none !important; }
 .terms a, .legal a { color: var(--accent); }
 .legal-links { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; margin: 0; }
 .legal-links a { color: var(--muted); }
+
+/* ---------- Reações a golpes ---------- */
+.label .status { position: absolute; left: 50%; bottom: 100%; margin-bottom: 14px; font-size: 22px; pointer-events: none; animation: spinstar 1.1s linear infinite; }
+@keyframes spinstar { from { transform: translateX(-50%) rotate(0); } to { transform: translateX(-50%) rotate(360deg); } }
+.label .dmg { position: absolute; left: 50%; top: 0; font-size: 26px; font-weight: 900; pointer-events: none; text-shadow: 0 2px 0 #000, 0 0 6px #000; animation: dmgup 0.9s ease-out forwards; }
+@keyframes dmgup { from { transform: translate(-50%, 10px) scale(0.6); opacity: 1; } 20% { transform: translate(-50%, -8px) scale(1.35); } to { transform: translate(-50%, -64px) scale(1); opacity: 0; } }
+#hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 5; background: radial-gradient(ellipse at center, rgba(220,38,38,0) 45%, rgba(220,38,38,0.65) 100%); }
+#hurt.on { animation: hurt 0.5s ease-out; }
+@keyframes hurt { from { opacity: 1; } to { opacity: 0; } }

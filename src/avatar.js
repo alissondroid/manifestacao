@@ -634,9 +634,18 @@ export class Avatar {
   }
 
   /** Levou um golpe: cambaleia (clipe de reação; atropelamento usa o de ser jogado para trás). */
-  staggerNow(kind = 'punch') {
-    if (this.actions.hit) this.playOnce(kind === 'car' && this.actions.knockback ? 'knockback' : (Math.random() < 0.5 ? 'hit' : 'hitHead'), 0.06);
-    else this.stun = 0.7;
+  staggerNow(kind = 'punch', hp = 100) {
+    const A = this.actions;
+    if (!A.hit) { this.stun = 0.7; return; }
+    const fall = A.knockback ? 'knockback' : 'hit';
+    let clip = 'hitHead'; // soco, cassetete e tomate: cabeça vai para trás
+    let speed = 1;
+    if (kind === 'car') clip = fall; // atropelado: é jogado para trás
+    else if (kind === 'kick') clip = hp < 40 ? fall : 'hit'; // chute no peito
+    else if (kind === 'baton') clip = hp < 55 ? fall : 'hitHead';
+    else if (kind === 'tomato') speed = 1.35; // susto rápido
+    else if (kind === 'punch' && hp < 30) clip = fall;
+    this.playOnce(clip, 0.05, speed);
   }
 
   /** Gesticula ao falar no chat. */

@@ -51,6 +51,33 @@ export class Effects {
     this.list.push({ kind: 'burst', t: 0, dur: 2.2, points, vel });
   }
 
+  /** Faíscas de impacto num golpe (kind: punch, kick, baton, car, tomato). */
+  hit(x, y, z, kind = 'punch') {
+    const n = kind === 'car' ? 34 : 18;
+    const tone = { punch: '#ffe08a', kick: '#ffd0a0', baton: '#ff9a3c', car: '#ffffff', tomato: '#e53935' }[kind] ?? '#ffffff';
+    const pos = new Float32Array(n * 3);
+    const col = new Float32Array(n * 3);
+    const vel = [];
+    const c = new THREE.Color(tone);
+    for (let i = 0; i < n; i++) {
+      pos.set([x, y, z], i * 3);
+      col.set([c.r, c.g, c.b], i * 3);
+      const a = Math.random() * Math.PI * 2;
+      const u = Math.random() * 2 - 0.6;
+      const sp = 2.5 + Math.random() * (kind === 'car' ? 5 : 3.5);
+      vel.push(new THREE.Vector3(Math.cos(a) * sp, u * sp, Math.sin(a) * sp));
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const points = new THREE.Points(geo, new THREE.PointsMaterial({
+      size: kind === 'car' ? 0.32 : 0.24, vertexColors: true, transparent: true, depthWrite: false, blending: kind === 'tomato' ? THREE.NormalBlending : THREE.AdditiveBlending, fog: false,
+    }));
+    points.frustumCulled = false;
+    this.scene.add(points);
+    this.list.push({ kind: 'burst', t: 0, dur: 0.45, points, vel });
+  }
+
   confetti(x, z) {
     const n = 70;
     const pos = new Float32Array(n * 3);

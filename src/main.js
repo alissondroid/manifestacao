@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  WORLD, SIDES, ANIMS, WALK_SPEED, RUN_SPEED, RACE, MELEE, VEHICLE, REACTIONS, STAMINA, EMOTES, JUMP, ZONES,
+  WORLD, SIDES, ANIMS, WALK_SPEED, RUN_SPEED, RACE, MELEE, VEHICLE, REACTIONS, STAMINA, EMOTES, JUMP, ZONES, COMBAT,
 } from '../shared/config.js';
 import { createWorld, carMesh } from './world.js';
 import { Avatar } from './avatar.js';
@@ -99,6 +99,20 @@ let lobbyAnim = 'idle'; // animação escolhida no preview do lobby
 // modos extras
 const race = { snap: { state: 'idle', n: 0 }, joined: false, mine: null, goAt: 0, countAt: 0 };
 const pvp = { on: false, lastThrow: 0 };
+// reações a golpes: tremor de câmera
+const shake = { until: 0, dur: 1, amp: 0 };
+const SHAKE = { punch: 0.07, kick: 0.1, baton: 0.09, car: 0.22, tomato: 0.04 };
+function shakeCam(amp, ms = 280) {
+  shake.amp = amp;
+  shake.until = performance.now() + ms;
+  shake.dur = ms;
+}
+function hurtFlash() {
+  const el = $('#hurt');
+  el.classList.remove('on');
+  void el.offsetWidth; // reinicia a animação
+  el.classList.add('on');
+}
 // vida (PvP), nocaute e fôlego
 const vit = { hp: 100, shieldUntil: 0, koUntil: 0, koBy: '', stamina: STAMINA.max, tired: false, next: 0 };
 const lastAttackAt = {}; // por golpe, para o cooldown no cliente
@@ -333,6 +347,10 @@ const net = new Net({
         break;
       }
       case 'fix':
+        if (me.slide && Math.hypot(m.x - me.slide.tx, m.z - me.slide.tz) < 0.1) break; // o empurrão já está em andamento
+        me.slide = null;
+        me.fixAt = performance.now();
+        me.fixFrom = { x: me.x, z: me.z };
         me.x = m.x;
         me.z = m.z;
         if (typeof m.ry === 'number') { me.ry = m.ry; camYaw = m.ry; }
@@ -355,9 +373,16 @@ const net = new Net({
           vit.shieldUntil = now + m.sh;
           vit.koUntil = now + m.ko;
           me.label?.setHp(m.hp, m.sh > 0);
+          if (m.ko === 0) me.label?.setStatus('');
         } else {
           const r = remotes.get(m.id);
-          if (r) { r.hp = m.hp; r.shieldUntil = now + m.sh; r.koUntil = now + m.ko; r.shieldOn = m.sh > 0; r.label.setHp(m.hp, r.shieldOn); }
+          if (r) {
+            r.hp = m.hp; r.shieldUntil = now + m.sh; r.koUntil = now + m.ko; r.shieldOn = m.sh > 0; r.label.setHp(m.hp, r.shieldOn);
+            const down = m.ko > 0;
+            if (down && !r.down) { r.avatar.staggerNow('car'); r.lieAt = now + 500; r.label.setStatus('💫'); }
+            if (!down && r.down) r.label.setStatus('');
+            r.down = down;
+          }
         }
         break;
       }
@@ -369,6 +394,10 @@ const net = new Net({
         hud.setEmote(0);
         if (drive.on) toggleDrive();
         sound.ko();
+        me.avatar.staggerNow('car'); // cai para trás e só então deita
+        me.lieAt = performance.now() + 500;
+        me.label?.setStatus('💫');
+        shakeCam(0.2, 420);
         break;
       case 'react': {
         const who = m.id === myId ? me : remotes.get(m.id);
@@ -407,23 +436,43 @@ const net = new Net({
       case 'feed':
         hud.addChat('☠️', `${m.a} nocauteou ${m.v}`, SIDES[m.as]?.color ?? '#94a3b8');
         break;
-      case 'hitby':
-        sound.hit();
-        if (m.kind && MELEE[m.kind]) {
-          toast(HIT_NAMES[m.kind].replace('%s', m.nick), 'error');
-          me.avatar.staggerNow(m.kind);
-          me.stunUntil = performance.now() + MELEE[m.kind].stunMs;
+      case 'hitby': {
+        const now = performance.now();
+        const kind = m.kind && MELEE[m.kind] ? m.kind : 'tomato';
+        sound.hit(kind);
+        if (me.manual) { me.manual = 0; hud.setEmote(0); }
+        if (kind !== 'tomato') {
+          toast(HIT_NAMES[kind].replace('%s', m.nick), 'error');
+          me.stunUntil = now + MELEE[kind].stunMs;
           if (drive.on) drive.speed *= 0.3;
         } else {
           toast(`🍅 ${m.nick} te acertou!`, 'error');
           splat(me.avatar);
         }
+        if (!drive.on) me.avatar.staggerNow(kind, m.hp);
+        impact(me, kind);
+        shakeCam(SHAKE[kind]);
+        hurtFlash();
+        // o servidor já moveu o jogador (fix): em vez de teleportar, desliza do ponto antigo até o novo
+        if (now - (me.fixAt || 0) < 250 && me.fixFrom && Math.hypot(me.x - me.fixFrom.x, me.z - me.fixFrom.z) < 5) {
+          me.slide = {
+            fx: me.fixFrom.x, fz: me.fixFrom.z, tx: me.x, tz: me.z, t0: now, dur: 260,
+          };
+          me.x = me.fixFrom.x;
+          me.z = me.fixFrom.z;
+        }
         break;
+      }
       case 'attack': { // golpe de outro jogador (e quem ele acertou)
         const who = remotes.get(m.id);
         if (who && m.kind !== 'car') who.avatar.strikeNow(m.kind);
         const victim = m.hit != null && m.hit !== myId ? remotes.get(m.hit) : null;
-        if (victim) victim.avatar.staggerNow(m.kind);
+        if (victim) {
+          if (!victim.down) victim.avatar.staggerNow(m.kind, victim.hp);
+          impact(victim, m.kind);
+          if (Math.hypot(victim.x - me.x, victim.z - me.z) < 30) sound.hit(m.kind);
+        }
+        if (m.id === myId && m.hit != null) { sound.land(); shakeCam(0.03, 120); } // acertei
         break;
       }
       case 'look': {
@@ -496,6 +545,12 @@ function throwTomato() {
   net.send({ t: 'throw' });
 }
 
+/** Impacto de um golpe: faíscas e número de dano sobre quem apanhou. */
+function impact(target, kind) {
+  effects.hit(target.x, 1.3, target.z, kind);
+  target.label?.pop(`-${COMBAT.dmg[kind] ?? 0}`);
+}
+
 /** Tomate voando do arremessador até o alvo (ou até o fim do alcance). */
 function spawnTomato(m) {
   const target = m.hit === myId ? me : remotes.get(m.hit);
@@ -540,7 +595,14 @@ function updateProjectiles(dt) {
     if (p.mesh.userData.spin) p.mesh.rotation.x += dt * p.mesh.userData.spin;
     if (k >= 1) {
       scene.remove(p.mesh);
-      if (p.target && p.target.avatar) splat(p.target.avatar);
+      if (p.target && p.target.avatar) {
+        splat(p.target.avatar);
+        if (p.target !== me) { // o 'hitby' já cuida de mim
+          p.target.avatar.staggerNow('tomato', p.target.hp ?? 100);
+          impact(p.target, 'tomato');
+          sound.hit('tomato');
+        }
+      }
       projectiles.splice(i, 1);
     }
   }
@@ -662,6 +724,16 @@ const lerpAngle = (a, b, k) => {
   return a + d * k;
 };
 
+function updateSlide(now) {
+  const s = me.slide;
+  if (!s) return;
+  const k = Math.min(1, (now - s.t0) / s.dur);
+  const e = 1 - (1 - k) ** 3;
+  me.x = s.fx + (s.tx - s.fx) * e;
+  me.z = s.fz + (s.tz - s.fz) * e;
+  if (k >= 1) me.slide = null;
+}
+
 function updateLocal(dt) {
   let ix = 0;
   let iy = 0;
@@ -767,7 +839,7 @@ function sendState(now) {
   const s = me.sent;
   const changed = Math.abs(me.x - s.x) > 0.01 || Math.abs(me.z - s.z) > 0.01
     || Math.abs(me.ry - s.ry) > 0.02 || a !== s.a;
-  if (watching || !changed || now - s.at < 66) return;
+  if (watching || !changed || now - s.at < 66 || now < me.stunUntil) return; // atordoado: o servidor ignora o movimento
   net.send({ t: 'move', x: me.x, z: me.z, ry: me.ry, a });
   s.x = me.x; s.z = me.z; s.ry = me.ry; s.a = a; s.at = now;
 }
@@ -806,7 +878,7 @@ function updateRemotes(dt) {
       const k = (nowMs - r.jumpAt) / JUMP.ms;
       if (k < 1) hop = 4 * JUMP.height * k * (1 - k);
     } else r.jumpAt = 0;
-    lie(r.avatar.group, down, dt, hop);
+    lie(r.avatar.group, down && nowMs >= (r.lieAt || 0), dt, hop);
     r.avatar.update(dt, down ? 'idle' : animName(r.anim, r.speed), r.speed);
   }
 }
@@ -847,6 +919,13 @@ function updateCamera(dt, time) {
   );
   camera.position.lerp(wanted, 1 - Math.exp(-dt * 10));
   camera.lookAt(me.x, watching ? 1 : 1.45, me.z);
+  const left = shake.until - performance.now();
+  if (left > 0) { // tremor após levar golpe
+    const a = shake.amp * (left / shake.dur);
+    camera.position.x += (Math.random() - 0.5) * a * 2;
+    camera.position.y += (Math.random() - 0.5) * a * 2;
+    camera.position.z += (Math.random() - 0.5) * a * 2;
+  }
 }
 
 function updateHud(now) {
@@ -872,6 +951,7 @@ function frame() {
   const time = elapsed;
 
   if (mode === 'play') {
+    updateSlide(now);
     updateLocal(dt);
     sendState(now);
     if (!watching) {
@@ -883,7 +963,7 @@ function frame() {
       } else {
         const jk = me.jumpAt ? (now - me.jumpAt) / JUMP.ms : 1;
         if (jk >= 1) me.jumpAt = 0;
-        lie(me.avatar.group, now < vit.koUntil, dt, jk < 1 ? 4 * JUMP.height * jk * (1 - jk) : 0);
+        lie(me.avatar.group, now < vit.koUntil && now >= (me.lieAt || 0), dt, jk < 1 ? 4 * JUMP.height * jk * (1 - jk) : 0);
         me.avatar.update(dt, now < vit.koUntil ? 'idle' : animName(currentAnim(), me.speed), me.speed);
       }
     }
@@ -927,5 +1007,5 @@ window.__AVENIDA__ = {
   info: renderer.info,
   movingCars,
   // só para depuração no console
-  THREE, Avatar, renderer, scene, world, me,
+  THREE, Avatar, renderer, scene, world, me, effects,
 };
