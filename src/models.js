@@ -284,7 +284,10 @@ function measureHead(root, prefix) {
 }
 
 const loader = new GLTFLoader();
-const load = (file) => loader.loadAsync(`/models/${file}`);
+const load = (file, onProgress) => loader.loadAsync(`/models/${file}`, onProgress);
+
+/** Espera o navegador pintar, para a tela de carregamento atualizar antes de um trabalho pesado. */
+export const nextPaint = () => new Promise((resolve) => { requestAnimationFrame(() => setTimeout(resolve, 0)); });
 
 function findSkinned(root, name) {
   if (name) return root.getObjectByName(name);
@@ -305,12 +308,20 @@ export function modelId(body, face = 0) {
   return list[Math.min(Math.max(0, face | 0), list.length - 1)];
 }
 
-export async function loadModels() {
+/** `onStage('download', 0..1)` durante o download; `onStage('prepare')` ao montar os modelos. */
+export async function loadModels(onStage) {
   if (models.ready) return models;
   const ids = Object.keys(CHARACTERS);
   // ual1/ual2: Universal Animation Library (Quaternius, CC0) com os ossos renomeados para o padrão Mixamo (src/dev-rig.js)
   // zsky.glb: chute, murro e aceno do pacote Animated Character (Zsky, CC BY 4.0), refeitos no padrão Mixamo
-  const [ual1, ual2, clapSrc, zsky, ...gltfs] = await Promise.all([load('ual1.glb'), load('ual2.glb'), load('clap.glb'), load('zsky.glb'), ...ids.map((id) => load(CHARACTERS[id].file))]);
+  const files = ['ual1.glb', 'ual2.glb', 'clap.glb', 'zsky.glb', ...ids.map((id) => CHARACTERS[id].file)];
+  const done = files.map(() => 0); // fração baixada de cada arquivo
+  const report = () => onStage?.('download', done.reduce((a, b) => a + b, 0) / files.length);
+  const [ual1, ual2, clapSrc, zsky, ...gltfs] = await Promise.all(files.map((file, i) => load(file, (e) => {
+    if (e.lengthComputable && e.total) { done[i] = Math.max(done[i], Math.min(0.99, e.loaded / e.total)); report(); }
+  }).then((gltf) => { done[i] = 1; report(); return gltf; })));
+  onStage?.('prepare');
+  await nextPaint();
 
   const skins = {};
   ids.forEach((id, i) => {

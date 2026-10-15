@@ -21,6 +21,53 @@ export function setOnline(counts) {
   }
 }
 
+const LOADING_TIPS = [
+  'WASD ou setas para andar, Shift para correr.',
+  'Enter abre o chat. Os outros jogadores veem o que você escrever.',
+  'As teclas 1, 2 e 3 acenam, dançam e aplaudem.',
+  'A tecla C chama o carro; C de novo para sair.',
+  'No celular, use o joystick na tela para andar.',
+  'Em "Só quero assistir" você passeia de câmera livre, sem avatar.',
+];
+
+/** Tela de carregamento: barra com porcentagem, etapa atual e dicas. */
+export const loadingScreen = (() => {
+  let shown = 0;
+  let timer = 0;
+  let tip = Math.floor(Math.random() * LOADING_TIPS.length);
+  const showTip = () => { $('#loadtip').textContent = `Dica: ${LOADING_TIPS[tip]}`; tip = (tip + 1) % LOADING_TIPS.length; };
+  return {
+    start() {
+      showTip();
+      timer = setInterval(showTip, 4000);
+      $('#loadretry').onclick = () => location.reload();
+    },
+    set(pct, text) {
+      shown = Math.max(shown, Math.min(100, Math.round(pct)));
+      $('#loadbar').firstElementChild.style.width = `${shown}%`;
+      $('#loadbar').setAttribute('aria-valuenow', shown);
+      $('#loadpct').textContent = `${shown}%`;
+      if (text) $('#loadtext').textContent = text;
+    },
+    fail(msg) {
+      clearInterval(timer);
+      $('#loading').classList.add('failed');
+      $('#loaderr').textContent = msg;
+      $('#loaderr').hidden = false;
+      $('#loadretry').hidden = false;
+      $('#loadtip').hidden = true;
+      $('#loadtext').textContent = 'Falha ao carregar';
+    },
+    done() {
+      clearInterval(timer);
+      this.set(100, 'Pronto');
+      const el = $('#loading');
+      el.classList.add('done');
+      setTimeout(() => { el.hidden = true; }, 450);
+    },
+  };
+})();
+
 export function setStatus(text) {
   $('#status').textContent = text;
 }

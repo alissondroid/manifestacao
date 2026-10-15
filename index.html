@@ -74,7 +74,17 @@
       <p>Jogo multiplayer grátis na Avenida Paulista, direto no navegador: monte seu personagem, converse, dispute trechos, corra e use itens da loja. Ative o JavaScript para jogar. Projeto independente, sem vínculo com candidatos, partidos ou campanhas.</p>
     </noscript>
     <canvas id="c"></canvas>
-    <div id="loading" class="loading">Carregando personagens…</div>
+    <div id="loading" class="loading" role="status" aria-live="polite">
+      <div class="load-box">
+        <span class="load-logo" aria-hidden="true"><i></i><i></i><i></i></span>
+        <b class="load-title">AVENIDA<span>ONLINE</span></b>
+        <div id="loadbar" class="load-bar" role="progressbar" aria-label="Carregando o jogo" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+        <p class="load-row"><span id="loadtext">Iniciando…</span><b id="loadpct">0%</b></p>
+        <p id="loadtip" class="load-tip"></p>
+        <p id="loaderr" class="load-err" hidden></p>
+        <button id="loadretry" class="primary" type="button" hidden>Recarregar a página</button>
+      </div>
+    </div>
     <div id="labels"></div>
     <div id="hurt"></div>
 

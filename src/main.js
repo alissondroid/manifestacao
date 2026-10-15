@@ -9,9 +9,9 @@ import { Net } from './net.js';
 import { Ambience } from './audio.js';
 import { initAccount } from './account.js';
 import { PRESETS, renderPortraits } from './portraits.js';
-import { loadModels } from './models.js';
+import { loadModels, nextPaint } from './models.js';
 import {
-  initLobby, initHud, initModes, createLabel, setOnline, setStatus, showError,
+  initLobby, initHud, initModes, createLabel, setOnline, setStatus, showError, loadingScreen,
 } from './ui.js';
 import { toast } from './account.js';
 import { initRadar } from './radar.js';
@@ -62,14 +62,19 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 900);
 
 // Modelos humanos (glTF) precisam estar carregados antes de montar a multidão e o avatar.
+loadingScreen.start();
 try {
-  await loadModels();
+  await loadModels((stage, frac) => {
+    if (stage === 'download') loadingScreen.set(frac * 75, 'Baixando personagens');
+    else loadingScreen.set(78, 'Preparando personagens');
+  });
 } catch (err) {
   console.error(err);
-  document.querySelector('#loading').textContent = 'Não foi possível carregar os personagens. Recarregue a página.';
+  loadingScreen.fail('Não foi possível carregar os personagens. Verifique a conexão e tente de novo.');
   throw err;
 }
-document.querySelector('#loading').hidden = true;
+loadingScreen.set(88, 'Montando a avenida');
+await nextPaint();
 
 const world = createWorld(scene, renderer);
 const effects = new Effects(scene);
@@ -993,6 +998,7 @@ function frame() {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+requestAnimationFrame(() => loadingScreen.done()); // só some depois do primeiro quadro desenhado
 
 // Métricas de depuração (equivalente simples ao do site original).
 window.__AVENIDA__ = {
