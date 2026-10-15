@@ -89,7 +89,12 @@ function resize() {
 function applyViewOffset() {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  if (mode === 'lobby' && w > 760) camera.setViewOffset(w, h, w * 0.2, 0, w, h); // cartão à direita
+  if (mode === 'lobby' && w > 760) {
+    // o conjunto (personagem + cartão) fica centralizado: o personagem vai para o meio da coluna da esquerda
+    const r = document.querySelector('#lobby .hero').getBoundingClientRect();
+    const dx = r.width > 0 ? w / 2 - (r.left + r.width / 2) : w * 0.2;
+    camera.setViewOffset(w, h, dx, 0, w, h);
+  }
   else if (mode === 'lobby') camera.setViewOffset(w, h, 0, h * 0.2, w, h); // celular: cartão fica embaixo
   else camera.clearViewOffset();
   camera.updateProjectionMatrix();
