@@ -135,6 +135,17 @@ WASD/setas mover · Shift correr · arrastar para girar a câmera (ou Q/E) · En
 - **Carro** (tecla C ou o botão 🚗): o jogador entra num carro da cor do seu lado, no lugar onde está. W/S aceleram e freiam, A/D viram (o giro cresce com a velocidade), a câmera segue atrás. A física é no cliente (`VEHICLE` em `shared/config.js`); o servidor só valida a velocidade máxima (16 m/s em vez de 9) quando o estado é `drive`. Os outros jogadores veem o carro no lugar do avatar (`ANIMS` ganhou `drive`).
 - **Atropelamento:** com PvP ligado e a mais de 3 m/s, o servidor aplica um golpe `car` em quem estiver a 1,6 m do carro (empurrão de 2,8 m, atordoado 1,2 s, no máximo uma vez a cada 1,5 s por vítima). Figurantes da multidão também caem e deslizam quando um carro (meu ou de outro jogador) passa por cima deles, e levantam 3 s depois (`knock` em `src/crowd.js`; só no cliente, a multidão é local).
 
+## Jogabilidade: vida, domínio e extras
+
+- **Vida e nocaute (PvP):** 100 de vida; tomate 12, murro 10, chute 16, cassetete 18, atropelamento 30 (`COMBAT` em `shared/config.js`). A zero, o jogador é nocauteado por 4 s (deitado, sem andar nem atacar), volta ao ponto de entrada com 3 s de escudo e o lado de quem nocauteou ganha +3. Quem está com escudo ou nocauteado não leva golpe. A vida regenera depois de 6 s sem apanhar e não dá para desligar o PvP por 8 s depois de apanhar. Barra de vida no HUD e sobre a cabeça de quem está ferido; aviso de nocaute para todos no chat. Servidor: `damage`, `announceHp` e o laço de 500 ms em `server/index.js`; mensagens `hp {id, hp, sh, ko}`, `ko {by, ms}`, `feed`.
+- **Domínio da Paulista** (`server/zones.js`): 5 trechos (Consolação, MASP, Brigadeiro, Gazeta, Paraíso). O lado com mais gente no trecho (bandeira conta em dobro) vai reduzindo a força do dono até tomá-lo; trecho sem dono precisa de um acúmulo. Cada trecho dominado rende 1 ponto por segundo ao lado. Mensagens `zones {z, scores}` (só quando muda) e `zonecap`.
+- **Minimapa** (`src/radar.js`): faixa da avenida com jogadores por cor de lado, trechos coloridos pelo dono, largada e chegada da corrida, o trecho em que você está e o placar do Domínio.
+- **Fôlego:** correr (Shift, ou o joystick até o fim) gasta; esgotado, só volta a correr com 25%.
+- **Colisão:** barracas, carros, ônibus, postes e totens bloqueiam o jogador (`world.obstacles`, caixas do cenário); o carro bate e perde velocidade.
+- **Reações** (teclas 7 a 0 ou o botão 😀): emojis flutuando sobre o jogador, visíveis a quem está perto (`react {e}`, `REACTIONS`).
+- **Jogadores** (Tab ou o botão 👥): lista de quem está na avenida, com acertos e nocautes (`who`).
+- **Sons:** golpe, nocaute e captura de trecho, sintetizados em `src/audio.js`.
+
 ## Animações
 
 - **Fontes:** quase tudo vem da **Universal Animation Library 1 e 2** (Quaternius, CC0; `assets-src/ual1.glb`, `ual2.glb`, licença em `assets-src/ual-LICENSE-CC0.txt`): parado, andar, correr, murro (`Punch_Cross`/`Punch_Jab`/`Melee_Hook`), cassetete (`Sword_Attack`), levar golpe (`Hit_Chest`/`Hit_Head`/`Hit_Knockback`), arremesso (`OverhandThrow`), dirigir, falar, sim/não. O samba vem da Michelle (three.js) e o aplauso do Mixamo (`clap.glb`). Chute, murro direto e aceno vêm do pacote **Animated Character** de **Zsky** (`assets-src/zsky.glb`, **CC BY 4.0**: exige crédito, ver Créditos abaixo). Sem clipe (por exemplo num corpo sem esses clipes), o aceno e o chute caem para poses procedurais.

@@ -821,5 +821,5 @@ export function createWorld(scene, renderer) {
     renderer.shadowMap.needsUpdate = true;
   }
 
-  return { update, setShadows, crowd, ticker, bounds: WORLD };
+  return { update, setShadows, crowd, ticker, bounds: WORLD, obstacles: avoid };
 }

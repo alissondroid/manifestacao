@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import {
-  WORLD, SIDES, SHIRTS, SKINS, HAIRS, HAIR_STYLES, BODIES, AGES, MODELS, HEIGHTS, BEARDS, TOPS, PANTS, FLAGS, ANIMS, MAX_SPEED, LIMITS, MELEE, VEHICLE,
+  WORLD, SIDES, SHIRTS, SKINS, HAIRS, HAIR_STYLES, BODIES, AGES, MODELS, HEIGHTS, BEARDS, TOPS, PANTS, FLAGS, ANIMS, MAX_SPEED, LIMITS, MELEE, VEHICLE, COMBAT, REACTIONS,
 } from '../shared/config.js';
 import { handleApi } from './api.js';
 import { userFromRequest, nickTaken } from './auth.js';
@@ -12,6 +12,7 @@ import { equippedMap, designsOf } from './shop.js';
 import { filterText } from './moderation.js';
 import { createRace } from './race.js';
 import { PVP } from '../shared/config.js';
+import { createZones } from './zones.js';
 
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_PLAYERS = Number(process.env.MAX_PLAYERS) || 300;
@@ -149,6 +150,8 @@ function teleport(p, x, z, ry) {
 
 const race = createRace({ players, send, broadcast: (msg) => broadcast(msg), teleport });
 
+const zones = createZones({ players, broadcast: (msg) => broadcast(msg) });
+
 // ---------- PvP: tomatada ----------
 // O arremesso é resolvido no servidor pela posição e direção do jogador: o tomate voa em linha
 // reta até PVP.range e acerta o primeiro jogador (com PvP ligado) a menos de PVP.radius da linha.
@@ -156,7 +159,7 @@ const race = createRace({ players, send, broadcast: (msg) => broadcast(msg), tel
 const sideScores = SIDES.map(() => 0);
 function pvpScores() {
   const top = [...players.values()].filter((p) => p.hits > 0).sort((a, b) => b.hits - a.hits).slice(0, 5)
-    .map((p) => ({ nick: p.nick, side: p.side, hits: p.hits }));
+    .map((p) => ({ nick: p.nick, side: p.side, hits: p.hits, kos: p.kos }));
   return { t: 'pvp', scores: sideScores, top };
 }
 
@@ -167,16 +170,60 @@ function sendNear(p, msg) {
   }
 }
 
+const spawnPoint = () => [(Math.random() - 0.5) * 12, (Math.random() - 0.5) * 10];
+
+function announceHp(p) {
+  const now = Date.now();
+  sendNear(p, {
+    t: 'hp', id: p.id, hp: Math.round(p.hp), sh: Math.max(0, p.shieldUntil - now), ko: Math.max(0, p.koUntil - now),
+  });
+}
+
+const protectedNow = (p, now) => p.koUntil > now || p.shieldUntil > now;
+
+/** Tira vida do alvo; a zero, nocauteia (some do jogo por um tempo e volta protegido). */
+function damage(target, attacker, kind) {
+  const now = Date.now();
+  target.hp = Math.max(0, target.hp - COMBAT.dmg[kind]);
+  target.lastHurt = now;
+  if (target.hp <= 0) {
+    target.koUntil = now + COMBAT.koMs;
+    target.stunUntil = target.koUntil;
+    attacker.kos += 1;
+    sideScores[attacker.side] += COMBAT.koBonus;
+    send(target.ws, { t: 'ko', by: attacker.nick, ms: COMBAT.koMs });
+    broadcast({ t: 'feed', a: attacker.nick, as: attacker.side, v: target.nick, vs: target.side, k: kind });
+  }
+  announceHp(target);
+}
+
+/** A cada meio segundo: devolve quem terminou o nocaute e regenera a vida de quem não apanha há um tempo. */
+setInterval(() => {
+  const now = Date.now();
+  for (const p of players.values()) {
+    if (p.hp <= 0 && p.koUntil <= now) {
+      p.hp = COMBAT.hp;
+      p.shieldUntil = now + COMBAT.shieldMs;
+      const [x, z] = spawnPoint();
+      teleport(p, x, z, 0);
+      announceHp(p);
+    } else if (p.hp > 0 && p.hp < COMBAT.hp && now - p.lastHurt > COMBAT.regenDelayMs) {
+      p.hp = Math.min(COMBAT.hp, p.hp + COMBAT.regenPerSec / 2);
+      announceHp(p);
+    }
+  }
+}, 500);
+
 function throwTomato(me) {
   const now = Date.now();
-  if (!me.pvp || now - me.lastThrow < PVP.cooldownMs) return;
+  if (!me.pvp || me.koUntil > now || now - me.lastThrow < PVP.cooldownMs) return;
   me.lastThrow = now;
   const dx = Math.sin(me.ry);
   const dz = Math.cos(me.ry);
   let target = null;
   let best = PVP.range;
   for (const p of players.values()) {
-    if (p === me || !p.pvp) continue;
+    if (p === me || !p.pvp || protectedNow(p, Date.now())) continue;
     const ox = p.x - me.x;
     const oz = p.z - me.z;
     const along = ox * dx + oz * dz;
@@ -189,12 +236,13 @@ function throwTomato(me) {
   if (target) {
     me.hits += 1;
     sideScores[me.side] += 1;
+    damage(target, me, 'tomato');
   }
   sendNear(me, {
     t: 'throw', id: me.id, x: round2(me.x), z: round2(me.z), ry: round2(me.ry), dist: round2(best), hit: target ? target.id : null,
   });
   if (target) {
-    send(target.ws, { t: 'hitby', id: me.id, nick: me.nick });
+    send(target.ws, { t: 'hitby', id: me.id, nick: me.nick, hp: Math.round(target.hp) });
     broadcast(pvpScores());
   }
 }
@@ -210,7 +258,7 @@ function hitTarget(me, kind, pushDir) {
   let target = null;
   let best = spec.reach;
   for (const p of players.values()) {
-    if (p === me || !p.pvp) continue;
+    if (p === me || !p.pvp || protectedNow(p, now)) continue;
     const ox = p.x - me.x;
     const oz = p.z - me.z;
     const d = Math.hypot(ox, oz);
@@ -231,7 +279,8 @@ function hitTarget(me, kind, pushDir) {
   teleport(target, nx, nz, target.ry);
   me.hits += 1;
   sideScores[me.side] += 1;
-  send(target.ws, { t: 'hitby', id: me.id, nick: me.nick, kind });
+  damage(target, me, kind);
+  send(target.ws, { t: 'hitby', id: me.id, nick: me.nick, kind, hp: Math.round(target.hp) });
   broadcast(pvpScores());
   return target;
 }
@@ -239,7 +288,7 @@ function hitTarget(me, kind, pushDir) {
 function attack(me, kind) {
   if (!MELEE[kind] || kind === 'car' || me.a === DRIVE) return;
   const now = Date.now();
-  if (now - (me.lastAttack || 0) < MELEE[kind].cooldownMs) return;
+  if (me.koUntil > now || now - (me.lastAttack || 0) < MELEE[kind].cooldownMs) return;
   me.lastAttack = now;
   const target = me.pvp ? hitTarget(me, kind) : null;
   sendNear(me, { t: 'attack', id: me.id, kind, hit: target ? target.id : null });
@@ -272,6 +321,7 @@ wss.on('connection', (ws, req) => {
       ws.player = null;
       ws.known = new Set();
       send(ws, { t: 'welcome', id: 0, spectator: true, x: 0, z: 0 });
+      send(ws, zones.snapshot());
       return;
     }
 
@@ -293,8 +343,8 @@ wss.on('connection', (ws, req) => {
         nick,
         side: int(m.side, SIDES.length - 1),
         look: cleanLook(m.look, account ? equippedMap(account.id) : {}, account ? designsOf(account.id) : {}),
-        x: (Math.random() - 0.5) * 12,
-        z: (Math.random() - 0.5) * 10,
+        x: 0,
+        z: 0,
         ry: 0,
         a: 0,
         dirty: false,
@@ -307,7 +357,15 @@ wss.on('connection', (ws, req) => {
         stunUntil: 0,
         lastRunOver: 0,
         hits: 0,
+        kos: 0,
+        hp: COMBAT.hp,
+        lastHurt: 0,
+        koUntil: 0,
+        shieldUntil: 0,
+        lastReact: 0,
+        lastWho: 0,
       };
+      [me.x, me.z] = spawnPoint();
       players.set(id, me);
       ws.joined = true;
       ws.player = me;
@@ -316,6 +374,7 @@ wss.on('connection', (ws, req) => {
       send(ws, { t: 'welcome', id, x: round2(me.x), z: round2(me.z) });
       send(ws, race.snapshot());
       send(ws, pvpScores());
+      send(ws, zones.snapshot());
       broadcast({ t: 'online', counts: onlineCounts() }, null, true);
       return;
     }
@@ -365,8 +424,27 @@ wss.on('connection', (ws, req) => {
       if (m.action === 'join') race.join(me);
       else if (m.action === 'leave') race.leave(me);
     } else if (m.t === 'pvp') {
-      me.pvp = !!m.on;
+      const on = !!m.on;
+      const now = Date.now();
+      if (!on && me.pvp && (now - me.lastHurt < COMBAT.leaveLockMs || me.koUntil > now)) {
+        return send(ws, { t: 'pvp', on: true, locked: true });
+      }
+      me.pvp = on;
+      if (!on) { me.hp = COMBAT.hp; me.shieldUntil = 0; announceHp(me); }
       send(ws, { t: 'pvp', on: me.pvp });
+    } else if (m.t === 'react') {
+      const e = Math.trunc(Number(m.e));
+      const now = Date.now();
+      if (!(e >= 0 && e < REACTIONS.length) || now - me.lastReact < 800) return;
+      me.lastReact = now;
+      sendNear(me, { t: 'react', id: me.id, e });
+    } else if (m.t === 'who') {
+      const now = Date.now();
+      if (now - me.lastWho < 1500) return;
+      me.lastWho = now;
+      const list = [...players.values()].sort((a, b) => b.hits - a.hits || b.kos - a.kos).slice(0, 80)
+        .map((p) => [p.nick, p.side, p.hits, p.kos]);
+      send(ws, { t: 'who', list, total: players.size });
     } else if (m.t === 'throw') {
       throwTomato(me);
     } else if (m.t === 'attack') {

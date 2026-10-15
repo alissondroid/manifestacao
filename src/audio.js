@@ -78,6 +78,27 @@ export class Ambience {
     this.tone(660, t, 0.12, 'sine', 0.08);
   }
 
+  hit() {
+    if (!this.ctx || !this.enabled) return;
+    const t = this.ctx.currentTime;
+    this.tone(160, t, 0.16, 'square', 0.1);
+    this.tone(90, t + 0.03, 0.2, 'sawtooth', 0.08);
+  }
+
+  ko() {
+    if (!this.ctx || !this.enabled) return;
+    const t = this.ctx.currentTime;
+    this.tone(300, t, 0.2, 'sawtooth', 0.09);
+    this.tone(200, t + 0.18, 0.2, 'sawtooth', 0.09);
+    this.tone(110, t + 0.36, 0.5, 'sawtooth', 0.09);
+  }
+
+  capture() {
+    if (!this.ctx || !this.enabled) return;
+    const t = this.ctx.currentTime;
+    [523, 659, 784].forEach((f, i) => this.tone(f, t + i * 0.1, 0.3, 'triangle', 0.08));
+  }
+
   setEnabled(on) {
     this.enabled = on;
     try { localStorage.setItem(STORAGE_KEY, on ? 'on' : 'off'); } catch { /* ignore */ }

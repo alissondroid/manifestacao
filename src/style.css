@@ -570,3 +570,50 @@ body[data-mode='play'] .lobby-only { display: none !important; }
 .emotes.disabled { opacity: 0.4; pointer-events: none; }
 
 #lobby .legal.credits a { color: var(--accent); text-underline-offset: 2px; }
+
+/* ---------- Radar, domínio, vida e fôlego ---------- */
+#radar {
+  position: absolute; top: 58px; right: 12px; width: 240px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 6px 6px 8px;
+  display: grid; gap: 4px; font-size: 12px;
+}
+#radarmap { width: 240px; height: 62px; display: block; border-radius: 8px; }
+#zoneinfo { padding: 0 4px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#domscore { display: flex; align-items: center; gap: 8px; padding: 0 4px; flex-wrap: wrap; font-weight: 700; }
+#domscore small { color: var(--muted); font-weight: 600; margin-right: 2px; }
+#domscore i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; box-shadow: 0 0 0 1px rgba(255,255,255,0.45); }
+#domscore .share { display: flex; width: 100%; height: 4px; border-radius: 2px; overflow: hidden; background: rgba(255,255,255,0.1); }
+#domscore .share b { display: block; min-width: 0; transition: flex 0.6s; }
+#who { top: 190px; left: auto; right: 12px; width: min(260px, calc(100% - 24px)); max-height: 50vh; overflow-y: auto; }
+#who h4 { margin: 0 0 6px; font-size: 13px; }
+#who .row { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 12.5px; }
+#who .row i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+#who .row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#who .row small { margin: 0; display: inline; }
+#vitals { position: absolute; left: 50%; bottom: 88px; transform: translateX(-50%); width: min(260px, 40vw); display: grid; gap: 5px; pointer-events: none !important; }
+.bar { position: relative; height: 12px; border-radius: 7px; background: rgba(2, 6, 23, 0.6); border: 1px solid var(--line); overflow: hidden; }
+.bar i { position: absolute; inset: 0 auto 0 0; width: 100%; transition: width 0.15s; }
+.bar.hp { height: 16px; }
+.bar.hp i { background: linear-gradient(90deg, #dc2626, #f97316 60%, #84cc16); }
+.bar.hp.shield { border-color: #38bdf8; box-shadow: 0 0 8px #38bdf8; }
+.bar.hp span { position: relative; display: block; text-align: center; font-size: 11px; font-weight: 700; line-height: 14px; text-shadow: 0 1px 2px #000; }
+.bar.st { height: 7px; }
+.bar.st i { background: #facc15; }
+.bar.st.tired i { background: #ef4444; }
+.bar.st.full { opacity: 0.25; }
+#ko { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; background: rgba(120, 10, 10, 0.4); font-size: 22px; font-weight: 800; text-shadow: 0 2px 6px #000; pointer-events: none !important; line-height: 1.3; }
+#ko small { display: block; font-size: 14px; font-weight: 600; }
+#reacts { position: absolute; right: 70px; bottom: 100px; display: flex; flex-wrap: wrap; gap: 6px; width: 190px; justify-content: flex-end; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 8px; }
+#reacts button { width: 38px; height: 38px; border-radius: 50%; background: transparent; border: 1px solid var(--line); font-size: 19px; cursor: pointer; }
+#reacts button:active { background: rgba(255,255,255,0.15); }
+.label .hpbar { width: 44px; height: 5px; border-radius: 3px; background: rgba(2,6,23,0.7); overflow: hidden; border: 1px solid rgba(255,255,255,0.35); }
+.label .hpbar i { display: block; height: 100%; background: #ef4444; }
+.label .hpbar.shield { border-color: #38bdf8; box-shadow: 0 0 6px #38bdf8; }
+.label .react { position: absolute; left: 50%; bottom: 100%; font-size: 30px; pointer-events: none; animation: floatup 2.2s ease-out forwards; }
+@keyframes floatup { from { transform: translate(-50%, 0) scale(0.6); opacity: 1; } 15% { transform: translate(-50%, -14px) scale(1.2); } to { transform: translate(-50%, -90px) scale(1); opacity: 0; } }
+@media (max-width: 640px) {
+  #radar { width: 200px; top: 50px; }
+  #radarmap { width: 200px; height: 52px; }
+  #who { top: 170px; }
+  #reacts { right: 64px; bottom: 90px; }
+}

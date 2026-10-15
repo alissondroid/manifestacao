@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  WORLD, SIDES, ANIMS, WALK_SPEED, RUN_SPEED, RACE, MELEE, VEHICLE,
+  WORLD, SIDES, ANIMS, WALK_SPEED, RUN_SPEED, RACE, MELEE, VEHICLE, REACTIONS, STAMINA,
 } from '../shared/config.js';
 import { createWorld, carMesh } from './world.js';
 import { Avatar } from './avatar.js';
@@ -14,6 +14,7 @@ import {
   initLobby, initHud, initModes, createLabel, setOnline, setStatus, showError,
 } from './ui.js';
 import { toast } from './account.js';
+import { initRadar } from './radar.js';
 
 const $ = (s) => document.querySelector(s);
 
@@ -96,6 +97,8 @@ let lobbyAnim = 'idle'; // animação escolhida no preview do lobby
 // modos extras
 const race = { snap: { state: 'idle', n: 0 }, joined: false, mine: null, goAt: 0, countAt: 0 };
 const pvp = { on: false, lastThrow: 0 };
+// vida (PvP), nocaute e fôlego
+const vit = { hp: 100, shieldUntil: 0, koUntil: 0, koBy: '', stamina: STAMINA.max, tired: false, next: 0 };
 const lastAttackAt = {}; // por golpe, para o cooldown no cliente
 const DRIVE = ANIMS.indexOf('drive');
 // carro: física simples no cliente (o servidor só valida a velocidade)
@@ -124,6 +127,7 @@ const me = {
   sent: { x: NaN, z: NaN, ry: NaN, a: -1, at: 0 },
 };
 scene.add(me.avatar.group);
+me.avatar.group.rotation.order = 'YXZ';
 
 const remotes = new Map();
 let camYaw = 0;
@@ -143,6 +147,9 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'Digit6') attack('baton');
     if (e.code === 'KeyC') toggleDrive();
     if (e.code === 'KeyF') throwTomato();
+    const ri = ['Digit7', 'Digit8', 'Digit9', 'Digit0'].indexOf(e.code);
+    if (ri >= 0) react(ri);
+    if (e.code === 'Tab') { e.preventDefault(); hud.toggleWho(); }
   }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -171,6 +178,15 @@ const endDrag = () => { drag = null; };
 canvas.addEventListener('pointerup', endDrag);
 canvas.addEventListener('pointercancel', endDrag);
 
+const knockedOut = () => performance.now() < vit.koUntil;
+let lastReact = 0;
+function react(i) {
+  const now = performance.now();
+  if (mode !== 'play' || watching || knockedOut() || now - lastReact < 800) return;
+  lastReact = now;
+  net.send({ t: 'react', e: i });
+}
+
 function toggleEmote(anim) {
   if (drive.on) return;
   me.manual = me.manual === anim ? 0 : anim;
@@ -179,7 +195,7 @@ function toggleEmote(anim) {
 
 /** Golpe: anima na hora e avisa o servidor, que decide se acertou alguém (só com PvP ligado nos dois). */
 function attack(kind) {
-  if (mode !== 'play' || watching || drive.on || hud.isTyping() || !MELEE[kind]) return;
+  if (mode !== 'play' || watching || drive.on || knockedOut() || hud.isTyping() || !MELEE[kind]) return;
   const now = performance.now();
   if (now - (lastAttackAt[kind] || 0) < MELEE[kind].cooldownMs) return;
   lastAttackAt[kind] = now;
@@ -229,7 +245,9 @@ function addRemote(p) {
     tx: p.x, tz: p.z, tr: p.ry,
     anim: p.a || 0,
     speed: 0,
+    hp: 100, shieldUntil: 0, koUntil: 0, shieldOn: false,
   });
+  avatar.group.rotation.order = 'YXZ';
 }
 
 function removeRemote(id) {
@@ -295,12 +313,54 @@ const net = new Net({
         break;
       case 'pvp':
         if (typeof m.on === 'boolean') { pvp.on = m.on; modes.setPvp(m.on); }
+        if (m.locked) toast('Você não pode sair do PvP logo depois de apanhar.');
         if (m.scores) modes.setScores(m.scores, m.top);
         break;
       case 'throw':
         spawnTomato(m);
         break;
+      case 'hp': {
+        const now = performance.now();
+        if (m.id === myId) {
+          vit.hp = m.hp;
+          vit.shieldUntil = now + m.sh;
+          vit.koUntil = now + m.ko;
+          me.label?.setHp(m.hp, m.sh > 0);
+        } else {
+          const r = remotes.get(m.id);
+          if (r) { r.hp = m.hp; r.shieldUntil = now + m.sh; r.koUntil = now + m.ko; r.shieldOn = m.sh > 0; r.label.setHp(m.hp, r.shieldOn); }
+        }
+        break;
+      }
+      case 'ko':
+        vit.koBy = m.by;
+        vit.koUntil = performance.now() + m.ms;
+        me.stunUntil = vit.koUntil;
+        me.manual = 0;
+        hud.setEmote(0);
+        if (drive.on) toggleDrive();
+        sound.ko();
+        break;
+      case 'react': {
+        const who = m.id === myId ? me : remotes.get(m.id);
+        who?.label?.react(REACTIONS[m.e] ?? '👍');
+        break;
+      }
+      case 'who':
+        hud.setWho(m.list, m.total);
+        break;
+      case 'zones':
+        radar.setZones(m);
+        break;
+      case 'zonecap':
+        hud.addChat('Domínio', `${SIDES[m.side].name} dominou ${radar.zoneName(m.zone)}!`, SIDES[m.side].color);
+        sound.capture();
+        break;
+      case 'feed':
+        hud.addChat('☠️', `${m.a} nocauteou ${m.v}`, SIDES[m.as]?.color ?? '#94a3b8');
+        break;
       case 'hitby':
+        sound.hit();
         if (m.kind && MELEE[m.kind]) {
           toast(HIT_NAMES[m.kind].replace('%s', m.nick), 'error');
           me.avatar.staggerNow(m.kind);
@@ -431,10 +491,14 @@ function updateProjectiles(dt) {
   }
 }
 
+const radar = initRadar();
+
 const hud = initHud({
   onChat: (text) => net.send({ t: 'chat', text }),
   onEmote: toggleEmote,
   onAttack: attack,
+  onReact: react,
+  onWho: () => net.send({ t: 'who' }),
   onLeave: () => window.location.reload(),
   onSound: (on) => sound.setEnabled(on),
   soundOn: sound.enabled,
@@ -491,6 +555,8 @@ function leavePlay(reason) {
   race.mine = null;
   pvp.on = false;
   modes.setPvp(false);
+  Object.assign(vit, { hp: 100, shieldUntil: 0, koUntil: 0, stamina: STAMINA.max, tired: false });
+  hud.setKo('');
   if (drive.on) toggleDrive();
   watching = false;
   myId = null;
@@ -568,6 +634,7 @@ function updateLocal(dt) {
     me.x = Math.min(WORLD.halfWidth, Math.max(-WORLD.halfWidth, me.x));
     me.z = Math.min(WORLD.halfLength, Math.max(-WORLD.halfLength, me.z));
     if (Math.abs(me.x) >= WORLD.halfWidth || Math.abs(me.z) >= WORLD.halfLength) drive.speed *= 0.2; // bateu no limite
+    if (collide(1.3)) drive.speed *= 0.45; // bateu em algo
     return;
   }
   const len = Math.hypot(ix, iy);
@@ -575,7 +642,12 @@ function updateLocal(dt) {
 
   if (len > 0.08) {
     if (me.manual) { me.manual = 0; hud.setEmote(0); }
-    const run = keys.ShiftLeft || keys.ShiftRight;
+    const wantRun = keys.ShiftLeft || keys.ShiftRight || (len > 0.95 && hud.joy.x * hud.joy.x + hud.joy.y * hud.joy.y > 0.9);
+    const run = watching ? wantRun : wantRun && !vit.tired && vit.stamina > 0;
+    if (!watching) {
+      vit.stamina = run ? Math.max(0, vit.stamina - STAMINA.drain * dt) : Math.min(STAMINA.max, vit.stamina + STAMINA.regen * dt);
+      if (vit.stamina <= 0) vit.tired = true;
+    }
     const base = watching ? (run ? 36 : 16) : (run ? RUN_SPEED : WALK_SPEED);
     me.speed = base * Math.min(1, len);
     // direção da câmera → mundo
@@ -589,10 +661,39 @@ function updateLocal(dt) {
     me.ry = lerpAngle(me.ry, Math.atan2(mx, mz), Math.min(1, dt * 12));
   } else {
     me.speed = 0;
+    if (!watching) vit.stamina = Math.min(STAMINA.max, vit.stamina + STAMINA.regen * 1.4 * dt);
   }
+  if (vit.tired && vit.stamina >= STAMINA.resume) vit.tired = false;
 
   me.x = Math.min(WORLD.halfWidth, Math.max(-WORLD.halfWidth, me.x));
   me.z = Math.min(WORLD.halfLength, Math.max(-WORLD.halfLength, me.z));
+  if (!watching) collide(0.4);
+}
+
+/** Empurra o jogador (círculo de raio r) para fora das caixas do cenário: barracas, carros, ônibus, postes e totens. */
+function collide(r) {
+  let hit = false;
+  for (const o of world.obstacles) {
+    const dx = me.x - o.x;
+    const dz = me.z - o.z;
+    const px = o.hx + r - Math.abs(dx);
+    const pz = o.hz + r - Math.abs(dz);
+    if (px <= 0 || pz <= 0) continue;
+    hit = true;
+    if (px < pz) me.x += px * Math.sign(dx || 1);
+    else me.z += pz * Math.sign(dz || 1);
+  }
+  return hit;
+}
+
+/** Deita o avatar quando nocauteado (e levanta de volta). */
+function lie(group, on, dt) {
+  const k = group.userData.lie || 0;
+  const next = on ? Math.min(1, k + dt * 5) : Math.max(0, k - dt * 3);
+  if (next === k) return;
+  group.userData.lie = next;
+  group.rotation.x = -Math.PI / 2 * next;
+  group.position.y = 0.14 * next;
 }
 
 function currentAnim() {
@@ -636,7 +737,10 @@ function updateRemotes(dt) {
     }
     if (r.car) r.car.visible = false;
     r.avatar.group.visible = true;
-    const anim = r.anim === 1 && r.speed < 0.3 ? 'idle' : ANIMS[r.anim] ?? 'idle';
+    if (r.shieldOn && performance.now() > r.shieldUntil) { r.shieldOn = false; r.label.setHp(r.hp, false); }
+    const down = performance.now() < r.koUntil;
+    lie(r.avatar.group, down, dt);
+    const anim = down || (r.anim === 1 && r.speed < 0.3) ? 'idle' : ANIMS[r.anim] ?? 'idle';
     r.avatar.update(dt, anim, r.speed);
   }
 }
@@ -679,6 +783,21 @@ function updateCamera(dt, time) {
   camera.lookAt(me.x, watching ? 1 : 1.45, me.z);
 }
 
+function updateHud(now) {
+  if (now >= vit.next) {
+    vit.next = now + 100;
+    const shield = now < vit.shieldUntil;
+    hud.setVitals({
+      hp: vit.hp, shield, pvp: pvp.on && !watching, stamina: vit.stamina, tired: vit.tired,
+    });
+    if (shield !== me.shieldOn) { me.shieldOn = shield; me.label?.setHp(vit.hp, shield); }
+    const left = vit.koUntil - now;
+    hud.setKo(left > 0 ? `💫 Nocauteado${vit.koBy ? ` por ${esc(vit.koBy)}` : ''}<small>volta em ${Math.ceil(left / 1000)} s</small>` : '');
+  }
+  radar.update(now, me, remotes, watching);
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
 function frame() {
   const now = performance.now();
   const dt = Math.min((now - lastFrame) / 1000, 0.1);
@@ -695,7 +814,10 @@ function frame() {
       if (drive.on) {
         drive.mesh.position.set(me.x, 0, me.z);
         drive.mesh.rotation.y = me.ry;
-      } else me.avatar.update(dt, ANIMS[currentAnim()], me.speed);
+      } else {
+        lie(me.avatar.group, now < vit.koUntil, dt);
+        me.avatar.update(dt, now < vit.koUntil ? 'idle' : ANIMS[currentAnim()], me.speed);
+      }
     }
   } else {
     const running = lobbyAnim === 'run';
@@ -708,6 +830,7 @@ function frame() {
     const countLeft = RACE.countdownMs - (now - race.countAt);
     modes.setRace({ ...race.snap, countLeft }, true, null, race.goAt ? now - race.goAt : 0);
   }
+  if (mode === 'play') updateHud(now);
   world.update(time, mode === 'play' ? me.x : 0, mode === 'play' ? me.z : 0, mode === 'play' ? movingCars() : []);
   updateCamera(dt, time);
 

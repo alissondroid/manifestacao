@@ -246,7 +246,7 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
 }
 
 /** HUD: chat, emotes e joystick virtual. */
-export function initHud({ onChat, onEmote, onAttack, onLeave, onSound, soundOn }) {
+export function initHud({ onChat, onEmote, onAttack, onReact, onWho, onLeave, onSound, soundOn }) {
   const hud = $('#hud');
   const log = $('#chatlog');
   const input = $('#chatinput');
@@ -275,6 +275,24 @@ export function initHud({ onChat, onEmote, onAttack, onLeave, onSound, soundOn }
     b.addEventListener('click', () => onAttack(b.dataset.attack));
   });
   $('#leave').onclick = onLeave;
+
+  // reações flutuantes (7 a 0 no teclado)
+  const reacts = $('#reacts');
+  $('#reactbtn').onclick = () => { reacts.hidden = !reacts.hidden; };
+  document.querySelectorAll('[data-react]').forEach((b) => {
+    b.addEventListener('click', () => { onReact(Number(b.dataset.react)); reacts.hidden = true; });
+  });
+
+  // lista de jogadores (Tab)
+  const who = $('#who');
+  let whoTimer = null;
+  const toggleWho = (force) => {
+    const open = force ?? who.hidden;
+    who.hidden = !open;
+    clearInterval(whoTimer);
+    if (open) { onWho(); whoTimer = setInterval(onWho, 3000); }
+  };
+  $('#whobtn').onclick = () => toggleWho();
 
   const sound = $('#sound');
   let on = soundOn;
@@ -318,6 +336,28 @@ export function initHud({ onChat, onEmote, onAttack, onLeave, onSound, soundOn }
       $('#drivebtn').hidden = watching;
     },
     isTyping: () => document.activeElement === input,
+    toggleWho,
+    setWho(list, total) {
+      const rows = list.map(([nick, side, hits, kos]) => `<div class="row"><i style="background:${SIDES[side]?.color}"></i><span>${esc(nick)}</span><small>👊 ${hits} · ☠️ ${kos}</small></div>`).join('');
+      who.innerHTML = `<h4>Na avenida: ${total}</h4>${rows}`;
+    },
+    /** Barra de vida (só com PvP ligado) e de fôlego. */
+    setVitals({ hp, shield, pvp, stamina, tired }) {
+      const bar = $('#hpbar');
+      bar.hidden = !pvp;
+      bar.classList.toggle('shield', shield);
+      bar.firstElementChild.style.width = `${hp}%`;
+      bar.lastElementChild.textContent = shield ? `🛡 ${Math.round(hp)}` : Math.round(hp);
+      const st = $('#stbar');
+      st.firstElementChild.style.width = `${stamina}%`;
+      st.classList.toggle('tired', tired);
+      st.classList.toggle('full', stamina >= 99.5);
+    },
+    setKo(text) {
+      const el = $('#ko');
+      el.hidden = !text;
+      if (text) el.innerHTML = text;
+    },
     setEmote(anim) {
       document.querySelectorAll('[data-emote]').forEach((b) => b.classList.toggle('on', Number(b.dataset.emote) === anim));
     },
@@ -412,7 +452,11 @@ export function createLabel(nick, color) {
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
   bubble.hidden = true;
-  el.append(bubble, name);
+  const hpbar = document.createElement('div');
+  hpbar.className = 'hpbar';
+  hpbar.hidden = true;
+  hpbar.append(document.createElement('i'));
+  el.append(bubble, name, hpbar);
   $('#labels').append(el);
 
   let timer;
@@ -423,6 +467,19 @@ export function createLabel(nick, color) {
       bubble.hidden = false;
       clearTimeout(timer);
       timer = setTimeout(() => { bubble.hidden = true; }, 6000);
+    },
+    /** Barra de vida sobre a cabeça: só aparece ferido ou protegido. */
+    setHp(hp, shield) {
+      hpbar.hidden = hp >= 100 && !shield;
+      hpbar.classList.toggle('shield', shield);
+      hpbar.firstChild.style.width = `${Math.max(0, hp)}%`;
+    },
+    react(emoji) {
+      const r = document.createElement('span');
+      r.className = 'react';
+      r.textContent = emoji;
+      r.addEventListener('animationend', () => r.remove());
+      el.append(r);
     },
     place(x, y, show) {
       if (show !== visible) { el.style.display = show ? '' : 'none'; visible = show; }

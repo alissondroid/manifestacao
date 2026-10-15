@@ -103,6 +103,29 @@ export const MELEE = {
 };
 // Carro: física simples no cliente, limite de velocidade validado no servidor.
 export const VEHICLE = { maxSpeed: 16, reverse: 4, accel: 7, brake: 14, drag: 1.2, turnRate: 1.7, minHitSpeed: 3 };
+// Vida no PvP: cada golpe tira pontos; a 0 o jogador é nocauteado, volta do ponto de entrada e fica protegido por um tempo.
+export const COMBAT = {
+  hp: 100,
+  regenDelayMs: 6000, // sem apanhar por esse tempo, a vida volta sozinha
+  regenPerSec: 6,
+  koMs: 4000,
+  shieldMs: 3000,
+  leaveLockMs: 8000, // não dá para desligar o PvP logo depois de apanhar
+  koBonus: 3, // pontos extras do lado de quem nocauteia
+  dmg: { tomato: 12, punch: 10, kick: 16, baton: 18, car: 30 },
+};
+// Domínio da Paulista: o lado com mais gente no trecho (bandeira conta em dobro) toma o controle e pontua a cada segundo.
+export const ZONES = [
+  { id: 0, name: 'Consolação', tag: 'Cons.', z: -100 },
+  { id: 1, name: 'MASP', tag: 'MASP', z: -26 },
+  { id: 2, name: 'Brigadeiro', tag: 'Brig.', z: 25 },
+  { id: 3, name: 'Gazeta', tag: 'Gaz.', z: 70 },
+  { id: 4, name: 'Paraíso', tag: 'Para.', z: 108 },
+];
+export const ZONE = { radius: 18, tickMs: 1000, capture: 7, neutralNeeded: 35, startHold: 35 };
+export const REACTIONS = ['👍', '😂', '🔥', '❤️', '😡', '🇧🇷', '✊', '🎉'];
+// Fôlego: correr gasta, andar recupera; esgotado, só volta a correr depois de `resume`.
+export const STAMINA = { max: 100, drain: 26, regen: 16, resume: 25 };
 export const SHOP_BY_ID = Object.fromEntries(SHOP.map((i) => [i.id, i]));
 
 export const ACCOUNT = {
