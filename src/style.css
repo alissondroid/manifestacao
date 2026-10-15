@@ -31,7 +31,7 @@ html, body {
   transform: translateX(-50%);
   padding: 72px 16px 16px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(380px, 560px);
+  grid-template-columns: minmax(0, 1fr) clamp(380px, 42vw, 560px);
   gap: 16px;
   align-items: stretch;
   pointer-events: none;
@@ -787,4 +787,10 @@ body[data-mode='lobby'] #topbar { padding-inline: max(14px, calc((100vw - 1360px
   .card-foot { gap: 6px; padding: 10px 20px; }
   .hero { gap: 10px; }
   .hero h1 { font-size: clamp(26px, 3vw, 38px); }
+}
+
+/* celular: sem card de prévia (o personagem aparece acima do menu); texto com margem */
+@media (max-width: 640px) {
+  .preview { display: none; }
+  .hero { padding: 8px 16px; gap: 0; }
 }
