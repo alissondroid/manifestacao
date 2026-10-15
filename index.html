@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#101915" />
+    <meta name="description" content="Entre na Avenida Paulista pelo navegador: escolha seu lado nas eleições, monte seu personagem, converse e participe em tempo real." />
+    <title>Avenida Online · Eleições 2026 na Paulista</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body data-mode="lobby">
+    <canvas id="c"></canvas>
+    <div id="loading" class="loading">Carregando personagens…</div>
+    <div id="labels"></div>
+
+    <!-- Barra do topo (lobby e jogo) -->
+    <header id="topbar">
+      <div class="brand">
+        <span class="logo" aria-hidden="true"><i></i><i></i><i></i></span>
+        <div><b>AVENIDA<span>ONLINE</span></b><small>São Paulo · edição piloto</small></div>
+      </div>
+      <div id="online" class="online"></div>
+      <div class="topright">
+        <div id="acctbar" class="acctbar lobby-only"></div>
+        <button id="shopbtn" class="pill sound play-only" title="Loja">🛍️ Loja</button>
+        <button id="sound" class="pill sound play-only" title="Som" aria-label="Ligar ou desligar o som">🔊</button>
+        <button id="leave" class="ghost play-only">Sair</button>
+      </div>
+    </header>
+
+    <!-- Lobby: escolha de lado e visual -->
+    <section id="lobby">
+      <div class="hero">
+        <p class="eyebrow">São Paulo / Avenida Paulista</p>
+        <h1>A sua presença.<br />Do seu jeito.</h1>
+        <div class="herobottom">
+          <div id="anims" class="anims">
+            <button data-anim="idle" class="on">Parado</button>
+            <button data-anim="walk">Andando</button>
+            <button data-anim="run">Correndo</button>
+            <button data-anim="wave">Acenando</button>
+            <button data-anim="dance">Dançando</button>
+            <button data-anim="clap">Aplaudindo</button>
+          </div>
+          <p class="tiny">Arraste para girar · alterações em tempo real</p>
+        </div>
+      </div>
+
+      <div class="card" id="card">
+        <header class="card-head">
+          <p class="eyebrow">Passo a passo · <span id="status">conectando…</span></p>
+          <h2>Monte seu personagem</h2>
+        </header>
+
+        <div class="steps" role="tablist" aria-label="Etapas">
+          <button role="tab" id="t-lado" data-tab="lado" aria-selected="true" aria-controls="tab-lado"><i>1</i>Lado</button>
+          <button role="tab" id="t-personagem" data-tab="personagem" aria-selected="false" aria-controls="tab-personagem" tabindex="-1"><i>2</i>Personagem</button>
+          <button role="tab" id="t-visual" data-tab="visual" aria-selected="false" aria-controls="tab-visual" tabindex="-1"><i>3</i>Visual</button>
+          <button role="tab" id="t-mao" data-tab="mao" aria-selected="false" aria-controls="tab-mao" tabindex="-1"><i>4</i>Na mão</button>
+        </div>
+
+        <div class="panels">
+          <section id="tab-lado" class="panel-tab" role="tabpanel" aria-labelledby="t-lado">
+            <p class="hint-line">De que lado você vai estar na avenida?</p>
+            <div id="sides" class="sides"></div>
+            <button class="next" type="button" data-go="personagem">Escolher personagem →</button>
+          </section>
+
+          <section id="tab-personagem" class="panel-tab" role="tabpanel" aria-labelledby="t-personagem" hidden>
+            <div class="row-between">
+              <p class="hint-line">Comece por um pronto</p>
+              <button id="random" class="ghost-btn" type="button">🎲 Sortear</button>
+            </div>
+            <div id="presets" class="presets"></div>
+            <button class="next" type="button" data-go="visual">Ajustar visual →</button>
+          </section>
+
+          <section id="tab-visual" class="panel-tab" role="tabpanel" aria-labelledby="t-visual" hidden>
+            <div class="group">
+              <div class="field"><span>Corpo</span><div id="bodies" class="seg"></div></div>
+              <div class="field"><span>Idade</span><div id="ages" class="seg"></div></div>
+              <div class="field"><span>Rosto</span><div id="faces" class="seg"></div></div>
+              <div class="field"><span>Altura</span><div id="heights" class="seg"></div></div>
+            </div>
+            <div class="group" id="tint-group">
+              <div class="field"><span>Pele</span><div id="sw-skin" class="swatches"></div></div>
+              <div class="field" id="beard-field"><span>Barba</span><div id="beards" class="seg"></div></div>
+              <div class="field"><span>Camisa</span><div id="sw-shirt" class="swatches"></div></div>
+              <div class="field"><span>Parte de baixo</span><div id="pants" class="seg wrap"></div></div>
+            </div>
+            <p id="visual-note" class="note-line" hidden>Este rosto já vem com a roupa e a cor originais. Para escolher pele, camisa e calça, use o Rosto 1 masculino.</p>
+            <button class="next" type="button" data-go="mao">Escolher o que levar →</button>
+          </section>
+
+          <section id="tab-mao" class="panel-tab" role="tabpanel" aria-labelledby="t-mao" hidden>
+            <p class="hint-line">O que você leva na mão?</p>
+            <div id="flags" class="options"></div>
+            <label class="field" id="sign-field" hidden>
+              <span>Texto do cartaz</span>
+              <input id="sign" maxlength="24" autocomplete="off" placeholder="Ex.: Fora a inflação" />
+            </label>
+            <p class="note-line">Cartaz, bandeira e camisa personalizados ficam na Loja, depois de entrar na sua conta.</p>
+          </section>
+        </div>
+
+        <footer class="card-foot">
+          <div id="summary" class="summary" aria-live="polite"></div>
+          <label class="nickbox">
+            <span>Seu apelido</span>
+            <div class="nickrow">
+              <input id="nick" maxlength="16" autocomplete="off" placeholder="Como quer ser chamado?" />
+              <small id="nickcount">0/16</small>
+            </div>
+            <small id="nickhint" class="nickhint">Em branco: entra como Visitante.</small>
+          </label>
+          <button id="enter" class="primary" type="button">Entrar na manifestação</button>
+          <button id="watch" class="link" type="button">Só quero assistir</button>
+          <p id="error" class="error" hidden></p>
+          <details class="legal">
+            <summary>Aviso</summary>
+            <p>Projeto independente, sem vínculo com candidatos, partidos ou campanhas. Nomes e números identificam apenas os lados da disputa. Acesso anônimo, direto no navegador.</p>
+          </details>
+          <details class="legal credits">
+            <summary>Créditos</summary>
+            <p>Animações de chute, murro e aceno: <a href="https://www.patreon.com/Zsky" target="_blank" rel="noopener noreferrer">Zsky</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>), adaptadas para os personagens deste jogo. Outras animações: <a href="https://quaternius.com/" target="_blank" rel="noopener noreferrer">Quaternius</a> (CC0) e <a href="https://www.mixamo.com/" target="_blank" rel="noopener noreferrer">Mixamo</a>. Personagens: Mixamo, Ready Player Me, Sketchfab e Tripo (ver o README).</p>
+          </details>
+        </footer>
+      </div>
+    </section>
+
+    <!-- HUD durante o jogo -->
+    <section id="hud" hidden>
+      <div class="modes">
+        <button id="racebtn" class="pill mode" type="button">🏁 Corrida</button>
+        <button id="pvpbtn" class="pill mode" type="button">🍅 PvP</button>
+        <button id="throwbtn" class="pill mode throw" type="button" hidden>Arremessar (F)</button>
+        <button id="drivebtn" class="pill mode" type="button">🚗 Carro (C)</button>
+      </div>
+      <div id="racepanel" class="panel" hidden></div>
+      <div id="pvppanel" class="panel pvp" hidden></div>
+
+      <div class="emotes">
+        <button data-emote="2" title="Acenar (1)">👋</button>
+        <button data-emote="3" title="Dançar (2)">💃</button>
+        <button data-emote="4" title="Aplaudir (3)">👏</button>
+        <span class="sep" aria-hidden="true"></span>
+        <button data-attack="punch" title="Murro (4)">👊</button>
+        <button data-attack="kick" title="Chute (5)">🦵</button>
+        <button data-attack="baton" title="Cassetete (6)">🏏</button>
+      </div>
+
+      <div id="chat">
+        <div id="chatlog"></div>
+        <form id="chatform" autocomplete="off">
+          <input id="chatinput" maxlength="140" placeholder="Enter para falar…" />
+        </form>
+      </div>
+
+      <div id="stick" hidden><div id="knob"></div></div>
+      <p class="hint">WASD/setas mover · Shift correr · 1-3 gestos · 4-6 golpes · C carro · arraste para girar a câmera · Enter chat</p>
+    </section>
+
+    <div id="modal" class="modal" hidden>
+      <div class="modal-card" role="dialog" aria-modal="true">
+        <button id="modal-close" class="close" aria-label="Fechar">×</button>
+        <div id="modal-body"></div>
+      </div>
+    </div>
+    <div id="toast" class="toast" role="status" hidden></div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

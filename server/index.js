@@ -1,0 +1,427 @@
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { WebSocketServer } from 'ws';
+import {
+  WORLD, SIDES, SHIRTS, SKINS, HAIRS, HAIR_STYLES, BODIES, AGES, MODELS, HEIGHTS, BEARDS, TOPS, PANTS, FLAGS, ANIMS, MAX_SPEED, LIMITS, MELEE, VEHICLE,
+} from '../shared/config.js';
+import { handleApi } from './api.js';
+import { userFromRequest, nickTaken } from './auth.js';
+import { equippedMap, designsOf } from './shop.js';
+import { filterText } from './moderation.js';
+import { createRace } from './race.js';
+import { PVP } from '../shared/config.js';
+
+const PORT = Number(process.env.PORT) || 8787;
+const MAX_PLAYERS = Number(process.env.MAX_PLAYERS) || 300;
+const MAX_PER_IP = Number(process.env.MAX_PER_IP) || 5;
+const AOI = Number(process.env.AOI) || 70; // raio de interesse em metros
+const AOI_EXIT = 10;
+const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
+
+// ---------- HTTP estático (produção) ----------
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.glb': 'model/gltf-binary',
+  '.mp3': 'audio/mpeg',
+  '.ico': 'image/x-icon',
+};
+
+const server = http.createServer(async (req, res) => {
+  if (await handleApi(req, res, { onEquip: refreshLook })) return;
+  if (!fs.existsSync(DIST)) {
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+    return res.end('Sem build. Em desenvolvimento use "npm run dev" (cliente em http://localhost:5173).');
+  }
+  let file;
+  try {
+    const { pathname } = new URL(req.url, 'http://localhost');
+    file = path.join(DIST, path.normalize(decodeURIComponent(pathname)));
+  } catch {
+    res.writeHead(400);
+    return res.end();
+  }
+  if (!file.startsWith(DIST)) {
+    res.writeHead(403);
+    return res.end();
+  }
+  fs.stat(file, (err, st) => {
+    if (err || st.isDirectory()) file = path.join(DIST, 'index.html');
+    res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
+    fs.createReadStream(file).on('error', () => res.end()).pipe(res);
+  });
+});
+
+// ---------- Estado e validação ----------
+
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 2048 });
+const players = new Map();
+const perIp = new Map();
+let nextId = 1;
+
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const int = (v, max) => clamp(Math.trunc(Number(v)) || 0, 0, max);
+const round2 = (v) => Math.round(v * 100) / 100;
+
+const cleanText = (s, max) => String(s ?? '')
+  .replace(/[\u0000-\u001f\u007f<>]/g, '')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .slice(0, max);
+
+
+// `equip` e `custom` vêm do banco (itens comprados e desenhos), nunca do cliente.
+function cleanLook(look = {}, equip = {}, custom = {}) {
+  const body = int(look.body, BODIES.length - 1);
+  return {
+    body,
+    age: int(look.age, AGES.length - 1),
+    face: int(look.face, MODELS[body === 1 ? 'female' : 'male'].length - 1),
+    height: int(look.height, HEIGHTS.length - 1),
+    skin: int(look.skin, SKINS.length - 1),
+    hairStyle: int(look.hairStyle, HAIR_STYLES.length - 1),
+    hair: int(look.hair, HAIRS.length - 1),
+    beard: body === 0 ? int(look.beard, BEARDS.length - 1) : 0,
+    shirt: int(look.shirt, SHIRTS.length - 1),
+    top: int(look.top, TOPS.length - 1),
+    pants: int(look.pants, PANTS.length - 1),
+    flag: int(look.flag, FLAGS.length - 1),
+    sign: cleanText(look.sign, LIMITS.sign),
+    equip,
+    custom,
+  };
+}
+
+/** Itens equipados mudaram na loja: atualiza o avatar de quem está online e avisa quem o vê. */
+function refreshLook(userId) {
+  for (const p of players.values()) {
+    if (p.userId !== userId) continue;
+    p.look = { ...p.look, equip: equippedMap(userId), custom: designsOf(userId) };
+    const msg = JSON.stringify({ t: 'look', id: p.id, look: p.look });
+    for (const ws of wss.clients) {
+      if (ws.readyState === ws.OPEN && ws.joined && (ws.player === p || ws.known.has(p.id))) ws.send(msg);
+    }
+  }
+}
+
+const publicPlayer = (p) => ({
+  id: p.id, nick: p.nick, side: p.side, look: p.look, x: round2(p.x), z: round2(p.z), ry: round2(p.ry), a: p.a,
+});
+
+function send(ws, obj) {
+  if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj));
+}
+
+// Por padrão só quem já entrou na avenida recebe; `everyone` inclui o lobby.
+function broadcast(obj, exceptWs, everyone = false) {
+  const data = JSON.stringify(obj);
+  for (const client of wss.clients) {
+    if (client === exceptWs || client.readyState !== client.OPEN) continue;
+    if (everyone || client.joined) client.send(data);
+  }
+}
+
+function onlineCounts() {
+  const counts = SIDES.map(() => 0);
+  for (const p of players.values()) counts[p.side] += 1;
+  return counts;
+}
+
+// ---------- Corrida ----------
+
+function teleport(p, x, z, ry) {
+  p.x = x;
+  p.z = z;
+  p.ry = ry;
+  p.dirty = true;
+  p.lastMove = Date.now();
+  send(p.ws, { t: 'fix', x: round2(x), z: round2(z), ry });
+}
+
+const race = createRace({ players, send, broadcast: (msg) => broadcast(msg), teleport });
+
+// ---------- PvP: tomatada ----------
+// O arremesso é resolvido no servidor pela posição e direção do jogador: o tomate voa em linha
+// reta até PVP.range e acerta o primeiro jogador (com PvP ligado) a menos de PVP.radius da linha.
+
+const sideScores = SIDES.map(() => 0);
+function pvpScores() {
+  const top = [...players.values()].filter((p) => p.hits > 0).sort((a, b) => b.hits - a.hits).slice(0, 5)
+    .map((p) => ({ nick: p.nick, side: p.side, hits: p.hits }));
+  return { t: 'pvp', scores: sideScores, top };
+}
+
+function sendNear(p, msg) {
+  const data = JSON.stringify(msg);
+  for (const ws of wss.clients) {
+    if (ws.readyState === ws.OPEN && ws.joined && (ws.player === p || ws.known.has(p.id))) ws.send(data);
+  }
+}
+
+function throwTomato(me) {
+  const now = Date.now();
+  if (!me.pvp || now - me.lastThrow < PVP.cooldownMs) return;
+  me.lastThrow = now;
+  const dx = Math.sin(me.ry);
+  const dz = Math.cos(me.ry);
+  let target = null;
+  let best = PVP.range;
+  for (const p of players.values()) {
+    if (p === me || !p.pvp) continue;
+    const ox = p.x - me.x;
+    const oz = p.z - me.z;
+    const along = ox * dx + oz * dz;
+    if (along < 0.5 || along > best) continue;
+    const lateral = Math.abs(ox * dz - oz * dx);
+    if (lateral > PVP.radius) continue;
+    best = along;
+    target = p;
+  }
+  if (target) {
+    me.hits += 1;
+    sideScores[me.side] += 1;
+  }
+  sendNear(me, {
+    t: 'throw', id: me.id, x: round2(me.x), z: round2(me.z), ry: round2(me.ry), dist: round2(best), hit: target ? target.id : null,
+  });
+  if (target) {
+    send(target.ws, { t: 'hitby', id: me.id, nick: me.nick });
+    broadcast(pvpScores());
+  }
+}
+
+// ---------- PvP: golpes corpo a corpo e atropelamento ----------
+// O alvo é o jogador (com PvP ligado) mais perto dentro do alcance e do arco à frente do atacante.
+// Quem leva o golpe é empurrado e fica atordoado (não anda) por alguns instantes.
+
+const DRIVE = ANIMS.indexOf('drive');
+function hitTarget(me, kind, pushDir) {
+  const spec = MELEE[kind];
+  const now = Date.now();
+  let target = null;
+  let best = spec.reach;
+  for (const p of players.values()) {
+    if (p === me || !p.pvp) continue;
+    const ox = p.x - me.x;
+    const oz = p.z - me.z;
+    const d = Math.hypot(ox, oz);
+    if (d > best || d < 0.05) continue;
+    const ang = Math.abs(Math.atan2(Math.sin(Math.atan2(ox, oz) - me.ry), Math.cos(Math.atan2(ox, oz) - me.ry)));
+    if (ang > spec.arc) continue;
+    if (kind === 'car' && now - (p.lastRunOver || 0) < spec.cooldownMs) continue;
+    best = d;
+    target = p;
+  }
+  if (!target) return null;
+  const dx = pushDir ? pushDir[0] : Math.sin(me.ry);
+  const dz = pushDir ? pushDir[1] : Math.cos(me.ry);
+  const nx = clamp(target.x + dx * spec.push, -WORLD.halfWidth, WORLD.halfWidth);
+  const nz = clamp(target.z + dz * spec.push, -WORLD.halfLength, WORLD.halfLength);
+  target.stunUntil = now + spec.stunMs;
+  if (kind === 'car') target.lastRunOver = now;
+  teleport(target, nx, nz, target.ry);
+  me.hits += 1;
+  sideScores[me.side] += 1;
+  send(target.ws, { t: 'hitby', id: me.id, nick: me.nick, kind });
+  broadcast(pvpScores());
+  return target;
+}
+
+function attack(me, kind) {
+  if (!MELEE[kind] || kind === 'car' || me.a === DRIVE) return;
+  const now = Date.now();
+  if (now - (me.lastAttack || 0) < MELEE[kind].cooldownMs) return;
+  me.lastAttack = now;
+  const target = me.pvp ? hitTarget(me, kind) : null;
+  sendNear(me, { t: 'attack', id: me.id, kind, hit: target ? target.id : null });
+}
+
+// ---------- Conexões ----------
+
+wss.on('connection', (ws, req) => {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
+  const open = perIp.get(ip) || 0;
+  if (open >= MAX_PER_IP) return ws.close(1008, 'Muitas conexões');
+  perIp.set(ip, open + 1);
+
+  ws.isAlive = true;
+  ws.user = userFromRequest(req);
+  ws.on('pong', () => { ws.isAlive = true; });
+  send(ws, { t: 'online', counts: onlineCounts() });
+
+  let me = null;
+
+  ws.on('message', (raw) => {
+    let m;
+    try { m = JSON.parse(raw); } catch { return; }
+    if (!m || typeof m.t !== 'string') return;
+
+    // Modo "só assistir": recebe o mundo inteiro, sem avatar e sem chat.
+    if (m.t === 'watch') {
+      if (ws.joined) return;
+      ws.joined = true;
+      ws.player = null;
+      ws.known = new Set();
+      send(ws, { t: 'welcome', id: 0, spectator: true, x: 0, z: 0 });
+      return;
+    }
+
+    if (m.t === 'join') {
+      if (ws.joined || players.size >= MAX_PLAYERS) return;
+      const id = nextId++;
+      const account = ws.user; // definido no upgrade pelo cookie de sessão
+      const nick = account ? account.nick : cleanText(m.nick, LIMITS.nick) || `Visitante${id}`;
+      if (!account && nickTaken(nick)) {
+        return send(ws, { t: 'denied', reason: 'Esse apelido pertence a uma conta. Escolha outro ou entre na conta.' });
+      }
+      if (account && [...players.values()].some((p) => p.userId === account.id)) {
+        return send(ws, { t: 'denied', reason: 'Essa conta já está na avenida em outra aba.' });
+      }
+      me = {
+        id,
+        ws,
+        userId: account?.id ?? null,
+        nick,
+        side: int(m.side, SIDES.length - 1),
+        look: cleanLook(m.look, account ? equippedMap(account.id) : {}, account ? designsOf(account.id) : {}),
+        x: (Math.random() - 0.5) * 12,
+        z: (Math.random() - 0.5) * 10,
+        ry: 0,
+        a: 0,
+        dirty: false,
+        lastMove: Date.now(),
+        lastChat: 0,
+        frozen: false, // na largada da corrida
+        pvp: false,
+        lastThrow: 0,
+        lastAttack: 0,
+        stunUntil: 0,
+        lastRunOver: 0,
+        hits: 0,
+      };
+      players.set(id, me);
+      ws.joined = true;
+      ws.player = me;
+      ws.known = new Set();
+      // quem está por perto chega no próximo ciclo de sincronização (≤100 ms)
+      send(ws, { t: 'welcome', id, x: round2(me.x), z: round2(me.z) });
+      send(ws, race.snapshot());
+      send(ws, pvpScores());
+      broadcast({ t: 'online', counts: onlineCounts() }, null, true);
+      return;
+    }
+
+    if (!me) return;
+
+    if (m.t === 'move') {
+      const now = Date.now();
+      const dt = clamp((now - me.lastMove) / 1000, 0.05, 1);
+      const x = num(m.x);
+      const z = num(m.z);
+      const ry = num(m.ry);
+      if (x === null || z === null || ry === null) return;
+      if (me.frozen || me.stunUntil > now) return send(ws, { t: 'fix', x: round2(me.x), z: round2(me.z) });
+      const nx = clamp(x, -WORLD.halfWidth, WORLD.halfWidth);
+      const nz = clamp(z, -WORLD.halfLength, WORLD.halfLength);
+      const a = int(m.a, ANIMS.length - 1);
+      const limit = a === DRIVE ? VEHICLE.maxSpeed : MAX_SPEED;
+      if (Math.hypot(nx - me.x, nz - me.z) > limit * dt * 1.5 + 0.5) {
+        // movimento impossível: devolve a posição aceita
+        send(ws, { t: 'fix', x: round2(me.x), z: round2(me.z) });
+        return;
+      }
+      const vx = (nx - me.x) / dt;
+      const vz = (nz - me.z) / dt;
+      me.lastMove = now;
+      me.x = nx;
+      me.z = nz;
+      me.ry = ry;
+      me.a = a;
+      me.dirty = true;
+      race.onMove(me);
+      // de carro e com o PvP ligado: atropela quem estiver na frente
+      if (a === DRIVE && me.pvp && Math.hypot(vx, vz) >= VEHICLE.minHitSpeed) {
+        const sp = Math.hypot(vx, vz);
+        const target = hitTarget(me, 'car', [vx / sp, vz / sp]);
+        if (target) sendNear(me, { t: 'attack', id: me.id, kind: 'car', hit: target.id });
+      }
+    } else if (m.t === 'chat') {
+      const now = Date.now();
+      if (now - me.lastChat < LIMITS.chatCooldownMs) return;
+      const text = filterText(cleanText(m.text, LIMITS.chat));
+      if (!text) return;
+      me.lastChat = now;
+      broadcast({ t: 'chat', id: me.id, nick: me.nick, side: me.side, text });
+    } else if (m.t === 'race') {
+      if (m.action === 'join') race.join(me);
+      else if (m.action === 'leave') race.leave(me);
+    } else if (m.t === 'pvp') {
+      me.pvp = !!m.on;
+      send(ws, { t: 'pvp', on: me.pvp });
+    } else if (m.t === 'throw') {
+      throwTomato(me);
+    } else if (m.t === 'attack') {
+      attack(me, String(m.kind));
+    }
+  });
+
+  ws.on('close', () => {
+    perIp.set(ip, Math.max(0, (perIp.get(ip) || 1) - 1));
+    if (!me) return;
+    race.onLeave(me);
+    players.delete(me.id); // quem o conhecia recebe `del` no próximo ciclo
+    broadcast({ t: 'online', counts: onlineCounts() }, null, true);
+  });
+  ws.on('error', () => {});
+});
+
+// ---------- Loops ----------
+
+// Sincronização a 10 Hz com interesse por área: cada cliente só recebe quem está
+// dentro de AOI metros (com histerese na saída) e só posições que mudaram.
+setInterval(() => {
+  for (const ws of wss.clients) {
+    if (!ws.joined || ws.readyState !== ws.OPEN) continue;
+    const vp = ws.player; // null = espectador (vê todos)
+    const add = [];
+    const del = [];
+    const s = [];
+
+    for (const p of players.values()) {
+      if (p === vp) continue;
+      const known = ws.known.has(p.id);
+      const near = !vp || Math.hypot(p.x - vp.x, p.z - vp.z) <= (known ? AOI + AOI_EXIT : AOI);
+      if (near && !known) { ws.known.add(p.id); add.push(publicPlayer(p)); }
+      else if (near && p.dirty) s.push([p.id, round2(p.x), round2(p.z), round2(p.ry), p.a]);
+      else if (!near && known) { ws.known.delete(p.id); del.push(p.id); }
+    }
+    for (const id of ws.known) {
+      if (!players.has(id)) { ws.known.delete(id); del.push(id); }
+    }
+
+    if (add.length || del.length || s.length) ws.send(JSON.stringify({ t: 'sync', add, del, s }));
+  }
+  for (const p of players.values()) p.dirty = false;
+}, 100);
+
+// Derruba conexões mortas.
+setInterval(() => {
+  for (const ws of wss.clients) {
+    if (!ws.isAlive) { ws.terminate(); continue; }
+    ws.isAlive = false;
+    ws.ping();
+  }
+}, 30000);
+
+server.listen(PORT, () => {
+  console.log(`Servidor em http://localhost:${PORT}  (WebSocket em /ws)`);
+});

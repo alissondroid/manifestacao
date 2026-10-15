@@ -1,0 +1,430 @@
+import {
+  SIDES, SHIRTS, SKINS, BODIES, AGES, MODELS, HEIGHTS, BEARDS, PANTS, RACE,
+} from '../shared/config.js';
+import { modelId } from './models.js';
+
+const $ = (sel) => document.querySelector(sel);
+
+export function setOnline(counts) {
+  const box = $('#online');
+  if (!box.children.length) {
+    SIDES.forEach((s) => {
+      const pill = document.createElement('span');
+      pill.className = 'pill';
+      pill.innerHTML = `<i class="dot" style="background:${s.color}"></i><b>0</b><span class="name"> ${s.short}</span>`;
+      box.append(pill);
+    });
+  }
+  box.querySelectorAll('b').forEach((b, i) => { b.textContent = counts[i] ?? 0; });
+  for (const [i, el] of document.querySelectorAll('.side small').entries()) {
+    el.textContent = `${counts[i] ?? 0} online`;
+  }
+}
+
+export function setStatus(text) {
+  $('#status').textContent = text;
+}
+
+export function showError(text) {
+  const el = $('#error');
+  el.textContent = text;
+  el.hidden = !text;
+}
+
+const FLAG_OPTIONS = [
+  { icon: '✋', title: 'Nada', text: 'Mãos livres para acenar e dançar' },
+  { icon: '🇧🇷', title: 'Bandeira do Brasil', text: 'Verde e amarela, para todo mundo' },
+  { icon: '🚩', title: 'Bandeira do lado', text: '' }, // texto muda com o lado escolhido
+  { icon: '🪧', title: 'Cartaz', text: 'Escreva o que quiser (até 24 letras)' },
+  { icon: '🥩', title: 'Picanha no espeto', text: 'Direto da churrasqueira da calçada' },
+  { icon: '🎃', title: 'Abóbora', text: 'Moranga fresquinha da feira' },
+];
+const STEPS = ['lado', 'personagem', 'visual', 'mao'];
+const pickOf = (list) => list[Math.floor(Math.random() * list.length)];
+
+/** Monta o menu "Monte seu personagem". `profile` é alterado no lugar. */
+export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim }) {
+  const look = profile.look;
+  const el = (tag, cls, html) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (html != null) n.innerHTML = html;
+    return n;
+  };
+
+  // ---------- etapas (abas) ----------
+  const tabs = [...document.querySelectorAll('.steps [role=tab]')];
+  const panels = Object.fromEntries(STEPS.map((id) => [id, $(`#tab-${id}`)]));
+  const go = (id, focus = false) => {
+    tabs.forEach((t) => {
+      const on = t.dataset.tab === id;
+      t.setAttribute('aria-selected', on);
+      t.tabIndex = on ? 0 : -1;
+      t.classList.toggle('on', on);
+      if (on) { t.scrollIntoView({ block: 'nearest', inline: 'center' }); if (focus) t.focus(); }
+    });
+    STEPS.forEach((k) => { panels[k].hidden = k !== id; });
+    panels[id].scrollTop = 0;
+  };
+  tabs.forEach((t, i) => {
+    t.onclick = () => go(t.dataset.tab);
+    t.onkeydown = (e) => {
+      const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+      if (d) { e.preventDefault(); go(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true); }
+    };
+  });
+  document.querySelectorAll('[data-go]').forEach((b) => { b.onclick = () => go(b.dataset.go); });
+  tabs[0].classList.add('on');
+
+  // ---------- 1. lado ----------
+  const sides = $('#sides');
+  SIDES.forEach((side) => {
+    const b = el('button', 'side', `<span class="num">${side.num}</span><span class="who"><b>${side.name}</b><small>0 online</small></span><span class="check" aria-hidden="true">✓</span>`);
+    b.type = 'button';
+    b.style.setProperty('--side', side.color);
+    b.onclick = () => { profile.side = side.id; refresh(); onChange(); };
+    sides.append(b);
+  });
+
+  // ---------- 2. personagens prontos (retratos renderizados do modelo 3D) ----------
+  const presetsBox = $('#presets');
+  presets.forEach((p, i) => {
+    const b = el('button', 'preset');
+    b.type = 'button';
+    const canvas = el('canvas', 'portrait');
+    canvas.dataset.preset = i;
+    const name = el('b');
+    name.textContent = p.name;
+    b.append(canvas, name);
+    b.onclick = () => { Object.assign(look, p.look); profile.preset = p.id; refresh(); onChange(); };
+    presetsBox.append(b);
+  });
+
+  $('#random').onclick = () => {
+    const body = Math.random() < 0.5 ? 0 : 1;
+    Object.assign(look, {
+      body,
+      age: Math.random() < 0.15 ? 1 : 0,
+      face: Math.floor(Math.random() * MODELS[body === 1 ? 'female' : 'male'].length),
+      height: Math.floor(Math.random() * HEIGHTS.length),
+      skin: Math.floor(Math.random() * SKINS.length),
+      shirt: Math.floor(Math.random() * SHIRTS.length),
+      pants: Math.floor(Math.random() * PANTS.length),
+      beard: body === 0 && Math.random() < 0.4 ? pickOf([1, 2]) : 0,
+    });
+    profile.preset = null;
+    refresh();
+    onChange();
+  };
+
+  $('#anims').querySelectorAll('button').forEach((b) => {
+    b.onclick = () => {
+      $('#anims').querySelectorAll('button').forEach((o) => o.classList.toggle('on', o === b));
+      onAnim(b.dataset.anim);
+    };
+  });
+
+  // ---------- 3. visual ----------
+  const swatchGroups = [['shirt', SHIRTS], ['skin', SKINS]];
+  for (const [key, colors] of swatchGroups) {
+    colors.forEach((c, i) => {
+      const b = el('button', 'sw');
+      b.type = 'button';
+      b.style.background = c;
+      b.setAttribute('aria-label', `${key === 'skin' ? 'Pele' : 'Camisa'} ${i + 1}`);
+      b.onclick = () => { look[key] = i; profile.preset = null; refresh(); onChange(); };
+      $(`#sw-${key}`).append(b);
+    });
+  }
+
+  const segGroups = [
+    ['bodies', BODIES, 'body'],
+    ['ages', AGES, 'age'],
+    ['heights', HEIGHTS, 'height'],
+    ['beards', BEARDS, 'beard'],
+    ['pants', PANTS.map((p) => p.name), 'pants'],
+  ];
+  for (const [id, labels, key] of segGroups) {
+    labels.forEach((name, i) => {
+      const b = el('button', 'segbtn');
+      b.type = 'button';
+      b.textContent = name;
+      b.onclick = () => {
+        look[key] = i;
+        profile.preset = null;
+        if (key === 'body' && i === 1) look.beard = 0; // barba só no visual masculino
+        refresh();
+        onChange();
+      };
+      $(`#${id}`).append(b);
+    });
+  }
+  const facesBox = $('#faces');
+  const renderFaces = () => {
+    facesBox.replaceChildren();
+    MODELS[look.body === 1 ? 'female' : 'male'].forEach((_, i) => {
+      const b = el('button', `segbtn${look.face === i ? ' on' : ''}`);
+      b.type = 'button';
+      b.textContent = `Rosto ${i + 1}`;
+      b.onclick = () => { look.face = i; profile.preset = null; refresh(); onChange(); };
+      facesBox.append(b);
+    });
+  };
+
+  // ---------- 4. na mão ----------
+  const flagsBox = $('#flags');
+  const sign = $('#sign');
+  FLAG_OPTIONS.forEach((o, i) => {
+    const b = el('button', 'option', `<span class="ic">${o.icon}</span><span><b>${o.title}</b><small>${o.text}</small></span><span class="check" aria-hidden="true">✓</span>`);
+    b.type = 'button';
+    b.onclick = () => {
+      look.flag = i;
+      refresh();
+      onChange();
+      if (i === 3) sign.focus();
+    };
+    flagsBox.append(b);
+  });
+  sign.value = look.sign;
+  sign.addEventListener('input', () => { look.sign = sign.value; onChange(); });
+
+  // ---------- apelido (sempre visível, no rodapé) ----------
+  const nick = $('#nick');
+  nick.value = profile.nick;
+  const syncNick = () => {
+    $('#nickcount').textContent = `${nick.value.length}/${nick.maxLength}`;
+    $('#nickhint').textContent = nick.disabled ? 'Este é o apelido da sua conta.' : 'Em branco: entra como Visitante.';
+  };
+  nick.addEventListener('input', () => { profile.nick = nick.value; syncNick(); onChange(); });
+  nick.addEventListener('keydown', (e) => { if (e.key === 'Enter') onEnter(); });
+
+  // ---------- estado visual ----------
+  function refresh() {
+    $('#lobby').dataset.side = profile.side; // o tema do menu acompanha o lado
+    document.querySelectorAll('.side').forEach((n, i) => n.classList.toggle('on', i === profile.side));
+    for (const [key] of swatchGroups) {
+      document.querySelectorAll(`#sw-${key} .sw`).forEach((n, i) => n.classList.toggle('on', i === look[key]));
+    }
+    for (const [id, , key] of segGroups) {
+      document.querySelectorAll(`#${id} .segbtn`).forEach((n, i) => n.classList.toggle('on', i === look[key]));
+    }
+    if (look.face >= MODELS[look.body === 1 ? 'female' : 'male'].length) look.face = 0;
+    renderFaces();
+
+    // só o modelo do Ready Player Me aceita tingir pele, camisa e calça
+    const tintable = modelId(look.body, look.face) === 'rpm';
+    $('#tint-group').hidden = !tintable;
+    $('#visual-note').hidden = tintable;
+
+    const side = SIDES[profile.side];
+    FLAG_OPTIONS[2].text = `${side.name}, nas cores do lado`;
+    document.querySelectorAll('#flags .option').forEach((n, i) => {
+      n.classList.toggle('on', i === look.flag);
+      if (i === 2) n.querySelector('small').textContent = FLAG_OPTIONS[2].text;
+    });
+    $('#sign-field').hidden = look.flag !== 3;
+    document.querySelectorAll('.preset').forEach((n, i) => n.classList.toggle('on', presets[i].id === profile.preset));
+
+    const preset = presets.find((p) => p.id === profile.preset);
+    $('#summary').innerHTML = `<i style="background:${side.color}"></i><b>${side.name}</b><span>${preset ? preset.name : 'Personalizado'} · ${BODIES[look.body]}${look.age ? ' idoso' : ''}</span>`;
+    syncNick();
+  }
+  refresh();
+
+  $('#enter').onclick = onEnter;
+  $('#watch').onclick = onWatch;
+
+  return {
+    show() { $('#lobby').hidden = false; },
+    hide() { $('#lobby').hidden = true; },
+    syncNick,
+    go,
+  };
+}
+
+/** HUD: chat, emotes e joystick virtual. */
+export function initHud({ onChat, onEmote, onAttack, onLeave, onSound, soundOn }) {
+  const hud = $('#hud');
+  const log = $('#chatlog');
+  const input = $('#chatinput');
+  const joy = { x: 0, y: 0 };
+
+  $('#chatform').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (text) onChat(text);
+    input.value = '';
+    input.blur();
+  });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Escape') input.blur(); });
+
+  window.addEventListener('keydown', (e) => {
+    if (hud.hidden || e.key !== 'Enter' || e.repeat) return;
+    if (document.activeElement?.tagName === 'INPUT') return; // ex.: Enter do lobby
+    e.preventDefault();
+    input.focus();
+  });
+
+  document.querySelectorAll('[data-emote]').forEach((b) => {
+    b.addEventListener('click', () => onEmote(Number(b.dataset.emote)));
+  });
+  document.querySelectorAll('[data-attack]').forEach((b) => {
+    b.addEventListener('click', () => onAttack(b.dataset.attack));
+  });
+  $('#leave').onclick = onLeave;
+
+  const sound = $('#sound');
+  let on = soundOn;
+  const paintSound = () => { sound.textContent = on ? '🔊' : '🔇'; };
+  paintSound();
+  sound.onclick = () => { on = !on; paintSound(); onSound(on); };
+
+  // joystick só em telas de toque
+  const stick = $('#stick');
+  const knob = $('#knob');
+  if (matchMedia('(pointer: coarse)').matches) {
+    stick.hidden = false;
+    const R = 50;
+    const move = (e) => {
+      const r = stick.getBoundingClientRect();
+      let dx = e.clientX - (r.left + r.width / 2);
+      let dy = e.clientY - (r.top + r.height / 2);
+      const len = Math.hypot(dx, dy);
+      if (len > R) { dx = (dx / len) * R; dy = (dy / len) * R; }
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      joy.x = dx / R;
+      joy.y = -dy / R;
+    };
+    const end = () => { knob.style.transform = ''; joy.x = 0; joy.y = 0; };
+    stick.addEventListener('pointerdown', (e) => { stick.setPointerCapture(e.pointerId); move(e); });
+    stick.addEventListener('pointermove', (e) => { if (e.buttons || e.pressure) move(e); });
+    stick.addEventListener('pointerup', end);
+    stick.addEventListener('pointercancel', end);
+  }
+
+  return {
+    joy,
+    show() { hud.hidden = false; },
+    /** Espectador não tem emotes nem campo de chat. */
+    setWatch(watching) {
+      $('.emotes').hidden = watching;
+      $('#chatform').hidden = watching;
+      $('.hint').textContent = watching
+        ? 'Modo assistir · WASD/setas mover a câmera · Shift mais rápido · arraste para girar'
+        : 'WASD/setas mover · Shift correr · 1-3 gestos · 4-6 golpes · C carro · arraste para girar a câmera · Enter chat';
+      $('#drivebtn').hidden = watching;
+    },
+    isTyping: () => document.activeElement === input,
+    setEmote(anim) {
+      document.querySelectorAll('[data-emote]').forEach((b) => b.classList.toggle('on', Number(b.dataset.emote) === anim));
+    },
+    /** Botão do golpe acende por um instante. */
+    flashAttack(kind) {
+      const b = document.querySelector(`[data-attack="${kind}"]`);
+      if (!b) return;
+      b.classList.add('on');
+      setTimeout(() => b.classList.remove('on'), 350);
+    },
+    setDriving(on) {
+      const b = $('#drivebtn');
+      b.classList.toggle('on', on);
+      b.textContent = on ? '🚶 Sair do carro (C)' : '🚗 Carro (C)';
+      $('.emotes').classList.toggle('disabled', on);
+      $('.hint').textContent = on
+        ? 'W/S acelerar e frear · A/D virar · C sair do carro · arraste para girar a câmera'
+        : 'WASD/setas mover · Shift correr · 1-3 gestos · 4-6 golpes · C carro · arraste para girar a câmera · Enter chat';
+    },
+    addChat(nick, text, color) {
+      const row = document.createElement('div');
+      const name = document.createElement('b');
+      name.style.color = color;
+      name.textContent = `${nick}:`;
+      row.append(name, document.createTextNode(text));
+      log.append(row);
+      while (log.children.length > 30) log.firstChild.remove();
+      setTimeout(() => row.remove(), 25000);
+    },
+  };
+}
+
+/** Modos extras no HUD: corrida e PvP. */
+export function initModes({ onRace, onPvp, onThrow, onDrive }) {
+  const raceBtn = $('#racebtn');
+  const pvpBtn = $('#pvpbtn');
+  const throwBtn = $('#throwbtn');
+  const racePanel = $('#racepanel');
+  const pvpPanel = $('#pvppanel');
+  raceBtn.onclick = onRace;
+  pvpBtn.onclick = onPvp;
+  throwBtn.onclick = onThrow;
+  $('#drivebtn').onclick = onDrive;
+  let hideTimer;
+  const fmt = (ms) => `${(ms / 1000).toFixed(1).replace('.', ',')} s`;
+  const sideName = (i) => SIDES[i]?.short ?? '?';
+
+  return {
+    /** snapshot do servidor + se eu estou inscrito + meu resultado. */
+    setRace(snap, joined, mine, runningMs) {
+      clearTimeout(hideTimer);
+      raceBtn.textContent = joined && snap.state !== 'results' ? '🏁 Sair da corrida' : '🏁 Corrida';
+      raceBtn.classList.toggle('on', joined);
+      let html = '';
+      if (snap.state === 'waiting') html = `<b>Corrida</b> começa em ${Math.ceil(snap.startsIn / 1000)} s · ${snap.n} inscrito${snap.n === 1 ? '' : 's'}`;
+      else if (snap.state === 'countdown') html = joined ? `<b class="big">${Math.max(1, Math.ceil(snap.countLeft / 1000))}</b> prepare-se…` : '<b>Corrida</b> na largada';
+      else if (snap.state === 'running') html = mine ? `<b>${mine.place}º lugar</b> · ${fmt(mine.time)}` : joined ? `<b>JÁ!</b> ${fmt(runningMs)}` : `<b>Corrida</b> em andamento (${snap.n})`;
+      else if (snap.state === 'results') {
+        const rows = snap.results.slice(0, 5).map((r, i) => `<li>${i + 1}º <b>${esc(r.nick)}</b> <small>${sideName(r.side)}</small> ${fmt(r.time)}</li>`).join('');
+        const best = (snap.top || []).slice(0, 3).map((r, i) => `<li>${i + 1}º ${esc(r.nick)} ${fmt(r.time_ms)}</li>`).join('');
+        html = `<b>Resultado</b><ol>${rows || '<li>ninguém chegou</li>'}</ol>${best ? `<small>Melhores tempos</small><ol class="best">${best}</ol>` : ''}`;
+        hideTimer = setTimeout(() => { racePanel.hidden = true; }, 15000);
+      }
+      racePanel.innerHTML = html;
+      racePanel.hidden = !html;
+    },
+    setPvp(on) {
+      pvpBtn.classList.toggle('on', on);
+      pvpBtn.textContent = on ? '🍅 PvP ligado' : '🍅 PvP';
+      throwBtn.hidden = !on;
+      pvpPanel.hidden = !on;
+    },
+    setScores(scores, top) {
+      const parts = SIDES.map((s, i) => `<span><i style="background:${s.color}"></i>${scores[i] ?? 0}</span>`).join('');
+      const best = (top || []).slice(0, 3).map((t) => `<li>${esc(t.nick)} · ${t.hits}</li>`).join('');
+      pvpPanel.innerHTML = `<div class="scores">${parts}</div>${best ? `<ol>${best}</ol>` : ''}`;
+    },
+  };
+}
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/** Rótulo flutuante com nome e balão de fala. */
+export function createLabel(nick, color) {
+  const el = document.createElement('div');
+  el.className = 'label';
+  const name = document.createElement('div');
+  name.className = 'name';
+  const dot = document.createElement('i');
+  dot.style.background = color;
+  name.append(dot, document.createTextNode(nick));
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.hidden = true;
+  el.append(bubble, name);
+  $('#labels').append(el);
+
+  let timer;
+  let visible = true;
+  return {
+    say(text) {
+      bubble.textContent = text;
+      bubble.hidden = false;
+      clearTimeout(timer);
+      timer = setTimeout(() => { bubble.hidden = true; }, 6000);
+    },
+    place(x, y, show) {
+      if (show !== visible) { el.style.display = show ? '' : 'none'; visible = show; }
+      if (show) el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
+    },
+    remove() { clearTimeout(timer); el.remove(); },
+  };
+}

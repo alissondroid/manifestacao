@@ -1,0 +1,20 @@
+{
+  "name": "avenida-online",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mundo 3D multiplayer no navegador: avenida, avatares, chat e presença em tempo real.",
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c blue,green \"node --watch --env-file-if-exists=.env server/index.js\" \"vite\"",
+    "build": "vite build",
+    "start": "NODE_ENV=production node --env-file-if-exists=.env server/index.js"
+  },
+  "dependencies": {
+    "three": "^0.186.1",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6",
+    "vite": "^8.3.4"
+  }
+}
