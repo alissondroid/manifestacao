@@ -1,6 +1,6 @@
 # Avenida Online · Eleições 2026 na Paulista
 
-Manifestação online na Avenida Paulista, no navegador: escolha o lado (**Petista** (13), **Bolsonarista** (22), **Anarquistas** ou **Sem partido**), monte um personagem brasileiro, leve bandeira ou cartaz, converse e participe em tempo real. MVP inspirado na arquitetura do manifestacao.com, com arte própria.
+Manifestação online na Avenida Paulista, direto no navegador. Você escolhe o lado (**Petista** (13), **Bolsonarista** (22), **Anarquistas** ou **Sem partido**), monta um personagem brasileiro, leva bandeira ou cartaz e conversa com os outros jogadores em tempo real. MVP inspirado na arquitetura do manifestacao.com, com arte própria.
 
 **Aviso jurídico:** projeto independente, sem vínculo com candidatos, partidos ou campanhas. Os nomes e números identificam apenas os lados da disputa. Há três personagens prontos com a aparência de políticos reais (Renan Santos, Lula e Bolsonaro), em tom de sátira; isso envolve direito de imagem, e os modelos vieram de terceiros (Tripo e Sketchfab): confira a licença de cada arquivo (o do Sketchfab pode exigir crédito ao autor). Antes de publicar, revise a legislação eleitoral (propaganda, uso de nome de candidato e monetização em período eleitoral) e os termos de uso.
 
@@ -101,7 +101,7 @@ Itens "Seu cartaz" (R$ 2) e "Sua bandeira" (R$ 4). Depois de comprar, o botão �
 
 ## Lobby
 
-Layout no espírito do manifestacao.com: barra no topo com logo e online por lado; à esquerda o personagem em 3D com o chamado "A sua presença. Do seu jeito." e as abas de animação (parado, andando, correndo, acenando, dançando; arraste para girar); à direita o menu **"Monte seu personagem"**, em quatro etapas:
+Layout no espírito do manifestacao.com: barra no topo com logo e online por lado; à esquerda o personagem em 3D com o chamado "Entre na Paulista. Do seu jeito." e as abas de animação (parado, andando, correndo, acenando, dançando; arraste para girar); à direita o menu **"Monte seu personagem"**, em quatro etapas:
 
 1. **Lado**: Petista (13), Bolsonarista (22), Anarquistas ou Sem partido, com o contador de online de cada um.
 2. **Personagem**: seis personagens prontos numa fila (Homem, Mulher, Tiozão do Zap, Renan Santos, Lula e Bolsonaro) com retratos do modelo 3D e o botão 🎲 Sortear. Idosos e demais variações ficam em Visual.

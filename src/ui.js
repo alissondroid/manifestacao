@@ -35,7 +35,7 @@ const FLAG_OPTIONS = [
   { icon: '✋', title: 'Nada', text: 'Mãos livres para acenar e dançar' },
   { icon: '🇧🇷', title: 'Bandeira do Brasil', text: 'Verde e amarela, para todo mundo' },
   { icon: '🚩', title: 'Bandeira do lado', text: '' }, // texto muda com o lado escolhido
-  { icon: '🪧', title: 'Cartaz', text: 'Escreva o que quiser (até 24 letras)' },
+  { icon: '🪧', title: 'Cartaz', text: 'Escreva o que quiser, até 24 caracteres' },
   { icon: '🥩', title: 'Picanha no espeto', text: 'Direto da churrasqueira da calçada' },
   { icon: '🎃', title: 'Abóbora', text: 'Moranga fresquinha da feira' },
 ];

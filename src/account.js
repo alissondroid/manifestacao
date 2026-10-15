@@ -123,7 +123,7 @@ export function initAccount({ onChange }) {
     openModal(
       h('div', { class: 'tabs' }, tab('login', 'Entrar'), tab('register', 'Criar conta')),
       form,
-      h('p', { class: 'note' }, 'A conta serve para guardar seus itens da loja. Seu apelido na avenida passa a ser o da conta.'),
+      h('p', { class: 'note' }, 'Com a conta, seus itens da loja ficam guardados e o apelido dela passa a ser o seu na avenida.'),
     );
     (isRegister ? email : email).focus();
   }
@@ -188,7 +188,7 @@ export function initAccount({ onChange }) {
     openModal(
       h('h2', {}, 'Loja de itens'),
       h('p', { class: 'note test' }, note),
-      h('p', { class: 'note' }, 'Camisa simples e Sua camisa só mudam de cor no Rosto 1 masculino; os outros rostos já vêm com a roupa original.'),
+      h('p', { class: 'note' }, 'A Camisa simples e a Sua camisa só aparecem no Rosto 1 masculino. Os outros rostos usam a roupa original.'),
       grid,
     );
   }
@@ -265,7 +265,7 @@ export function initAccount({ onChange }) {
         const res = await api.confirm(order);
         if (res.status === 'paid') {
           apply(res, 'items');
-          toast('Compra confirmada! Abra a loja para equipar o item. 🎉', 'ok');
+          toast('Compra confirmada. Abra a loja para equipar o item.', 'ok');
           return;
         }
         if (res.status !== 'pending') { toast('O pagamento não foi concluído.', 'error'); return; }
