@@ -1,5 +1,8 @@
 import { db } from './db.js';
-import { RACE } from '../shared/config.js';
+import { RACE, MAX_SPEED, SPEED_SLACK } from '../shared/config.js';
+
+// Tempo mínimo possível na prova: abaixo disso é trapaça (não entra no ranking).
+export const RACE_MIN_MS = Math.floor(((RACE.finishZ - RACE.startZ) / (MAX_SPEED * SPEED_SLACK)) * 1000);
 
 // Modo corrida: quem entra espera outros corredores, vai para a largada, conta 3-2-1 e corre
 // até a linha de chegada. O servidor marca o tempo pela posição que já valida nos `move`.
@@ -93,7 +96,8 @@ export function createRace({ players, send, broadcast, teleport }) {
     const time = Date.now() - race.startAt;
     race.entrants.delete(p.id);
     race.results.push({ id: p.id, nick: p.nick, side: p.side, time });
-    db.prepare('INSERT INTO race_times (nick, side, time_ms, at) VALUES (?, ?, ?, ?)').run(p.nick, p.side, time, Date.now());
+    if (time >= RACE_MIN_MS) db.prepare('INSERT INTO race_times (nick, side, time_ms, at) VALUES (?, ?, ?, ?)').run(p.nick, p.side, time, Date.now());
+    else console.warn(`[corrida] tempo implausível de ${p.nick}: ${time} ms (mínimo ${RACE_MIN_MS})`);
     send(p.ws, { t: 'race', state: 'finished', time, place: race.results.length });
     announce();
     if (race.entrants.size === 0) finish();

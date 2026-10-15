@@ -15,6 +15,11 @@ import { filterText } from './moderation.js';
 import { createRace } from './race.js';
 import { PVP } from '../shared/config.js';
 import { createZones } from './zones.js';
+import { clientIp } from './ip.js';
+import {
+  cleanText, isReservedNick, uniqueNick, spendMoveBudget,
+} from './rules.js';
+import { db } from './db.js';
 
 process.on('uncaughtException', (err) => console.error('[erro não tratado]', err));
 process.on('unhandledRejection', (err) => console.error('[promessa rejeitada]', err));
@@ -58,6 +63,10 @@ const server = http.createServer(async (req, res) => {
 });
 
 async function handle(req, res) {
+  if (req.url === '/healthz') {
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    return res.end(JSON.stringify({ ok: true, players: players.size, uptime: Math.round(process.uptime()) }));
+  }
   if (await handleApi(req, res, { onEquip: refreshLook, onDelete: kickUser })) return;
   if (!fs.existsSync(DIST)) {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
@@ -127,12 +136,6 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const int = (v, max) => clamp(Math.trunc(Number(v)) || 0, 0, max);
 const round2 = (v) => Math.round(v * 100) / 100;
-
-const cleanText = (s, max) => String(s ?? '')
-  .replace(/[\u0000-\u001f\u007f<>]/g, '')
-  .replace(/\s+/g, ' ')
-  .trim()
-  .slice(0, max);
 
 
 // `equip` e `custom` vêm do banco (itens comprados e desenhos), nunca do cliente.
@@ -212,6 +215,8 @@ function teleport(p, x, z, ry) {
   p.ry = ry;
   p.dirty = true;
   p.lastMove = Date.now();
+  p.budgetAt = p.lastMove;
+  p.budget = MAX_SPEED; // folga para o cliente se acertar na nova posição
   send(p.ws, { t: 'fix', x: round2(x), z: round2(z), ry });
 }
 
@@ -402,7 +407,7 @@ function removePlayer(p) {
 // ---------- Conexões ----------
 
 wss.on('connection', (ws, req) => {
-  const ip = (TRUST_PROXY && req.headers['x-forwarded-for']?.split(',').pop().trim()) || req.socket.remoteAddress;
+  const ip = clientIp(req);
   const open = perIp.get(ip) || 0;
   if (open >= MAX_PER_IP) return ws.close(1008, 'Muitas conexões');
   perIp.set(ip, open + 1);
@@ -451,7 +456,9 @@ wss.on('connection', (ws, req) => {
       if (ws.joined || players.size >= MAX_PLAYERS) return;
       const id = nextId++;
       const account = ws.user; // definido no upgrade pelo cookie de sessão
-      const nick = account ? account.nick : filterText(cleanText(m.nick, LIMITS.nick)) || `Visitante${id}`;
+      let nick = account ? account.nick : filterText(cleanText(m.nick, LIMITS.nick));
+      if (!account && (!nick || isReservedNick(nick))) nick = `Visitante${id}`;
+      if (!account) nick = uniqueNick(nick, [...players.values()].map((q) => q.nick), LIMITS.nick);
       if (!account && nickTaken(nick)) {
         return send(ws, { t: 'denied', reason: 'Esse apelido pertence a uma conta. Escolha outro ou entre na conta.' });
       }
@@ -475,6 +482,8 @@ wss.on('connection', (ws, req) => {
         a: 0,
         dirty: false,
         lastMove: Date.now(),
+        budgetAt: Date.now(),
+        budget: MAX_SPEED,
         lastChat: 0,
         frozen: false, // na largada da corrida
         pvp: false,
@@ -524,8 +533,8 @@ wss.on('connection', (ws, req) => {
       let a = int(m.a, ANIMS.length - 1);
       if (PREMIUM_ANIMS.includes(a) && !me.premium) a = 0; // gesto premium sem direito: fica parado
       const limit = a === DRIVE ? VEHICLE.maxSpeed : MAX_SPEED;
-      if (Math.hypot(nx - me.x, nz - me.z) > limit * dt * 1.5 + 0.3) {
-        // movimento impossível: devolve a posição aceita
+      if (!spendMoveBudget(me, now, limit, Math.hypot(nx - me.x, nz - me.z))) {
+        // movimento impossível (acima da velocidade permitida): devolve a posição aceita
         send(ws, { t: 'fix', x: round2(me.x), z: round2(me.z) });
         return;
       }
@@ -636,3 +645,19 @@ setInterval(() => {
 server.listen(PORT, () => {
   console.log(`Servidor em http://localhost:${PORT}  (WebSocket em /ws)`);
 });
+
+// Desligamento limpo: avisa os clientes (que reconectam sozinhos), fecha o HTTP e o banco.
+let stopping = false;
+function shutdown(signal) {
+  if (stopping) return;
+  stopping = true;
+  console.log(`[${signal}] encerrando...`);
+  for (const ws of wss.clients) ws.close(1001, 'Servidor reiniciando');
+  server.close(() => {
+    try { db.close(); } catch { /* já fechado */ }
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(0), 5000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

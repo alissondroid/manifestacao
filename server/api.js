@@ -8,6 +8,7 @@ import {
   ownedIds, equippedMap, owns, createOrder, pendingOrder, inventoryOf, vipUntil, hasPremiumEmotes, canBuy, getOrder, setOrderRef, setOrderStatus, fulfill, equip, designsOf, saveDesign,
 } from './shop.js';
 import { filterText } from './moderation.js';
+import { clientIp } from './ip.js';
 import {
   PROVIDER, PAYMENTS_ENABLED, WEBHOOK_CONFIGURED, createCheckout, fetchStatus, verifyWebhook,
 } from './payments.js';
@@ -15,7 +16,6 @@ import { SHOP, SHOP_BY_ID, SLOTS, DESIGN } from '../shared/config.js';
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
-const clientIp = (req) => req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
 const isHttps = (req) => req.headers['x-forwarded-proto'] === 'https' || (process.env.PUBLIC_URL || '').startsWith('https');
 // Atrás de proxy (Vite em dev, nginx/Cloudflare em produção) o host público vem em x-forwarded-host.
 const publicHost = (req) => req.headers['x-forwarded-host'] || req.headers.host;
