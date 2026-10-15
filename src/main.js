@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  WORLD, SIDES, ANIMS, WALK_SPEED, RUN_SPEED, RACE, MELEE, VEHICLE, REACTIONS, STAMINA,
+  WORLD, SIDES, ANIMS, WALK_SPEED, RUN_SPEED, RACE, MELEE, VEHICLE, REACTIONS, STAMINA, EMOTES, JUMP, ZONES,
 } from '../shared/config.js';
 import { createWorld, carMesh } from './world.js';
 import { Avatar } from './avatar.js';
@@ -15,6 +15,7 @@ import {
 } from './ui.js';
 import { toast } from './account.js';
 import { initRadar } from './radar.js';
+import { Effects } from './effects.js';
 
 const $ = (s) => document.querySelector(s);
 
@@ -71,6 +72,7 @@ try {
 document.querySelector('#loading').hidden = true;
 
 const world = createWorld(scene, renderer);
+const effects = new Effects(scene);
 
 function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -101,6 +103,9 @@ const pvp = { on: false, lastThrow: 0 };
 const vit = { hp: 100, shieldUntil: 0, koUntil: 0, koBy: '', stamina: STAMINA.max, tired: false, next: 0 };
 const lastAttackAt = {}; // por golpe, para o cooldown no cliente
 const DRIVE = ANIMS.indexOf('drive');
+const JUMP_A = JUMP.anim;
+/** Nome da animação para o índice enviado pela rede (o pulo mostra andar ou parado). */
+const animName = (a, speed) => (a === JUMP_A ? (speed > 0.3 ? 'walk' : 'idle') : (a === 1 && speed < 0.3 ? 'idle' : ANIMS[a] ?? 'idle'));
 // carro: física simples no cliente (o servidor só valida a velocidade)
 const drive = { on: false, speed: 0, mesh: null };
 const projectiles = [];
@@ -121,7 +126,8 @@ const me = {
   avatar: new Avatar(lookOf(profile.look, profile.side)),
   label: null,
   x: 0, z: 0, ry: 0,
-  manual: 0, // 0 nenhum, 2 acenar, 3 dançar, 4 aplaudir
+  manual: 0, // 0 nenhum, ou o índice do gesto em ANIMS (acenar, dançar, aplaudir, premium…)
+  jumpAt: 0, // início do pulo (performance.now), 0 = no chão
   speed: 0,
   stunUntil: 0, // levou um golpe: não anda até aqui
   sent: { x: NaN, z: NaN, ry: NaN, a: -1, at: 0 },
@@ -147,6 +153,7 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'Digit6') attack('baton');
     if (e.code === 'KeyC') toggleDrive();
     if (e.code === 'KeyF') throwTomato();
+    if (e.code === 'Space') { e.preventDefault(); jump(); }
     const ri = ['Digit7', 'Digit8', 'Digit9', 'Digit0'].indexOf(e.code);
     if (ri >= 0) react(ri);
     if (e.code === 'Tab') { e.preventDefault(); hud.toggleWho(); }
@@ -187,8 +194,19 @@ function react(i) {
   net.send({ t: 'react', e: i });
 }
 
+function jump() {
+  const now = performance.now();
+  if (mode !== 'play' || watching || drive.on || knockedOut() || now - me.jumpAt < JUMP.ms + 150) return;
+  me.jumpAt = now;
+}
+
 function toggleEmote(anim) {
-  if (drive.on) return;
+  if (drive.on || knockedOut()) return;
+  const em = EMOTES.find((e) => e.anim === anim);
+  if (em?.premium && !acct.premium) {
+    toast(acct.user ? 'Gesto premium: libere com o Pacote de gestos ou o VIP na loja 🛍️' : 'Gestos premium: entre numa conta e compre o Pacote de gestos ou o VIP.');
+    return;
+  }
   me.manual = me.manual === anim ? 0 : anim;
   hud.setEmote(me.manual);
 }
@@ -212,13 +230,15 @@ function toggleDrive() {
   drive.speed = 0;
   if (drive.on) {
     if (me.manual) { me.manual = 0; hud.setEmote(0); }
-    if (!drive.mesh) drive.mesh = carMesh(SIDES[profile.side].color);
+    drive.mesh = carMesh(SIDES[profile.side].color, acct.equipped?.car);
     drive.mesh.position.set(me.x, 0, me.z);
     drive.mesh.rotation.y = me.ry;
     scene.add(drive.mesh);
     me.avatar.group.visible = false;
   } else {
     scene.remove(drive.mesh);
+    drive.mesh.geometry.dispose();
+    drive.mesh = null;
     me.avatar.group.visible = true;
   }
   camDist = drive.on ? 9.5 : 6.5;
@@ -240,7 +260,8 @@ function addRemote(p) {
     nick: p.nick,
     side: p.side,
     avatar,
-    label: createLabel(p.nick, SIDES[p.side].color),
+    label: createLabel(p.nick, SIDES[p.side].color, p.look?.equip),
+    look: p.look,
     x: p.x, z: p.z, ry: p.ry,
     tx: p.x, tz: p.z, tr: p.ry,
     anim: p.a || 0,
@@ -252,8 +273,8 @@ function addRemote(p) {
 
 function removeRemote(id) {
   const r = remotes.get(id);
-  if (r?.car) scene.remove(r.car);
   if (!r) return;
+  if (r.car) { scene.remove(r.car); r.car.geometry.dispose(); }
   r.avatar.dispose();
   r.label.remove();
   remotes.delete(id);
@@ -283,6 +304,13 @@ const net = new Net({
         me.x = m.x;
         me.z = m.z;
         clearRemotes();
+        // reconectou: o servidor criou um jogador novo (sem corrida, sem PvP, vida cheia)
+        race.joined = false; race.mine = null; race.snap = { state: 'idle', n: 0 };
+        pvp.on = false; modes.setPvp(false);
+        Object.assign(vit, { hp: 100, shieldUntil: 0, koUntil: 0 });
+        me.stunUntil = 0;
+        if (drive.on) toggleDrive();
+        modes.setRace(race.snap, false, null, 0);
         break;
       case 'sync':
         // o servidor só envia quem está na nossa área de interesse
@@ -295,9 +323,10 @@ const net = new Net({
         break;
       case 'chat': {
         const mine = m.id === myId;
-        if (mine) me.label?.say(m.text);
-        else {
-          remotes.get(m.id)?.label.say(m.text);
+        if (mine) { me.label?.say(m.text); me.avatar.talkNow(); } else {
+          const r = remotes.get(m.id);
+          r?.label.say(m.text);
+          r?.avatar.talkNow();
           sound.pop();
         }
         hud.addChat(mine ? profile.nick || 'Você' : m.nick, m.text, SIDES[m.side]?.color ?? '#94a3b8');
@@ -346,15 +375,34 @@ const net = new Net({
         who?.label?.react(REACTIONS[m.e] ?? '👍');
         break;
       }
+      case 'inv':
+        acct.inventory = m.inv;
+        acct.premium = m.premium;
+        hud.setInventory(m.inv, m.premium);
+        break;
+      case 'notice':
+        toast(m.text);
+        break;
+      case 'fx':
+        effects.fireworks(m.x, m.z, SIDES[m.side]?.color ?? '#ffffff');
+        sound.boom();
+        break;
+      case 'billboard':
+        world.ticker.show(m.nick, m.text);
+        hud.showBanner(m.nick, m.side, m.text);
+        sound.pop();
+        break;
       case 'who':
         hud.setWho(m.list, m.total);
         break;
       case 'zones':
         radar.setZones(m);
+        world.setZones(m.z);
         break;
       case 'zonecap':
         hud.addChat('Domínio', `${SIDES[m.side].name} dominou ${radar.zoneName(m.zone)}!`, SIDES[m.side].color);
         sound.capture();
+        effects.confetti(0, ZONES[m.zone]?.z ?? 0);
         break;
       case 'feed':
         hud.addChat('☠️', `${m.a} nocauteou ${m.v}`, SIDES[m.as]?.color ?? '#94a3b8');
@@ -380,10 +428,17 @@ const net = new Net({
       }
       case 'look': {
         // itens equipados mudaram (loja)
-        if (m.id === myId) me.avatar.setLook({ ...m.look, side: profile.side });
-        else {
+        if (m.id === myId) {
+          me.avatar.setLook({ ...m.look, side: profile.side });
+          me.label?.setStyle(m.look.equip);
+        } else {
           const r = remotes.get(m.id);
-          if (r) r.avatar.setLook({ ...m.look, side: r.side });
+          if (r) {
+            r.avatar.setLook({ ...m.look, side: r.side });
+            r.label.setStyle(m.look.equip);
+            if (r.look?.equip?.car !== m.look.equip?.car && r.car) { scene.remove(r.car); r.car.geometry.dispose(); r.car = null; }
+            r.look = m.look;
+          }
         }
         break;
       }
@@ -499,6 +554,8 @@ const hud = initHud({
   onAttack: attack,
   onReact: react,
   onWho: () => net.send({ t: 'who' }),
+  onFireworks: () => net.send({ t: 'use', item: 'fogos' }),
+  onBillboard: () => hud.prefillChat('/telao '),
   onLeave: () => window.location.reload(),
   onSound: (on) => sound.setEnabled(on),
   soundOn: sound.enabled,
@@ -525,7 +582,7 @@ const lobby = initLobby({
     lobby.hide();
     hud.show();
     sound.start();
-    me.label = createLabel(profile.nick || 'Você', SIDES[profile.side].color);
+    me.label = createLabel(profile.nick || 'Você', SIDES[profile.side].color, acct.equipped);
     net.join({ nick: profile.nick, side: profile.side, look: profile.look });
   },
   onWatch() {
@@ -550,6 +607,7 @@ renderPortraits(renderer, profile.side);
 
 /** Volta do jogo para o lobby (ex.: servidor recusou a entrada). */
 function leavePlay(reason) {
+  if (drive.on) toggleDrive();
   setMode('lobby');
   race.joined = false;
   race.mine = null;
@@ -580,6 +638,8 @@ let lastUserNick = null;
 initAccount({
   onChange(account, reason) {
     acct = account;
+    hud.setInventory(account.inventory || {}, !!account.premium);
+    me.label?.setStyle(account.equipped);
     const nick = account.user?.nick ?? null;
     nickInput.disabled = !!nick;
     nickInput.value = nick ?? profile.nick;
@@ -687,17 +747,17 @@ function collide(r) {
 }
 
 /** Deita o avatar quando nocauteado (e levanta de volta). */
-function lie(group, on, dt) {
+function lie(group, on, dt, hop = 0) {
   const k = group.userData.lie || 0;
   const next = on ? Math.min(1, k + dt * 5) : Math.max(0, k - dt * 3);
-  if (next === k) return;
   group.userData.lie = next;
   group.rotation.x = -Math.PI / 2 * next;
-  group.position.y = 0.14 * next;
+  group.position.y = 0.14 * next + hop;
 }
 
 function currentAnim() {
   if (drive.on) return DRIVE;
+  if (me.jumpAt) return JUMP_A;
   if (me.speed > 0.1) return 1;
   return me.manual || 0;
 }
@@ -738,10 +798,16 @@ function updateRemotes(dt) {
     if (r.car) r.car.visible = false;
     r.avatar.group.visible = true;
     if (r.shieldOn && performance.now() > r.shieldUntil) { r.shieldOn = false; r.label.setHp(r.hp, false); }
-    const down = performance.now() < r.koUntil;
-    lie(r.avatar.group, down, dt);
-    const anim = down || (r.anim === 1 && r.speed < 0.3) ? 'idle' : ANIMS[r.anim] ?? 'idle';
-    r.avatar.update(dt, anim, r.speed);
+    const nowMs = performance.now();
+    const down = nowMs < r.koUntil;
+    let hop = 0;
+    if (r.anim === JUMP_A) {
+      r.jumpAt ||= nowMs;
+      const k = (nowMs - r.jumpAt) / JUMP.ms;
+      if (k < 1) hop = 4 * JUMP.height * k * (1 - k);
+    } else r.jumpAt = 0;
+    lie(r.avatar.group, down, dt, hop);
+    r.avatar.update(dt, down ? 'idle' : animName(r.anim, r.speed), r.speed);
   }
 }
 
@@ -815,8 +881,10 @@ function frame() {
         drive.mesh.position.set(me.x, 0, me.z);
         drive.mesh.rotation.y = me.ry;
       } else {
-        lie(me.avatar.group, now < vit.koUntil, dt);
-        me.avatar.update(dt, now < vit.koUntil ? 'idle' : ANIMS[currentAnim()], me.speed);
+        const jk = me.jumpAt ? (now - me.jumpAt) / JUMP.ms : 1;
+        if (jk >= 1) me.jumpAt = 0;
+        lie(me.avatar.group, now < vit.koUntil, dt, jk < 1 ? 4 * JUMP.height * jk * (1 - jk) : 0);
+        me.avatar.update(dt, now < vit.koUntil ? 'idle' : animName(currentAnim(), me.speed), me.speed);
       }
     }
   } else {
@@ -826,6 +894,7 @@ function frame() {
 
   updateRemotes(dt);
   updateProjectiles(dt);
+  effects.update(dt);
   if (race.joined && (race.snap.state === 'countdown' || race.snap.state === 'running') && !race.mine) {
     const countLeft = RACE.countdownMs - (now - race.countAt);
     modes.setRace({ ...race.snap, countLeft }, true, null, race.goAt ? now - race.goAt : 0);
@@ -858,5 +927,5 @@ window.__AVENIDA__ = {
   info: renderer.info,
   movingCars,
   // só para depuração no console
-  THREE, Avatar, renderer, scene, world,
+  THREE, Avatar, renderer, scene, world, me,
 };

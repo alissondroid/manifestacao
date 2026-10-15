@@ -68,7 +68,23 @@ db.exec(`
     item_id TEXT NOT NULL,
     PRIMARY KEY (user_id, slot)
   );
+
+  CREATE TABLE IF NOT EXISTS inventory (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    item_id TEXT NOT NULL,
+    qty     INTEGER NOT NULL DEFAULT 0 CHECK (qty >= 0),
+    PRIMARY KEY (user_id, item_id)
+  );
 `);
+
+// Migração: assinatura VIP (vip_until em ms; 0 = nunca teve).
+if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'vip_until')) {
+  db.exec('ALTER TABLE users ADD COLUMN vip_until INTEGER NOT NULL DEFAULT 0');
+}
+
+if (!db.prepare('PRAGMA table_info(orders)').all().some((c) => c.name === 'pay_url')) {
+  db.exec('ALTER TABLE orders ADD COLUMN pay_url TEXT');
+}
 
 // Item retirado do catálogo (bandeira nas costas): tira de quem estava com ele equipado.
 db.prepare("DELETE FROM equipped WHERE item_id = 'capa-brasil'").run();

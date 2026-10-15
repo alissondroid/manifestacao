@@ -802,7 +802,13 @@ export class LedTicker {
 
   setOnline(counts) { this.counts = counts; }
 
+  /** Mensagem paga: ocupa o centro do telão por `seconds`. */
+  show(nick, text, seconds = 20) {
+    this.pay = { nick, text, until: (this.now || 0) + seconds };
+  }
+
   update(time) {
+    this.now = time;
     if (time - this.last < 0.08) return;
     this.last = time;
     this.draw(time);
@@ -833,6 +839,17 @@ export class LedTicker {
       ctx.font = '700 22px system-ui, sans-serif';
       ctx.fillStyle = '#9ad0ff';
       ctx.fillText(`${this.counts.reduce((a, b) => a + b, 0)} pessoas na avenida agora`, w / 2, 180);
+    }
+    if (this.pay && time < this.pay.until) {
+      ctx.fillStyle = Math.floor(time * 3) % 2 ? '#7c1d1d' : '#9a1b1b';
+      ctx.fillRect(14, 56, w - 28, h - 56 - 70);
+      ctx.fillStyle = '#fcd34d';
+      ctx.textAlign = 'center';
+      ctx.font = '800 24px system-ui, sans-serif';
+      ctx.fillText(`MENSAGEM DE ${this.pay.nick.toUpperCase()}`, w / 2, 90);
+      ctx.fillStyle = '#fff';
+      ctx.font = '800 34px system-ui, sans-serif';
+      wrapWords(this.pay.text, 24, 3).forEach((line, i) => ctx.fillText(line.toUpperCase(), w / 2, 138 + i * 42));
     }
     // faixa de notícias rolando
     ctx.fillStyle = '#fcd34d';
@@ -886,7 +903,7 @@ function drawShirtPrint(ctx, w, h, design) {
 export function shirtPrintTexture(design) {
   const key = `shirt${JSON.stringify([design.text, design.fg, design.emblem])}`;
   if (!designCache.has(key)) {
-    designCache.set(key, canvasTexture(128, 128, (ctx, w, h) => drawShirtPrint(ctx, w, h, design), { tile: false }));
+    cacheDesign(key, canvasTexture(128, 128, (ctx, w, h) => drawShirtPrint(ctx, w, h, design), { tile: false }));
   }
   return designCache.get(key);
 }
@@ -928,11 +945,21 @@ export function drawDesign(ctx, w, h, kind, design) {
 }
 
 const designCache = new Map();
+/** Cache com teto: desenhos de outros jogadores não crescem sem limite (a textura descartada é reenviada à GPU se for usada de novo). */
+function cacheDesign(key, tex) {
+  designCache.set(key, tex);
+  if (designCache.size > 64) {
+    const [oldKey, old] = designCache.entries().next().value;
+    designCache.delete(oldKey);
+    old.dispose();
+  }
+  return tex;
+}
 export function designTexture(kind, design) {
   const key = kind + JSON.stringify(design);
   if (!designCache.has(key)) {
     const sign = kind === 'sign';
-    designCache.set(key, canvasTexture(sign ? 256 : 240, sign ? 170 : 160, (ctx, w, h) => drawDesign(ctx, w, h, kind, design), { tile: false }));
+    cacheDesign(key, canvasTexture(sign ? 256 : 240, sign ? 170 : 160, (ctx, w, h) => drawDesign(ctx, w, h, kind, design), { tile: false }));
   }
   return designCache.get(key);
 }

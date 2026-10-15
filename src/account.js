@@ -1,4 +1,6 @@
-import { SHOP, DESIGN } from '../shared/config.js';
+import {
+  SHOP, DESIGN, SLOTS, SLOT_NAMES,
+} from '../shared/config.js';
 import { drawDesign } from './textures.js';
 import { api } from './api.js';
 
@@ -34,14 +36,22 @@ export function toast(text, kind = 'info') {
  */
 export function initAccount({ onChange }) {
   let account = {
-    user: null, owned: [], equipped: {}, custom: {}, shop: { items: SHOP, provider: 'simulated' },
+    user: null, owned: [], equipped: {}, custom: {}, inventory: {}, vipUntil: 0, premium: false, shop: { items: SHOP.filter((i) => !i.hidden), provider: 'simulated' },
   };
   const modal = $('#modal');
   const body = $('#modal-body');
 
   const apply = (data, reason) => {
     account = {
-      ...account, user: data.user, owned: data.owned, equipped: data.equipped, custom: data.custom ?? {}, shop: data.shop ?? account.shop,
+      ...account,
+      user: data.user,
+      owned: data.owned,
+      equipped: data.equipped,
+      custom: data.custom ?? {},
+      inventory: data.inventory ?? {},
+      vipUntil: data.vipUntil ?? 0,
+      premium: !!data.premium,
+      shop: data.shop ?? account.shop,
     };
     renderBar();
     onChange(account, reason);
@@ -62,7 +72,7 @@ export function initAccount({ onChange }) {
     } else {
       bar.replaceChildren(
         h('span', { class: 'who' }, `👤 ${account.user.nick}`),
-        h('button', { class: 'chip', type: 'button', onclick: openShop }, '🛍️ Loja'),
+        h('button', { class: 'chip', type: 'button', onclick: () => openShop() }, '🛍️ Loja'),
         h('button', { class: 'link', type: 'button', onclick: logout }, 'Sair da conta'),
       );
     }
@@ -130,70 +140,120 @@ export function initAccount({ onChange }) {
 
   // ---------- Loja ----------
 
-  function openShop() {
+  const TABS = [
+    ['vip', '⭐ VIP'], ['pacotes', '🎁 Pacotes'], ['visual', '👕 Visual'], ['consumiveis', '🎆 Itens'], ['apoio', '💛 Apoiar'],
+  ];
+  let shopTab = 'vip';
+  let visualSlot = 'all';
+
+  async function openShop(tab) {
+    if (typeof tab === 'string') shopTab = tab;
     if (!account.user) { openAuth('login'); return; }
+    try { apply(await api.me(), 'items'); } catch { /* usa o que já temos */ }
     const provider = account.shop.provider;
     const note = provider === 'stripe'
       ? 'Pagamento em modo de teste (Stripe): use os cartões e o Pix de teste. Nenhum dinheiro é cobrado.'
       : 'Modo de teste: o pagamento é simulado e nenhum dinheiro é cobrado.';
-
+    const isVip = account.vipUntil > Date.now();
     const grid = h('div', { class: 'shopgrid' });
-    const render = () => {
-      grid.replaceChildren(...account.shop.items.map((item) => {
-        const owned = account.owned.includes(item.id);
+    const tabs = h('div', { class: 'tabs shoptabs' });
+
+    const buy = (item) => h('button', {
+      class: 'primary small',
+      type: 'button',
+      async onclick(e) {
+        e.currentTarget.disabled = true;
+        try {
+          const { url } = await api.checkout(item.id);
+          window.location.href = url;
+        } catch (err) {
+          toast(err.message, 'error');
+          e.currentTarget.disabled = false;
+        }
+      },
+    }, `${item.kind === 'vip' && isVip ? 'Renovar' : item.kind === 'donation' ? 'Apoiar' : 'Comprar'} ${brl(item.price)}`);
+
+    const card = (item) => {
+      const owned = account.owned.includes(item.id);
+      let sub = brl(item.price);
+      let action;
+      if (item.kind === 'vip') {
+        sub = isVip ? `Ativo até ${new Date(account.vipUntil).toLocaleDateString('pt-BR')}` : brl(item.price);
+        action = buy(item);
+      } else if (item.kind === 'consumable') {
+        const key = Object.keys(item.give)[0];
+        sub = `Você tem ${account.inventory[key] || 0} · ${brl(item.price)}`;
+        action = buy(item);
+      } else if (item.kind === 'donation') action = buy(item);
+      else if (item.kind === 'bundle') {
+        const all = item.contains.every((id) => account.owned.includes(id));
+        sub = all ? 'Você tem tudo' : brl(item.price);
+        action = all ? h('button', { class: 'chip', type: 'button', disabled: true }, '✓ Completo') : buy(item);
+      } else if (item.kind === 'unlock') {
+        sub = owned ? 'Ativo' : brl(item.price);
+        action = owned ? h('button', { class: 'chip on', type: 'button', disabled: true }, '✓ Liberado') : buy(item);
+      } else if (!owned) action = buy(item);
+      else {
         const on = account.equipped[item.slot] === item.id;
-        const btn = !owned
-          ? h('button', {
-            class: 'primary small',
-            type: 'button',
-            async onclick(e) {
-              e.currentTarget.disabled = true;
-              try {
-                const { url } = await api.checkout(item.id);
-                window.location.href = url;
-              } catch (err) {
-                toast(err.message, 'error');
-                e.currentTarget.disabled = false;
-              }
-            },
-          }, `Comprar ${brl(item.price)}`)
-          : h('button', {
-            class: `chip${on ? ' on' : ''}`,
-            type: 'button',
-            async onclick(e) {
-              e.currentTarget.disabled = true;
-              try {
-                apply(await api.equip(item.slot, on ? null : item.id), 'items');
-                render();
-              } catch (err) {
-                toast(err.message, 'error');
-                e.currentTarget.disabled = false;
-              }
-            },
-          }, on ? '✓ Equipado · Remover' : 'Equipar');
-        const edit = owned && item.custom ? h('button', { class: 'chip', type: 'button', onclick: () => openDesigner(item.custom, render) }, '✏️ Editar') : null;
-        return h(
-          'div',
-          { class: 'shopitem' },
-          h('div', { class: 'icon', style: item.color ? `background:${item.color}33` : '' }, item.icon),
-          h('b', {}, item.name),
-          h('small', {}, owned ? 'Você tem' : brl(item.price)),
-          btn,
-          edit,
-        );
-      }));
+        sub = 'Você tem';
+        action = h('button', {
+          class: `chip${on ? ' on' : ''}`,
+          type: 'button',
+          async onclick(e) {
+            e.currentTarget.disabled = true;
+            try {
+              apply(await api.equip(item.slot, on ? null : item.id), 'items');
+              render();
+            } catch (err) {
+              toast(err.message, 'error');
+              e.currentTarget.disabled = false;
+            }
+          },
+        }, on ? '✓ Equipado · Remover' : 'Equipar');
+      }
+      const edit = owned && item.custom ? h('button', { class: 'chip', type: 'button', onclick: () => openDesigner(item.custom, render) }, '✏️ Editar') : null;
+      return h(
+        'div',
+        { class: `shopitem${item.kind === 'vip' ? ' vip' : ''}` },
+        h('div', { class: 'icon', style: item.color ? `background:${item.color}33` : '' }, item.icon),
+        h('b', {}, item.name),
+        item.desc ? h('small', { class: 'desc' }, item.desc) : null,
+        h('small', {}, sub),
+        action,
+        edit,
+      );
     };
+
+    const render = () => {
+      tabs.replaceChildren(...TABS.map(([id, label]) => h('button', {
+        class: `tab${id === shopTab ? ' on' : ''}`, type: 'button', onclick: () => { shopTab = id; render(); },
+      }, label)));
+      let items = account.shop.items.filter((i) => (i.cat ?? 'visual') === shopTab);
+      const extra = [];
+      if (shopTab === 'visual') {
+        const slots = SLOTS.filter((sl) => items.some((i) => i.slot === sl));
+        extra.push(h('div', { class: 'row slotrow' }, ...[['all', 'Tudo'], ...slots.map((sl) => [sl, SLOT_NAMES[sl]])].map(([id, label]) => h('button', {
+          class: `chip${visualSlot === id ? ' on' : ''}`, type: 'button', onclick: () => { visualSlot = id; render(); },
+        }, label))));
+        if (visualSlot !== 'all') items = items.filter((i) => i.slot === visualSlot);
+      }
+      grid.replaceChildren(...items.map(card));
+      slotHolder.replaceChildren(...extra);
+    };
+    const slotHolder = h('div');
     render();
 
     openModal(
-      h('h2', {}, 'Loja de itens'),
+      h('h2', {}, 'Loja'),
       h('p', { class: 'note test' }, note),
-      h('p', { class: 'note' }, 'Camisa simples e Sua camisa só mudam de cor no Rosto 1 masculino; os outros rostos já vêm com a roupa original.'),
+      h('p', { class: 'note' }, 'Tudo é cosmético ou de diversão: nada aqui dá vantagem no PvP. Camisa simples e Sua camisa só mudam de cor no Rosto 1 masculino.'),
+      tabs,
+      slotHolder,
       grid,
     );
   }
 
-  $('#shopbtn').onclick = openShop;
+  $('#shopbtn').onclick = () => openShop();
 
   // ---------- Editor de cartaz / bandeira ----------
 
@@ -245,7 +305,7 @@ export function initAccount({ onChange }) {
       plain
         ? h('div', { class: 'designer' }, canvas, swatches('bg'), error, save)
         : h('div', { class: 'designer' }, canvas, h('label', { class: 'field' }, h('span', {}, `Texto (até ${max} caracteres)`), text), swatches('bg'), swatches('fg'), emblems, error, save),
-      h('button', { class: 'link', type: 'button', onclick: openShop }, '← Voltar à loja'),
+      h('button', { class: 'link', type: 'button', onclick: () => openShop() }, '← Voltar à loja'),
     );
     if (!plain) text.focus();
   }
@@ -265,7 +325,7 @@ export function initAccount({ onChange }) {
         const res = await api.confirm(order);
         if (res.status === 'paid') {
           apply(res, 'items');
-          toast('Compra confirmada! Abra a loja para equipar o item. 🎉', 'ok');
+          toast('Compra confirmada! Abra a loja para equipar ou usar o item. 🎉', 'ok');
           return;
         }
         if (res.status !== 'pending') { toast('O pagamento não foi concluído.', 'error'); return; }

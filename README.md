@@ -146,6 +146,29 @@ WASD/setas mover · Shift correr · arrastar para girar a câmera (ou Q/E) · En
 - **Jogadores** (Tab ou o botão 👥): lista de quem está na avenida, com acertos e nocautes (`who`).
 - **Sons:** golpe, nocaute e captura de trecho, sintetizados em `src/audio.js`.
 
+## Monetização e loja
+
+Tudo é cosmético ou de diversão; **nada dá vantagem no PvP** (catálogo em `SHOP`, `shared/config.js`; entrega em `server/shop.js`). Compra só com conta.
+
+| Tipo | Exemplos | Como funciona |
+|---|---|---|
+| **VIP** (`vip`) | Apoiador VIP 30 dias, R$ 9,90 | `users.vip_until` (renova somando 30 dias). Nome dourado, selo ⭐, gestos premium e 3 fogos de brinde |
+| **Pacotes** | Pacote de gestos (`unlock`), Kit manifestante e Kit festa (`bundle`, 30–35% de desconto) | Liberam gestos ou vários itens de uma vez |
+| **Visual** | Cartola, capacete, faixa, coroa, óculos aviador, máscara, mochila, capa, asas, aura do lado/dourada, selos 🔥🥩💎, carro dourado e carro de som, além de camisas, boné, bandeira e cartaz personalizados | Slots `head face shirt back flag sign fx badge car`; aparecem para todos |
+| **Consumíveis** | 5 fogos (R$ 3), 3 mensagens no telão (R$ 4) | Tabela `inventory`. Fogos: botão 🎆 ou `/fogos`, explodem sobre o jogador para quem está perto. Telão: `/telao texto` no chat, passa no telão 3D e no topo da tela de todos (1 a cada 12 s, passa pelo filtro de palavras) |
+| **Apoio** | R$ 5, 10 ou 25 | Dão o selo 💛 |
+
+Repetíveis (`vip`, `consumable`, `donation`) podem ser comprados de novo; os demais só uma vez. Um pedido pendente do mesmo item volta ao mesmo checkout (evita cobrança dupla). O webhook do Stripe confere sessão, valor e moeda, e a entrega vale mesmo se o pedido tinha sido marcado como falho. **Em produção sem chave Stripe a loja fica desligada** (o checkout simulado só funciona em desenvolvimento ou com `ALLOW_SIMULATED=1`). Antes de cobrar de verdade: revisar a legislação eleitoral, impostos, termos e nota fiscal.
+
+## Gestos, pulo e cenário
+
+- **Gestos** (menu 🎭): acenar, dançar e aplaudir são grátis; Dança 2, chamar, concordar e negar são premium (o servidor descarta o gesto de quem não tem direito). **Pulo** com Espaço ou ⤴️ (visível para os outros). O avatar gesticula (`talk`) quando fala no chat; nocauteados ficam deitados.
+- **Cenário** (`src/scenery.js`): faixas e bandeirinhas atravessando a pista, balões que balançam nas calçadas e, em cada trecho do Domínio, coluna de luz, listras no chão e nome flutuando, na cor do lado que domina. Fogos e confete (captura de trecho) em `src/effects.js`.
+
+## Auditoria e correções de segurança
+
+Corrigido: o servidor caía com `look: null`, cookie malformado ou URL inválida (agora há `try/catch` e handlers globais); `attack` aceitava chaves do protótipo (`constructor`) e podia zerar posição e vida de outro jogador; limite de 40 msg/s por conexão e folga menor no anti-teleporte; "Sair da corrida" na contagem deixava o jogador congelado; reconexão de conta expulsava o jogador (agora a sessão antiga cai e a nova entra) e o cliente reinicia corrida, PvP, vida e carro; `X-Forwarded-For` só vale com `TRUST_PROXY=1`; WebSocket confere `Origin` em produção (`PUBLIC_URL` ou `ALLOWED_ORIGINS`); limite de espectadores e corte de clientes que não acompanham; filtro de palavras também no apelido de visitante e no cartaz; checagem de caminho do servidor estático; vazamento de texturas dos esqueletos e do cache de desenhos. Limitação conhecida: o carro é validado só pela velocidade máxima e não há anti-cheat completo (movimento é autoritativo no cliente).
+
 ## Animações
 
 - **Fontes:** quase tudo vem da **Universal Animation Library 1 e 2** (Quaternius, CC0; `assets-src/ual1.glb`, `ual2.glb`, licença em `assets-src/ual-LICENSE-CC0.txt`): parado, andar, correr, murro (`Punch_Cross`/`Punch_Jab`/`Melee_Hook`), cassetete (`Sword_Attack`), levar golpe (`Hit_Chest`/`Hit_Head`/`Hit_Knockback`), arremesso (`OverhandThrow`), dirigir, falar, sim/não. O samba vem da Michelle (three.js) e o aplauso do Mixamo (`clap.glb`). Chute, murro direto e aceno vêm do pacote **Animated Character** de **Zsky** (`assets-src/zsky.glb`, **CC BY 4.0**: exige crédito, ver Créditos abaixo). Sem clipe (por exemplo num corpo sem esses clipes), o aceno e o chute caem para poses procedurais.

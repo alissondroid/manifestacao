@@ -37,7 +37,19 @@ export const PANTS = [
 export const FLAGS = ['Sem bandeira', 'Bandeira do Brasil', 'Bandeira do candidato', 'Cartaz', 'Picanha no espeto', 'Abóbora'];
 
 // Índice enviado pela rede em vez do nome.
-export const ANIMS = ['idle', 'walk', 'wave', 'dance', 'clap', 'drive'];
+export const ANIMS = ['idle', 'walk', 'wave', 'dance', 'clap', 'drive', 'dance2', 'call', 'yes', 'no', 'jump'];
+// Gestos do menu 😀/🎭. `premium`: só com o pacote de gestos ou VIP (o servidor confere).
+export const EMOTES = [
+  { anim: 2, icon: '👋', name: 'Acenar', key: '1' },
+  { anim: 3, icon: '💃', name: 'Dançar', key: '2' },
+  { anim: 4, icon: '👏', name: 'Aplaudir', key: '3' },
+  { anim: 6, icon: '🕺', name: 'Dança 2', premium: true },
+  { anim: 7, icon: '📣', name: 'Chamar', premium: true },
+  { anim: 8, icon: '🙆', name: 'Concordar', premium: true },
+  { anim: 9, icon: '🙅', name: 'Negar', premium: true },
+];
+export const PREMIUM_ANIMS = EMOTES.filter((e) => e.premium).map((e) => e.anim);
+export const JUMP = { anim: 10, ms: 700, height: 0.85 };
 
 export const WALK_SPEED = 5;
 export const RUN_SPEED = 8;
@@ -53,21 +65,80 @@ export const LIMITS = {
 // ---------- Loja de itens cosméticos ----------
 
 // Cada slot aceita um item equipado por vez.
-export const SLOTS = ['head', 'face', 'shirt', 'flag', 'sign'];
+export const SLOTS = ['head', 'face', 'shirt', 'back', 'flag', 'sign', 'fx', 'badge', 'car'];
+export const SLOT_NAMES = {
+  head: 'Cabeça', face: 'Rosto', shirt: 'Camisa', back: 'Costas', flag: 'Bandeira', sign: 'Cartaz', fx: 'Efeito', badge: 'Selo', car: 'Carro',
+};
 
-// price em centavos de BRL. O servidor é a fonte da verdade: o cliente só exibe.
+// Tipos de produto: (sem kind) cosmético que fica na conta · 'unlock' libera uma função · 'bundle' vários itens com desconto ·
+// 'vip' assinatura por tempo (renovável) · 'consumable' pacote com usos (`qty` de `give`) · 'donation' apoio ao projeto (dá o selo 💛).
+// price em centavos de BRL. O servidor é a fonte da verdade: o cliente só exibe. Nada aqui dá vantagem no PvP.
 export const SHOP = [
+  // --- VIP e pacotes ---
+  {
+    id: 'vip-30', cat: 'vip', kind: 'vip', days: 30, name: 'Apoiador VIP (30 dias)', price: 990, icon: '⭐',
+    desc: 'Nome dourado, selo ⭐ ao lado do nome, gestos premium e um brinde de 3 fogos por mês.', give: { fogos: 3 },
+  },
+  {
+    id: 'gestos-pack', cat: 'pacotes', kind: 'unlock', name: 'Pacote de gestos', price: 400, icon: '🕺', desc: 'Dança 2, chamar, concordar e negar. Para sempre.',
+  },
+  {
+    id: 'kit-manifestante', cat: 'pacotes', kind: 'bundle', name: 'Kit manifestante', price: 900, icon: '🎁', contains: ['camisa-brasil', 'bone', 'bandeira-gigante', 'oculos'], desc: 'Camisa amarela, boné, bandeira gigante e óculos escuros: 30% mais barato.',
+  },
+  {
+    id: 'kit-festa', cat: 'pacotes', kind: 'bundle', name: 'Kit festa', price: 1100, icon: '🎉', contains: ['coroa', 'aura-dourada', 'capa', 'badge-diamante'], desc: 'Coroa, aura dourada, capa e selo 💎: 35% mais barato.',
+  },
+  // --- visual ---
   { id: 'camisa-brasil', slot: 'shirt', name: 'Camisa amarela', price: 400, color: '#f2c20f', icon: '👕' },
   { id: 'camisa-numero', slot: 'shirt', name: 'Camisa do candidato', price: 400, icon: '🎽' },
   { id: 'camisa-simples', slot: 'shirt', name: 'Camisa simples', price: 200, icon: '👚', custom: 'plainshirt' },
   { id: 'camisa-custom', slot: 'shirt', name: 'Sua camisa', price: 400, icon: '🎨', custom: 'shirt' },
   { id: 'bone', slot: 'head', name: 'Boné do time', price: 300, icon: '🧢' },
   { id: 'chapeu-palha', slot: 'head', name: 'Chapéu de palha', price: 300, icon: '👒' },
+  { id: 'cartola', slot: 'head', name: 'Cartola', price: 300, icon: '🎩' },
+  { id: 'capacete', slot: 'head', name: 'Capacete de obra', price: 300, icon: '⛑️' },
+  { id: 'bandana', slot: 'head', name: 'Faixa na cabeça', price: 200, icon: '🎀' },
+  { id: 'coroa', slot: 'head', name: 'Coroa', price: 500, icon: '👑' },
   { id: 'oculos', slot: 'face', name: 'Óculos escuros', price: 200, icon: '🕶️' },
+  { id: 'oculos-aviador', slot: 'face', name: 'Óculos aviador', price: 200, icon: '😎' },
+  { id: 'mascara-festa', slot: 'face', name: 'Máscara de festa', price: 300, icon: '🎭' },
+  { id: 'mochila', slot: 'back', name: 'Mochila', price: 300, icon: '🎒' },
+  { id: 'capa', slot: 'back', name: 'Capa do lado', price: 500, icon: '🦸' },
+  { id: 'asas', slot: 'back', name: 'Asas', price: 600, icon: '🪽' },
   { id: 'bandeira-gigante', slot: 'flag', name: 'Bandeira gigante', price: 400, icon: '🚩' },
   { id: 'cartaz-custom', slot: 'sign', name: 'Seu cartaz', price: 200, icon: '🪧', custom: 'sign' },
   { id: 'bandeira-custom', slot: 'flag', name: 'Sua bandeira', price: 400, icon: '🏳️', custom: 'flag' },
+  { id: 'aura-lado', slot: 'fx', name: 'Aura do lado', price: 400, icon: '🔵' },
+  { id: 'aura-dourada', slot: 'fx', name: 'Aura dourada', price: 600, icon: '✨' },
+  { id: 'badge-raiz', slot: 'badge', name: 'Selo Raiz', price: 200, icon: '🔥' },
+  { id: 'badge-picanha', slot: 'badge', name: 'Selo Picanha', price: 200, icon: '🥩' },
+  { id: 'badge-diamante', slot: 'badge', name: 'Selo Diamante', price: 500, icon: '💎' },
+  { id: 'badge-coracao', slot: 'badge', name: 'Selo Apoiador', price: 0, icon: '💛', hidden: true, desc: 'Ganho com qualquer apoio ao projeto.' },
+  { id: 'badge-estrela', slot: 'badge', name: 'Selo VIP', price: 0, icon: '⭐', hidden: true },
+  { id: 'carro-dourado', slot: 'car', name: 'Carro dourado', price: 500, icon: '🚕' },
+  { id: 'carro-som', slot: 'car', name: 'Carro de som', price: 600, icon: '📢' },
+  // --- consumíveis ---
+  {
+    id: 'fogos-5', cat: 'consumiveis', kind: 'consumable', give: { fogos: 5 }, name: '5 fogos de artifício', price: 300, icon: '🎆', desc: 'Solta fogos sobre você, todos por perto veem. Use pelo botão 🎆.',
+  },
+  {
+    id: 'telao-3', cat: 'consumiveis', kind: 'consumable', give: { telao: 3 }, name: '3 mensagens no telão', price: 400, icon: '📺', desc: 'Sua mensagem passa no telão e no topo da tela de todo mundo. No chat: /telao seu texto.',
+  },
+  // --- apoio ---
+  {
+    id: 'apoio-5', cat: 'apoio', kind: 'donation', grant: 'badge-coracao', name: 'Apoio R$ 5', price: 500, icon: '💛', desc: 'Ajuda a manter o servidor. Dá o selo 💛.',
+  },
+  {
+    id: 'apoio-10', cat: 'apoio', kind: 'donation', grant: 'badge-coracao', name: 'Apoio R$ 10', price: 1000, icon: '💛', desc: 'Ajuda a manter o servidor. Dá o selo 💛.',
+  },
+  {
+    id: 'apoio-25', cat: 'apoio', kind: 'donation', grant: 'badge-coracao', name: 'Apoio R$ 25', price: 2500, icon: '💛', desc: 'Ajuda a manter o servidor. Dá o selo 💛.',
+  },
 ];
+export const REPEATABLE = new Set(['vip', 'consumable', 'donation']);
+export const VIP_BADGE = 'badge-estrela'; // não é vendido: o VIP ativo mostra ⭐
+export const CONSUMABLES = { fogos: { name: 'Fogos', icon: '🎆' }, telao: { name: 'Telão', icon: '📺' } };
+export const BILLBOARD = { max: 70, cooldownMs: 12000 };
 
 // Cartaz, bandeira e camisa personalizados: o que o jogador pode escolher (validado no servidor).
 // `kind` do desenho -> item da loja que precisa ter sido comprado.

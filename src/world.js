@@ -5,6 +5,7 @@ import { createSky, SUN_DIR } from './sky.js';
 import { createCrowd } from './crowd.js';
 import { addTrees } from './trees.js';
 import { addVendors } from './props.js';
+import { addScenery } from './scenery.js';
 import {
   asphaltTexture, busLaneTexture, mosaicTexture, concreteTexture, grassTexture,
   facadeTexture, shopfrontTexture, bikeSymbolTexture, roadTextTexture, streetTotemTexture, bannerTexture, streetSignTexture, posterTexture,
@@ -67,7 +68,8 @@ const vehicleMat = new THREE.MeshStandardMaterial({
   vertexColors: true, roughness: 0.4, metalness: 0.35,
 });
 
-export function carMesh(color) {
+export function carMesh(color, skin = '') {
+  if (skin === 'carro-dourado') color = '#d4af37';
   const parts = [
     { geo: B(1.8, 0.62, 4.3), color, pos: [0, 0.62, 0] },
     { geo: B(1.62, 0.55, 2.2), color: '#1d2730', pos: [0, 1.18, -0.1] },
@@ -79,6 +81,12 @@ export function carMesh(color) {
     { geo: B(1.76, 0.12, 0.08), color: '#1d2730', pos: [0, 0.95, 2.14] }, // grade
   ];
   for (const x of [-0.9, 0.9]) for (const z of [-1.4, 1.4]) parts.push({ geo: wheelGeo, color: '#111', pos: [x, 0.34, z] });
+  if (skin === 'carro-dourado') {
+    parts.push({ geo: B(1.9, 0.06, 0.2), color: '#fff2a8', pos: [0, 0.98, 2.2] }, { geo: B(1.7, 0.05, 0.12), color: '#fff2a8', pos: [0, 1.53, 0.9] });
+  } else if (skin === 'carro-som') { // caixas de som no teto e bandeirola
+    for (const x of [-0.5, 0.5]) parts.push({ geo: B(0.7, 1.0, 0.7), color: '#0e0e10', pos: [x, 2.0, -0.3] }, { geo: new THREE.CylinderGeometry(0.22, 0.22, 0.08, 12).rotateX(Math.PI / 2), color: '#3a3a3a', pos: [x, 2.1, 0.07] });
+    parts.push({ geo: B(0.04, 1.2, 0.04), color: '#d4d4d0', pos: [0, 2.3, -1.6] }, { geo: B(0.7, 0.4, 0.02), color, pos: [0.35, 2.7, -1.6] });
+  }
   return setShadow(new THREE.Mesh(mergeColored(parts), vehicleMat));
 }
 
@@ -799,6 +807,9 @@ export function createWorld(scene, renderer) {
   ]);
   avoid.push(...vendors.avoid);
 
+  // ---------- faixas, bandeirinhas, balões e marcadores do Domínio ----------
+  const scenery = addScenery(scene, rng, { ROAD, WALK }, avoid);
+
   // ---------- multidão ----------
   // o centro (0, 0) fica livre: é onde o avatar aparece no lobby e perto de onde os jogadores entram
   const crowd = createCrowd(scene, rng, [...avoid, { x: 0, z: 0, hx: 3.4, hz: 3.4 }]);
@@ -810,6 +821,7 @@ export function createWorld(scene, renderer) {
     crowd.update(time, fx, fz, cars);
     ticker.update(time);
     vendors.update(time);
+    scenery.update(time);
     // a câmera de sombra acompanha o jogador, ancorada em texels para não tremer
     focus.set(Math.round(fx / snap) * snap, 0, Math.round(fz / snap) * snap);
     sun.target.position.copy(focus);
@@ -821,5 +833,7 @@ export function createWorld(scene, renderer) {
     renderer.shadowMap.needsUpdate = true;
   }
 
-  return { update, setShadows, crowd, ticker, bounds: WORLD, obstacles: avoid };
+  return {
+    update, setShadows, crowd, ticker, bounds: WORLD, obstacles: avoid, setZones: scenery.setZones,
+  };
 }

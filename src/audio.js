@@ -93,6 +93,14 @@ export class Ambience {
     this.tone(110, t + 0.36, 0.5, 'sawtooth', 0.09);
   }
 
+  boom() {
+    if (!this.ctx || !this.enabled) return;
+    const t = this.ctx.currentTime;
+    this.tone(70, t + 0.9, 0.5, 'sine', 0.2);
+    this.tone(55, t + 1.35, 0.5, 'sine', 0.2);
+    this.tone(80, t + 1.8, 0.4, 'sine', 0.15);
+  }
+
   capture() {
     if (!this.ctx || !this.enabled) return;
     const t = this.ctx.currentTime;

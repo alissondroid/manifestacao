@@ -617,3 +617,18 @@ body[data-mode='play'] .lobby-only { display: none !important; }
   #who { top: 170px; }
   #reacts { right: 64px; bottom: 90px; }
 }
+
+/* ---------- Gestos, telão pago, VIP ---------- */
+.popmenu { position: absolute; right: 70px; bottom: 150px; display: flex; flex-wrap: wrap; gap: 6px; width: 190px; justify-content: flex-end; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 8px; }
+.popmenu button { width: 38px; height: 38px; border-radius: 50%; background: transparent; border: 1px solid var(--line); font-size: 19px; cursor: pointer; position: relative; }
+.popmenu button.locked { opacity: 0.55; }
+.popmenu button.locked::after { content: '🔒'; position: absolute; right: -4px; bottom: -4px; font-size: 11px; }
+#banner { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); max-width: min(560px, 92vw); background: linear-gradient(90deg, #fcd34d, #f59e0b); color: #1c1917; font-weight: 700; padding: 8px 16px; border-radius: 999px; text-align: center; box-shadow: 0 4px 18px rgba(0,0,0,0.4); pointer-events: none !important; animation: bannerin 0.4s ease-out; }
+#banner b { color: #7c2d12 !important; }
+@keyframes bannerin { from { transform: translate(-50%, -30px); opacity: 0; } }
+.label .name.vip { background: linear-gradient(90deg, #7a5a07, #3a2a02); color: #ffe27a; box-shadow: 0 0 0 1px #f5c518 inset; }
+
+.shoptabs { flex-wrap: wrap; }
+.shopitem .desc { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; }
+.shopitem.vip { grid-column: 1 / -1; border-color: #f5c518; background: linear-gradient(135deg, rgba(245,197,24,0.14), transparent); }
+.slotrow { flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }

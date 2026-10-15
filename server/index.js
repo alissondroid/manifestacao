@@ -4,16 +4,24 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import {
-  WORLD, SIDES, SHIRTS, SKINS, HAIRS, HAIR_STYLES, BODIES, AGES, MODELS, HEIGHTS, BEARDS, TOPS, PANTS, FLAGS, ANIMS, MAX_SPEED, LIMITS, MELEE, VEHICLE, COMBAT, REACTIONS,
+  WORLD, SIDES, SHIRTS, SKINS, HAIRS, HAIR_STYLES, BODIES, AGES, MODELS, HEIGHTS, BEARDS, TOPS, PANTS, FLAGS, ANIMS, MAX_SPEED, LIMITS, MELEE, VEHICLE, COMBAT, REACTIONS, PREMIUM_ANIMS, BILLBOARD,
 } from '../shared/config.js';
 import { handleApi } from './api.js';
 import { userFromRequest, nickTaken } from './auth.js';
-import { equippedMap, designsOf } from './shop.js';
+import {
+  equippedMap, designsOf, hasPremiumEmotes, inventoryOf, spend,
+} from './shop.js';
 import { filterText } from './moderation.js';
 import { createRace } from './race.js';
 import { PVP } from '../shared/config.js';
 import { createZones } from './zones.js';
 
+process.on('uncaughtException', (err) => console.error('[erro não tratado]', err));
+process.on('unhandledRejection', (err) => console.error('[promessa rejeitada]', err));
+
+const PROD = process.env.NODE_ENV === 'production';
+const TRUST_PROXY = process.env.TRUST_PROXY === '1'; // só confie em X-Forwarded-* atrás de um proxy seu
+const MAX_SPECTATORS = Number(process.env.MAX_SPECTATORS) || 100;
 const PORT = Number(process.env.PORT) || 8787;
 const MAX_PLAYERS = Number(process.env.MAX_PLAYERS) || 300;
 const MAX_PER_IP = Number(process.env.MAX_PER_IP) || 5;
@@ -37,6 +45,16 @@ const MIME = {
 };
 
 const server = http.createServer(async (req, res) => {
+  try {
+    await handle(req, res);
+  } catch (err) {
+    console.error('[http]', err);
+    if (!res.headersSent) res.writeHead(400);
+    res.end();
+  }
+});
+
+async function handle(req, res) {
   if (await handleApi(req, res, { onEquip: refreshLook })) return;
   if (!fs.existsSync(DIST)) {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
@@ -45,25 +63,46 @@ const server = http.createServer(async (req, res) => {
   let file;
   try {
     const { pathname } = new URL(req.url, 'http://localhost');
-    file = path.join(DIST, path.normalize(decodeURIComponent(pathname)));
+    const decoded = decodeURIComponent(pathname);
+    if (decoded.includes('\0')) throw new Error('nul');
+    file = path.join(DIST, path.normalize(decoded));
   } catch {
     res.writeHead(400);
     return res.end();
   }
-  if (!file.startsWith(DIST)) {
+  if (file !== DIST && !file.startsWith(DIST + path.sep)) {
     res.writeHead(403);
     return res.end();
   }
   fs.stat(file, (err, st) => {
     if (err || st.isDirectory()) file = path.join(DIST, 'index.html');
-    res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
+    res.writeHead(200, {
+      'content-type': MIME[path.extname(file)] || 'application/octet-stream',
+      'x-content-type-options': 'nosniff',
+      ...(file.includes(`${path.sep}assets${path.sep}`) ? { 'cache-control': 'public, max-age=31536000, immutable' } : {}),
+    });
     fs.createReadStream(file).on('error', () => res.end()).pipe(res);
   });
-});
+}
 
 // ---------- Estado e validação ----------
 
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 2048 });
+// Em produção o WebSocket só aceita a própria origem (ou as de ALLOWED_ORIGINS, separadas por vírgula).
+const allowedHosts = new Set([
+  ...(process.env.PUBLIC_URL ? [new URL(process.env.PUBLIC_URL).host] : []),
+  ...(process.env.ALLOWED_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean).map((o) => { try { return new URL(o).host; } catch { return o; } }),
+]);
+function originOk(req) {
+  if (!PROD) return true;
+  const origin = req.headers.origin;
+  if (!origin) return false;
+  let host;
+  try { host = new URL(origin).host; } catch { return false; }
+  return host === req.headers.host || (TRUST_PROXY && host === req.headers['x-forwarded-host']) || allowedHosts.has(host);
+}
+const wss = new WebSocketServer({
+  server, path: '/ws', maxPayload: 2048, verifyClient: ({ req }) => originOk(req),
+});
 const players = new Map();
 const perIp = new Map();
 let nextId = 1;
@@ -81,7 +120,8 @@ const cleanText = (s, max) => String(s ?? '')
 
 
 // `equip` e `custom` vêm do banco (itens comprados e desenhos), nunca do cliente.
-function cleanLook(look = {}, equip = {}, custom = {}) {
+function cleanLook(rawLook, equip = {}, custom = {}) {
+  const look = rawLook && typeof rawLook === 'object' ? rawLook : {};
   const body = int(look.body, BODIES.length - 1);
   return {
     body,
@@ -96,7 +136,7 @@ function cleanLook(look = {}, equip = {}, custom = {}) {
     top: int(look.top, TOPS.length - 1),
     pants: int(look.pants, PANTS.length - 1),
     flag: int(look.flag, FLAGS.length - 1),
-    sign: cleanText(look.sign, LIMITS.sign),
+    sign: filterText(cleanText(look.sign, LIMITS.sign)),
     equip,
     custom,
   };
@@ -107,6 +147,8 @@ function refreshLook(userId) {
   for (const p of players.values()) {
     if (p.userId !== userId) continue;
     p.look = { ...p.look, equip: equippedMap(userId), custom: designsOf(userId) };
+    p.premium = hasPremiumEmotes(userId);
+    send(p.ws, { t: 'inv', inv: inventoryOf(userId), premium: p.premium });
     const msg = JSON.stringify({ t: 'look', id: p.id, look: p.look });
     for (const ws of wss.clients) {
       if (ws.readyState === ws.OPEN && ws.joined && (ws.player === p || ws.known.has(p.id))) ws.send(msg);
@@ -286,7 +328,7 @@ function hitTarget(me, kind, pushDir) {
 }
 
 function attack(me, kind) {
-  if (!MELEE[kind] || kind === 'car' || me.a === DRIVE) return;
+  if (!Object.hasOwn(MELEE, kind) || kind === 'car' || me.a === DRIVE) return;
   const now = Date.now();
   if (me.koUntil > now || now - (me.lastAttack || 0) < MELEE[kind].cooldownMs) return;
   me.lastAttack = now;
@@ -294,10 +336,48 @@ function attack(me, kind) {
   sendNear(me, { t: 'attack', id: me.id, kind, hit: target ? target.id : null });
 }
 
+// ---------- Itens consumíveis (comprados na loja) ----------
+
+const notice = (p, text) => send(p.ws, { t: 'notice', text });
+const stock = (p) => send(p.ws, { t: 'inv', inv: inventoryOf(p.userId), premium: p.premium });
+
+/** Fogos de artifício sobre o jogador, visíveis a quem está por perto. Consome 1 unidade. */
+function useFireworks(me) {
+  const now = Date.now();
+  if (!me.userId) return notice(me, 'Entre numa conta para usar itens da loja.');
+  if (me.koUntil > now) return;
+  if (now - me.lastUse < 4000) return notice(me, 'Espere um pouco para soltar outro.');
+  if (!spend(me.userId, 'fogos')) return notice(me, 'Você não tem fogos. Compre na loja 🛍️.');
+  me.lastUse = now;
+  sendNear(me, { t: 'fx', k: 'fogos', x: round2(me.x), z: round2(me.z), side: me.side });
+  stock(me);
+}
+
+let lastBillboard = 0;
+/** Mensagem no telão: aparece no telão da avenida e no topo da tela de todos. Consome 1 unidade só se for ao ar. */
+function billboard(me, raw) {
+  const now = Date.now();
+  if (!me.userId) return notice(me, 'Entre numa conta para usar o telão.');
+  const text = cleanText(raw, BILLBOARD.max);
+  if (!text) return notice(me, 'Escreva depois do comando: /telao seu texto');
+  if (now - lastBillboard < BILLBOARD.cooldownMs) return notice(me, 'O telão está ocupado. Tente em instantes.');
+  if (!spend(me.userId, 'telao')) return notice(me, 'Você não tem mensagens de telão. Compre na loja 🛍️.');
+  lastBillboard = now;
+  broadcast({ t: 'billboard', nick: me.nick, side: me.side, text });
+  stock(me);
+}
+
+/** Tira o jogador do jogo (quem o conhecia recebe `del` no próximo ciclo de sincronização). */
+function removePlayer(p) {
+  race.onLeave(p);
+  players.delete(p.id);
+  broadcast({ t: 'online', counts: onlineCounts() }, null, true);
+}
+
 // ---------- Conexões ----------
 
 wss.on('connection', (ws, req) => {
-  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
+  const ip = (TRUST_PROXY && req.headers['x-forwarded-for']?.split(',').pop().trim()) || req.socket.remoteAddress;
   const open = perIp.get(ip) || 0;
   if (open >= MAX_PER_IP) return ws.close(1008, 'Muitas conexões');
   perIp.set(ip, open + 1);
@@ -308,8 +388,23 @@ wss.on('connection', (ws, req) => {
   send(ws, { t: 'online', counts: onlineCounts() });
 
   let me = null;
+  let tokens = 60; // limite de mensagens: 40/s com rajada de 60
+  let refillAt = Date.now();
 
   ws.on('message', (raw) => {
+    try {
+      const now = Date.now();
+      tokens = Math.min(60, tokens + ((now - refillAt) / 1000) * 40);
+      refillAt = now;
+      if (tokens < 1) return;
+      tokens -= 1;
+      onMessage(raw);
+    } catch (err) {
+      console.error('[ws]', err);
+    }
+  });
+
+  function onMessage(raw) {
     let m;
     try { m = JSON.parse(raw); } catch { return; }
     if (!m || typeof m.t !== 'string') return;
@@ -317,6 +412,8 @@ wss.on('connection', (ws, req) => {
     // Modo "só assistir": recebe o mundo inteiro, sem avatar e sem chat.
     if (m.t === 'watch') {
       if (ws.joined) return;
+      const watching = [...wss.clients].filter((c) => c.joined && !c.player).length;
+      if (watching >= MAX_SPECTATORS) return send(ws, { t: 'denied', reason: 'Muitos espectadores no momento. Tente entrar na avenida.' });
       ws.joined = true;
       ws.player = null;
       ws.known = new Set();
@@ -329,12 +426,16 @@ wss.on('connection', (ws, req) => {
       if (ws.joined || players.size >= MAX_PLAYERS) return;
       const id = nextId++;
       const account = ws.user; // definido no upgrade pelo cookie de sessão
-      const nick = account ? account.nick : cleanText(m.nick, LIMITS.nick) || `Visitante${id}`;
+      const nick = account ? account.nick : filterText(cleanText(m.nick, LIMITS.nick)) || `Visitante${id}`;
       if (!account && nickTaken(nick)) {
         return send(ws, { t: 'denied', reason: 'Esse apelido pertence a uma conta. Escolha outro ou entre na conta.' });
       }
-      if (account && [...players.values()].some((p) => p.userId === account.id)) {
-        return send(ws, { t: 'denied', reason: 'Essa conta já está na avenida em outra aba.' });
+      if (account) { // a mesma conta entrando de novo (reconexão ou outra aba): a sessão antiga cai
+        for (const old of [...players.values()]) {
+          if (old.userId !== account.id) continue;
+          old.ws.close(4000, 'Entrou em outro lugar');
+          removePlayer(old);
+        }
       }
       me = {
         id,
@@ -364,6 +465,8 @@ wss.on('connection', (ws, req) => {
         shieldUntil: 0,
         lastReact: 0,
         lastWho: 0,
+        lastUse: 0,
+        premium: account ? hasPremiumEmotes(account.id) : false,
       };
       [me.x, me.z] = spawnPoint();
       players.set(id, me);
@@ -375,6 +478,7 @@ wss.on('connection', (ws, req) => {
       send(ws, race.snapshot());
       send(ws, pvpScores());
       send(ws, zones.snapshot());
+      if (me.userId) stock(me);
       broadcast({ t: 'online', counts: onlineCounts() }, null, true);
       return;
     }
@@ -383,17 +487,19 @@ wss.on('connection', (ws, req) => {
 
     if (m.t === 'move') {
       const now = Date.now();
-      const dt = clamp((now - me.lastMove) / 1000, 0.05, 1);
+      const dt = clamp((now - me.lastMove) / 1000, 0.02, 1);
       const x = num(m.x);
       const z = num(m.z);
       const ry = num(m.ry);
       if (x === null || z === null || ry === null) return;
       if (me.frozen || me.stunUntil > now) return send(ws, { t: 'fix', x: round2(me.x), z: round2(me.z) });
+      if (!Number.isFinite(me.x + me.z)) return;
       const nx = clamp(x, -WORLD.halfWidth, WORLD.halfWidth);
       const nz = clamp(z, -WORLD.halfLength, WORLD.halfLength);
-      const a = int(m.a, ANIMS.length - 1);
+      let a = int(m.a, ANIMS.length - 1);
+      if (PREMIUM_ANIMS.includes(a) && !me.premium) a = 0; // gesto premium sem direito: fica parado
       const limit = a === DRIVE ? VEHICLE.maxSpeed : MAX_SPEED;
-      if (Math.hypot(nx - me.x, nz - me.z) > limit * dt * 1.5 + 0.5) {
+      if (Math.hypot(nx - me.x, nz - me.z) > limit * dt * 1.5 + 0.3) {
         // movimento impossível: devolve a posição aceita
         send(ws, { t: 'fix', x: round2(me.x), z: round2(me.z) });
         return;
@@ -419,6 +525,8 @@ wss.on('connection', (ws, req) => {
       const text = filterText(cleanText(m.text, LIMITS.chat));
       if (!text) return;
       me.lastChat = now;
+      if (/^\/telao(\s|$)/i.test(text)) return billboard(me, text.replace(/^\/telao\s*/i, ''));
+      if (/^\/fogos\b/i.test(text)) return useFireworks(me);
       broadcast({ t: 'chat', id: me.id, nick: me.nick, side: me.side, text });
     } else if (m.t === 'race') {
       if (m.action === 'join') race.join(me);
@@ -432,6 +540,8 @@ wss.on('connection', (ws, req) => {
       me.pvp = on;
       if (!on) { me.hp = COMBAT.hp; me.shieldUntil = 0; announceHp(me); }
       send(ws, { t: 'pvp', on: me.pvp });
+    } else if (m.t === 'use') {
+      if (m.item === 'fogos') useFireworks(me);
     } else if (m.t === 'react') {
       const e = Math.trunc(Number(m.e));
       const now = Date.now();
@@ -450,14 +560,11 @@ wss.on('connection', (ws, req) => {
     } else if (m.t === 'attack') {
       attack(me, String(m.kind));
     }
-  });
+  }
 
   ws.on('close', () => {
     perIp.set(ip, Math.max(0, (perIp.get(ip) || 1) - 1));
-    if (!me) return;
-    race.onLeave(me);
-    players.delete(me.id); // quem o conhecia recebe `del` no próximo ciclo
-    broadcast({ t: 'online', counts: onlineCounts() }, null, true);
+    if (me && players.get(me.id) === me) removePlayer(me);
   });
   ws.on('error', () => {});
 });
@@ -469,6 +576,7 @@ wss.on('connection', (ws, req) => {
 setInterval(() => {
   for (const ws of wss.clients) {
     if (!ws.joined || ws.readyState !== ws.OPEN) continue;
+    if (ws.bufferedAmount > 512 * 1024) { ws.terminate(); continue; } // cliente que não acompanha
     const vp = ws.player; // null = espectador (vê todos)
     const add = [];
     const del = [];
