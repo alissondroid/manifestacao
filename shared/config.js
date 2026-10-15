@@ -54,6 +54,7 @@ export const JUMP = { anim: 10, ms: 700, height: 0.85 };
 export const WALK_SPEED = 5;
 export const RUN_SPEED = 8;
 export const MAX_SPEED = 9; // limite validado pelo servidor
+export const SPEED_SLACK = 1.25; // tolerância sobre o limite (lag e arredondamento)
 
 export const LIMITS = {
   nick: 16,

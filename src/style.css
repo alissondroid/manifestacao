@@ -26,7 +26,9 @@ html, body {
 /* ---------- Lobby ---------- */
 #lobby {
   position: fixed;
-  inset: 0;
+  inset: 0 auto 0 50%;
+  width: min(1180px, 100vw);
+  transform: translateX(-50%);
   padding: 72px 16px 16px;
   display: grid;
   grid-template-columns: 1fr minmax(360px, 440px);
@@ -161,6 +163,8 @@ input:focus { border-color: var(--accent); }
   overflow-wrap: anywhere;
 }
 #chatlog b { margin-right: 6px; }
+#chatlog b[data-id] { pointer-events: auto; cursor: pointer; }
+#chatlog b[data-id]:hover { text-decoration: underline; }
 #chatinput { background: var(--card); border-radius: 999px; padding: 10px 14px; }
 
 .hint {
@@ -297,17 +301,17 @@ body[data-mode='play'] .lobby-only { display: none !important; }
 
 /* ---------- Herói do lobby (lado esquerdo) ---------- */
 .hero {
-  display: flex; flex-direction: column; justify-content: space-between;
+  display: flex; flex-direction: column; align-items: center; text-align: center;
   padding: 12px 8px 8px;
   pointer-events: none;
 }
-.hero .eyebrow { color: var(--accent); }
+.hero .eyebrow { color: var(--accent); background: rgba(8, 14, 11, 0.62); padding: 5px 12px; border-radius: 999px; backdrop-filter: blur(6px); }
 .hero h1 {
   margin: 6px 0 0; font-size: clamp(28px, 4.2vw, 50px); line-height: 1; letter-spacing: -0.02em;
-  text-transform: uppercase; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
-  max-width: 12ch;
+  text-transform: uppercase; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 3px 22px rgba(0, 0, 0, 0.85);
+  max-width: 14ch;
 }
-.herobottom { display: grid; gap: 8px; justify-items: start; }
+.herobottom { display: grid; gap: 8px; justify-items: center; margin-top: auto; }
 .anims { display: inline-flex; gap: 4px; padding: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; pointer-events: auto; }
 .anims button {
   background: transparent; border: 0; color: var(--muted); font: inherit; font-size: 13px;
@@ -528,7 +532,7 @@ body[data-mode='play'] .lobby-only { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   #lobby .side, #lobby .preset, .segbtn, .option { transition: none; }
 }
-#lobby .card { align-self: end; }
+#lobby .card { align-self: center; }
 
 @media (max-width: 640px) {
   #lobby { grid-template-columns: minmax(0, 1fr); }
@@ -728,3 +732,26 @@ body[data-mode='play'] .lobby-only { display: none !important; }
 #hurt { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 5; background: radial-gradient(ellipse at center, rgba(220,38,38,0) 45%, rgba(220,38,38,0.65) 100%); }
 #hurt.on { animation: hurt 0.5s ease-out; }
 @keyframes hurt { from { opacity: 1; } to { opacity: 0; } }
+
+/* ---------- Menu centralizado ---------- */
+body[data-mode='lobby'] #topbar { padding-inline: max(14px, calc((100vw - 1180px) / 2 + 16px)); }
+.steps button.seen i { background: var(--accent); color: var(--accent-ink, #1c1917); }
+#lobby .primary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) {
+  #lobby { inset: 0; width: 100%; transform: none; }
+}
+
+/* ---------- Menu do jogador (silenciar / denunciar) ---------- */
+.usermenu {
+  position: fixed; z-index: 60; min-width: 170px; display: grid; gap: 2px; padding: 6px;
+  background: rgba(10, 17, 13, 0.97); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+}
+.usermenu b { padding: 6px 10px 4px; font-size: 12px; color: var(--muted); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usermenu button {
+  background: transparent; border: 0; border-radius: 8px; color: var(--text); font: inherit; font-size: 14px;
+  padding: 9px 10px; text-align: left; cursor: pointer;
+}
+.usermenu button:hover, .usermenu button:focus-visible { background: rgba(255, 255, 255, 0.1); outline: none; }
+#who .row[data-id] { cursor: pointer; }
+#who .row[data-id]:hover { background: rgba(255, 255, 255, 0.07); border-radius: 6px; }
+#chatlog div.past { opacity: 0.7; }

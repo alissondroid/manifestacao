@@ -106,18 +106,22 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
   const prevBtn = $('#prev');
   const nextBtn = $('#next');
   const nav = $('.stepnav');
+  const visited = new Set();
   const syncMore = () => {
     const box = $('.panels');
     nav.classList.toggle('more', box.scrollTop + box.clientHeight < box.scrollHeight - 6);
   };
   const go = (id, focus = false) => {
     const at = STEPS.indexOf(id);
+    visited.add(id);
     prevBtn.hidden = at === 0;
-    nextBtn.hidden = at === STEPS.length - 1;
     if (at > 0) prevBtn.textContent = `← ${STEP_NAMES[at - 1]}`;
-    if (at < STEPS.length - 1) nextBtn.textContent = `${STEP_NAMES[at + 1]} →`;
-    tabs.forEach((t) => {
+    nextBtn.textContent = at < STEPS.length - 1 ? `${STEP_NAMES[at + 1]} →` : 'Apelido →';
+    tabs.forEach((t, ti) => {
       const on = t.dataset.tab === id;
+      const seen = !on && visited.has(t.dataset.tab);
+      t.classList.toggle('seen', seen);
+      t.querySelector('i').textContent = seen ? '✓' : ti + 1;
       t.setAttribute('aria-selected', on);
       t.tabIndex = on ? 0 : -1;
       t.classList.toggle('on', on);
@@ -130,13 +134,22 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
   $('.panels').addEventListener('scroll', syncMore, { passive: true });
   window.addEventListener('resize', syncMore);
   prevBtn.onclick = () => go(STEPS[Math.max(0, STEPS.findIndex((k) => !panels[k].hidden) - 1)]);
-  nextBtn.onclick = () => go(STEPS[Math.min(STEPS.length - 1, STEPS.findIndex((k) => !panels[k].hidden) + 1)]);
+  nextBtn.onclick = () => {
+    const at = STEPS.findIndex((k) => !panels[k].hidden);
+    if (at === STEPS.length - 1) { $('#nick').focus(); $('#nick').select(); } else go(STEPS[at + 1]);
+  };
   tabs.forEach((t, i) => {
     t.onclick = () => go(t.dataset.tab);
     t.onkeydown = (e) => {
       const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
       if (d) { e.preventDefault(); go(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true); }
     };
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.legal')) document.querySelectorAll('.legal[open]').forEach((d) => { d.open = false; });
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') document.querySelectorAll('.legal[open]').forEach((d) => { d.open = false; });
   });
   document.querySelectorAll('.legal').forEach((d) => d.addEventListener('toggle', () => {
     if (d.open) document.querySelectorAll('.legal').forEach((o) => { if (o !== d) o.open = false; });
@@ -261,6 +274,8 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
   const syncNick = () => {
     $('#nickcount').textContent = `${nick.value.length}/${nick.maxLength}`;
     $('#nickhint').hidden = !nick.disabled;
+    const who = nick.value.trim();
+    $('#enter').textContent = who ? `Entrar como ${who}` : 'Entrar na manifestação';
   };
   nick.addEventListener('input', () => { profile.nick = nick.value; syncNick(); onChange(); });
   nick.addEventListener('keydown', (e) => { if (e.key === 'Enter') onEnter(); });
@@ -451,7 +466,7 @@ export function initHud({
       el.timer = setTimeout(() => { el.hidden = true; }, 9000);
     },
     setWho(list, total) {
-      const rows = list.map(([nick, side, hits, kos]) => `<div class="row"><i style="background:${SIDES[side]?.color}"></i><span>${esc(nick)}</span><small>👊 ${hits} · ☠️ ${kos}</small></div>`).join('');
+      const rows = list.map(([nick, side, hits, kos, id]) => `<div class="row"${id && id !== myId ? ` data-id="${id}" data-nick="${esc(nick)}"` : ''}><i style="background:${SIDES[side]?.color}"></i><span>${esc(nick)}</span><small>👊 ${hits} · ☠️ ${kos}</small></div>`).join('');
       who.innerHTML = `<h4>Na avenida: ${total}</h4>${rows}`;
     },
     /** Barra de vida (só com PvP ligado) e de fôlego. */
@@ -490,15 +505,21 @@ export function initHud({
         ? 'W/S acelerar e frear · A/D virar · C sair do carro · arraste para girar a câmera'
         : 'WASD/setas mover · Shift correr · 1-3 gestos · 4-6 golpes · C carro · arraste para girar a câmera · Enter chat';
     },
-    addChat(nick, text, color) {
+    addChat(nick, text, color, id = 0, past = false) {
       const row = document.createElement('div');
+      if (past) row.className = 'past';
       const name = document.createElement('b');
       name.style.color = color;
       name.textContent = `${nick}:`;
+      if (id) { // toque no nome abre silenciar/denunciar
+        name.dataset.id = id;
+        name.dataset.nick = nick;
+        name.title = 'Silenciar ou denunciar';
+      }
       row.append(name, document.createTextNode(text));
       log.append(row);
       while (log.children.length > 30) log.firstChild.remove();
-      setTimeout(() => row.remove(), 25000);
+      setTimeout(() => row.remove(), past ? 40000 : 25000);
     },
   };
 }
@@ -551,6 +572,8 @@ export function initModes({ onRace, onPvp, onThrow, onDrive }) {
   };
 }
 
+let myId = 0;
+export const setMyId = (id) => { myId = id; };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /** Rótulo flutuante com nome e balão de fala. */
@@ -626,4 +649,46 @@ export function createLabel(nick, color, equip = {}) {
     },
     remove() { clearTimeout(timer); el.remove(); },
   };
+}
+
+/** Menu de um jogador (tocar no nome no chat ou na lista): silenciar e denunciar. */
+export function initUserMenu({ isMuted, onMute, onUnmute, onReport }) {
+  const menu = $('#usermenu');
+  const close = () => { menu.hidden = true; };
+  const item = (label, fn) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('role', 'menuitem');
+    b.textContent = label;
+    b.onclick = () => { close(); fn(); };
+    return b;
+  };
+  const open = (nick, id, x, y) => {
+    const head = document.createElement('b');
+    head.textContent = nick;
+    const muted = isMuted(nick);
+    menu.replaceChildren(
+      head,
+      muted ? item('🔊 Reativar', () => onUnmute(nick)) : item('🔇 Silenciar', () => onMute(nick)),
+      item('🚩 Denunciar', () => onReport(id, nick)),
+    );
+    menu.hidden = false;
+    const w = menu.offsetWidth;
+    const h = menu.offsetHeight;
+    menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - w - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - h - 8))}px`;
+    menu.querySelector('button').focus();
+  };
+  document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !menu.contains(e.target)) close(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  // delegação: nomes no chat e linhas da lista "Na avenida"
+  const pick = (e) => {
+    const el = e.target.closest('[data-id][data-nick]');
+    if (!el) return;
+    e.stopPropagation();
+    open(el.dataset.nick, Number(el.dataset.id), e.clientX, e.clientY);
+  };
+  $('#chatlog').addEventListener('click', pick);
+  $('#who').addEventListener('click', pick);
+  return { close };
 }

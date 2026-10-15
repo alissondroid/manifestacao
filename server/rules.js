@@ -1,0 +1,39 @@
+import { SPEED_SLACK } from '../shared/config.js';
+
+// Regras puras do servidor de jogo (sem rede nem banco), para ficarem testáveis.
+
+export const cleanText = (s, max) => String(s ?? '')
+  .replace(/[\u0000-\u001f\u007f<>]/g, '')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .slice(0, max);
+
+const RESERVED = new Set(['sistema', 'admin', 'administrador', 'moderador', 'moderacao', 'moderação', 'suporte', 'avenida online', 'dominio', 'domínio']);
+export const isReservedNick = (nick) => RESERVED.has(String(nick).trim().toLowerCase());
+
+/** Apelido de convidado que não repete o de quem já está online (evita se passar por outro jogador). */
+export function uniqueNick(nick, online, max) {
+  const taken = new Set([...online].map((n) => String(n).toLowerCase()));
+  if (!taken.has(nick.toLowerCase())) return nick;
+  for (let n = 2; n < 1000; n += 1) {
+    const tag = String(n);
+    const candidate = `${nick.slice(0, Math.max(1, max - tag.length))}${tag}`;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+  return `${nick.slice(0, max - 4)}${Date.now() % 10000}`;
+}
+
+/**
+ * Orçamento de deslocamento: acumula `limit * tempo real * SPEED_SLACK` (com teto, para absorver lag) e
+ * gasta a distância andada. Impede velocidade acima do limite mesmo mandando muitas mensagens curtas.
+ * Retorna true se o movimento cabe no orçamento (e já o desconta).
+ */
+export function spendMoveBudget(p, now, limit, dist) {
+  const elapsed = Math.min(1, Math.max(0, (now - p.budgetAt) / 1000));
+  p.budgetAt = now;
+  const cap = limit * 0.6;
+  p.budget = Math.min(cap, p.budget + limit * SPEED_SLACK * elapsed);
+  if (dist > p.budget + 0.05) return false;
+  p.budget -= dist;
+  return true;
+}

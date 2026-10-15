@@ -8,6 +8,11 @@ import {
   ownedIds, equippedMap, owns, createOrder, pendingOrder, inventoryOf, vipUntil, hasPremiumEmotes, canBuy, getOrder, setOrderRef, setOrderStatus, fulfill, equip, designsOf, saveDesign,
 } from './shop.js';
 import { filterText } from './moderation.js';
+import { clientIp } from './ip.js';
+import {
+  addBan, removeBan, listBans, resolveKey,
+} from './bans.js';
+import crypto from 'node:crypto';
 import {
   PROVIDER, PAYMENTS_ENABLED, WEBHOOK_CONFIGURED, createCheckout, fetchStatus, verifyWebhook,
 } from './payments.js';
@@ -15,7 +20,6 @@ import { SHOP, SHOP_BY_ID, SLOTS, DESIGN } from '../shared/config.js';
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
-const clientIp = (req) => req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
 const isHttps = (req) => req.headers['x-forwarded-proto'] === 'https' || (process.env.PUBLIC_URL || '').startsWith('https');
 // Atrás de proxy (Vite em dev, nginx/Cloudflare em produção) o host público vem em x-forwarded-host.
 const publicHost = (req) => req.headers['x-forwarded-host'] || req.headers.host;
@@ -56,6 +60,15 @@ function sameOrigin(req) {
   if (!origin) return true;
   try { return new URL(origin).host === publicHost(req); } catch { return false; }
 }
+
+// Administração: só existe com ADMIN_TOKEN (16+ caracteres) definido; autenticada por `Authorization: Bearer <token>`.
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+const ADMIN_ENABLED = ADMIN_TOKEN.length >= 16;
+const sha = (v) => crypto.createHash('sha256').update(String(v)).digest();
+const isAdmin = (req) => {
+  const given = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1] ?? '';
+  return crypto.timingSafeEqual(sha(given), sha(ADMIN_TOKEN));
+};
 
 const accountPayload = (user) => (user
   ? {
@@ -104,6 +117,32 @@ export async function handleApi(req, res, hooks = {}) {
         }
       }
       return json(res, 200, { received: true }), true;
+    }
+
+    if (pathname.startsWith('/api/admin/')) {
+      if (!ADMIN_ENABLED) return json(res, 404, { error: 'Não encontrado' }), true;
+      if (!rateLimit(`admin:${clientIp(req)}`, 60, 10 * 60_000)) return json(res, 429, { error: 'Muitas tentativas.' }), true;
+      if (!isAdmin(req)) return json(res, 401, { error: 'Não autorizado.' }), true;
+      if (method === 'GET' && pathname === '/api/admin/reports') {
+        const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit')) || 50));
+        const rows = db.prepare('SELECT id, at, target_nick, target_key, reporter_nick, reporter_key, context FROM reports ORDER BY id DESC LIMIT ?').all(limit);
+        return json(res, 200, { reports: rows.map((r) => ({ ...r, context: JSON.parse(r.context) })) }), true;
+      }
+      if (method === 'GET' && pathname === '/api/admin/bans') return json(res, 200, { bans: listBans() }), true;
+      if (method === 'POST' && pathname === '/api/admin/ban') {
+        const body = await readJson(req);
+        const key = resolveKey(body);
+        if (!key) return json(res, 400, { error: 'Informe key (u12 ou ip:1.2.3.4) ou o apelido de alguém conhecido.' }), true;
+        const minutes = Math.max(0, Math.min(525_600, Number(body.minutes) || 0));
+        const id = addBan(key, { minutes, reason: body.reason });
+        hooks.onBan?.(key);
+        return json(res, 200, { id, key, minutes }), true;
+      }
+      if (method === 'POST' && pathname === '/api/admin/unban') {
+        const body = await readJson(req);
+        return json(res, 200, { removed: removeBan(Number(body.id)) }), true;
+      }
+      return json(res, 404, { error: 'Não encontrado' }), true;
     }
 
     const user = userFromRequest(req);

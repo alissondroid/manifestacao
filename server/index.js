@@ -15,6 +15,13 @@ import { filterText } from './moderation.js';
 import { createRace } from './race.js';
 import { PVP } from '../shared/config.js';
 import { createZones } from './zones.js';
+import { clientIp } from './ip.js';
+import {
+  cleanText, isReservedNick, uniqueNick, spendMoveBudget,
+} from './rules.js';
+import { db } from './db.js';
+import { REPORT, recordChat, fileReport } from './reports.js';
+import { isBanned, keysOf } from './bans.js';
 
 process.on('uncaughtException', (err) => console.error('[erro não tratado]', err));
 process.on('unhandledRejection', (err) => console.error('[promessa rejeitada]', err));
@@ -47,6 +54,33 @@ const MIME = {
   '.webmanifest': 'application/manifest+json',
 };
 
+// Cabeçalhos de segurança das páginas e arquivos estáticos. A CSP só vale para HTML.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'", // o cliente usa style="..." em elementos criados por script
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self' ws: wss: data: blob:",
+  "media-src 'self' data: blob:",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+const HSTS = PROD && (process.env.PUBLIC_URL || '').startsWith('https');
+function securityHeaders(isHtml) {
+  return {
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+    'referrer-policy': 'strict-origin-when-cross-origin',
+    'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+    ...(isHtml ? { 'content-security-policy': CSP } : {}),
+    ...(HSTS ? { 'strict-transport-security': 'max-age=31536000' } : {}),
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     await handle(req, res);
@@ -58,7 +92,11 @@ const server = http.createServer(async (req, res) => {
 });
 
 async function handle(req, res) {
-  if (await handleApi(req, res, { onEquip: refreshLook, onDelete: kickUser })) return;
+  if (req.url === '/healthz') {
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    return res.end(JSON.stringify({ ok: true, players: players.size, uptime: Math.round(process.uptime()) }));
+  }
+  if (await handleApi(req, res, { onEquip: refreshLook, onDelete: kickUser, onBan: kickBanned })) return;
   if (!fs.existsSync(DIST)) {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
     return res.end('Sem build. Em desenvolvimento use "npm run dev" (cliente em http://localhost:5173).');
@@ -94,8 +132,8 @@ async function handle(req, res) {
         : 'public, max-age=86400';
     res.writeHead(200, {
       'content-type': MIME[path.extname(file)] || 'application/octet-stream',
-      'x-content-type-options': 'nosniff',
       'cache-control': cache,
+      ...securityHeaders(file.endsWith('.html')),
     });
     fs.createReadStream(file).on('error', () => res.end()).pipe(res);
   });
@@ -127,12 +165,6 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const int = (v, max) => clamp(Math.trunc(Number(v)) || 0, 0, max);
 const round2 = (v) => Math.round(v * 100) / 100;
-
-const cleanText = (s, max) => String(s ?? '')
-  .replace(/[\u0000-\u001f\u007f<>]/g, '')
-  .replace(/\s+/g, ' ')
-  .trim()
-  .slice(0, max);
 
 
 // `equip` e `custom` vêm do banco (itens comprados e desenhos), nunca do cliente.
@@ -167,6 +199,16 @@ function kickUser(userId) {
   }
 }
 
+/** Banimento novo: derruba quem estiver online com essa chave (conta `u12` ou IP `ip:...`). */
+function kickBanned(key) {
+  for (const ws of wss.clients) {
+    const keys = keysOf({ ip: ws.ip, userId: ws.user?.id });
+    if (!keys.includes(key)) continue;
+    if (ws.player) removePlayer(ws.player);
+    ws.close(4003, 'Banido');
+  }
+}
+
 /** Itens equipados mudaram na loja: atualiza o avatar de quem está online e avisa quem o vê. */
 function refreshLook(userId) {
   for (const p of players.values()) {
@@ -198,6 +240,10 @@ function broadcast(obj, exceptWs, everyone = false) {
   }
 }
 
+// Últimas mensagens do chat: quem entra vê o contexto da conversa.
+const chatLog = [];
+const HISTORY_MS = 10 * 60_000;
+
 function onlineCounts() {
   const counts = SIDES.map(() => 0);
   for (const p of players.values()) counts[p.side] += 1;
@@ -212,6 +258,8 @@ function teleport(p, x, z, ry) {
   p.ry = ry;
   p.dirty = true;
   p.lastMove = Date.now();
+  p.budgetAt = p.lastMove;
+  p.budget = MAX_SPEED; // folga para o cliente se acertar na nova posição
   send(p.ws, { t: 'fix', x: round2(x), z: round2(z), ry });
 }
 
@@ -364,6 +412,8 @@ function attack(me, kind) {
 // ---------- Itens consumíveis (comprados na loja) ----------
 
 const notice = (p, text) => send(p.ws, { t: 'notice', text });
+/** Identifica a pessoa (conta ou IP) para contar denunciantes diferentes. */
+const playerKey = (p) => (p.userId ? `u${p.userId}` : `ip:${p.ip}`);
 const stock = (p) => send(p.ws, { t: 'inv', inv: inventoryOf(p.userId), premium: p.premium });
 
 /** Fogos de artifício sobre o jogador, visíveis a quem está por perto. Consome 1 unidade. */
@@ -402,13 +452,15 @@ function removePlayer(p) {
 // ---------- Conexões ----------
 
 wss.on('connection', (ws, req) => {
-  const ip = (TRUST_PROXY && req.headers['x-forwarded-for']?.split(',').pop().trim()) || req.socket.remoteAddress;
+  const ip = clientIp(req);
+  ws.ip = ip;
+  ws.user = userFromRequest(req);
+  if (isBanned(keysOf({ ip, userId: ws.user?.id }))) return ws.close(4003, 'Banido');
   const open = perIp.get(ip) || 0;
   if (open >= MAX_PER_IP) return ws.close(1008, 'Muitas conexões');
   perIp.set(ip, open + 1);
 
   ws.isAlive = true;
-  ws.user = userFromRequest(req);
   ws.on('pong', () => { ws.isAlive = true; });
   send(ws, { t: 'online', counts: onlineCounts() });
 
@@ -451,7 +503,9 @@ wss.on('connection', (ws, req) => {
       if (ws.joined || players.size >= MAX_PLAYERS) return;
       const id = nextId++;
       const account = ws.user; // definido no upgrade pelo cookie de sessão
-      const nick = account ? account.nick : filterText(cleanText(m.nick, LIMITS.nick)) || `Visitante${id}`;
+      let nick = account ? account.nick : filterText(cleanText(m.nick, LIMITS.nick));
+      if (!account && (!nick || isReservedNick(nick))) nick = `Visitante${id}`;
+      if (!account) nick = uniqueNick(nick, [...players.values()].map((q) => q.nick), LIMITS.nick);
       if (!account && nickTaken(nick)) {
         return send(ws, { t: 'denied', reason: 'Esse apelido pertence a uma conta. Escolha outro ou entre na conta.' });
       }
@@ -475,6 +529,8 @@ wss.on('connection', (ws, req) => {
         a: 0,
         dirty: false,
         lastMove: Date.now(),
+        budgetAt: Date.now(),
+        budget: MAX_SPEED,
         lastChat: 0,
         frozen: false, // na largada da corrida
         pvp: false,
@@ -490,6 +546,8 @@ wss.on('connection', (ws, req) => {
         shieldUntil: 0,
         lastReact: 0,
         lastWho: 0,
+        mutedUntil: 0,
+        ip,
         lastUse: 0,
         premium: account ? hasPremiumEmotes(account.id) : false,
       };
@@ -503,6 +561,8 @@ wss.on('connection', (ws, req) => {
       send(ws, race.snapshot());
       send(ws, pvpScores());
       send(ws, zones.snapshot());
+      const recent = chatLog.filter((c) => Date.now() - c.at < HISTORY_MS).slice(-12);
+      if (recent.length) send(ws, { t: 'history', list: recent.map((c) => [c.nick, c.side, c.text]) });
       if (me.userId) stock(me);
       broadcast({ t: 'online', counts: onlineCounts() }, null, true);
       return;
@@ -524,8 +584,8 @@ wss.on('connection', (ws, req) => {
       let a = int(m.a, ANIMS.length - 1);
       if (PREMIUM_ANIMS.includes(a) && !me.premium) a = 0; // gesto premium sem direito: fica parado
       const limit = a === DRIVE ? VEHICLE.maxSpeed : MAX_SPEED;
-      if (Math.hypot(nx - me.x, nz - me.z) > limit * dt * 1.5 + 0.3) {
-        // movimento impossível: devolve a posição aceita
+      if (!spendMoveBudget(me, now, limit, Math.hypot(nx - me.x, nz - me.z))) {
+        // movimento impossível (acima da velocidade permitida): devolve a posição aceita
         send(ws, { t: 'fix', x: round2(me.x), z: round2(me.z) });
         return;
       }
@@ -550,9 +610,24 @@ wss.on('connection', (ws, req) => {
       const text = filterText(cleanText(m.text, LIMITS.chat));
       if (!text) return;
       me.lastChat = now;
+      if (me.mutedUntil > now) return notice(me, `Você está silenciado por mais ${Math.ceil((me.mutedUntil - now) / 60000)} min após denúncias de outros jogadores.`);
       if (/^\/telao(\s|$)/i.test(text)) return billboard(me, text.replace(/^\/telao\s*/i, ''));
       if (/^\/fogos\b/i.test(text)) return useFireworks(me);
+      if (/^\/ajuda\b/i.test(text)) return notice(me, 'Comandos: /telao <texto> (gasta 1 mensagem de telão), /fogos (gasta 1 fogos) e /ajuda. Toque no nome de alguém para silenciar ou denunciar.');
+      recordChat(playerKey(me), me.nick, text, now);
+      chatLog.push({ nick: me.nick, side: me.side, text, at: now });
+      if (chatLog.length > 30) chatLog.shift();
       broadcast({ t: 'chat', id: me.id, nick: me.nick, side: me.side, text });
+    } else if (m.t === 'report') {
+      const target = players.get(Math.trunc(Number(m.id)));
+      if (!target || target === me) return;
+      const res = fileReport({ key: playerKey(me), nick: me.nick }, { key: playerKey(target), nick: target.nick });
+      if (!res.ok) return notice(me, res.reason);
+      if (res.mute && target.mutedUntil < Date.now()) {
+        target.mutedUntil = Date.now() + REPORT.muteMs;
+        notice(target, 'Você foi silenciado por alguns minutos após denúncias de outros jogadores.');
+      }
+      notice(me, 'Denúncia enviada. Obrigado por ajudar a manter a avenida legal.');
     } else if (m.t === 'race') {
       if (m.action === 'join') race.join(me);
       else if (m.action === 'leave') race.leave(me);
@@ -578,7 +653,7 @@ wss.on('connection', (ws, req) => {
       if (now - me.lastWho < 1500) return;
       me.lastWho = now;
       const list = [...players.values()].sort((a, b) => b.hits - a.hits || b.kos - a.kos).slice(0, 80)
-        .map((p) => [p.nick, p.side, p.hits, p.kos]);
+        .map((p) => [p.nick, p.side, p.hits, p.kos, p.id]);
       send(ws, { t: 'who', list, total: players.size });
     } else if (m.t === 'throw') {
       throwTomato(me);
@@ -636,3 +711,19 @@ setInterval(() => {
 server.listen(PORT, () => {
   console.log(`Servidor em http://localhost:${PORT}  (WebSocket em /ws)`);
 });
+
+// Desligamento limpo: avisa os clientes (que reconectam sozinhos), fecha o HTTP e o banco.
+let stopping = false;
+function shutdown(signal) {
+  if (stopping) return;
+  stopping = true;
+  console.log(`[${signal}] encerrando...`);
+  for (const ws of wss.clients) ws.close(1001, 'Servidor reiniciando');
+  server.close(() => {
+    try { db.close(); } catch { /* já fechado */ }
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(0), 5000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
