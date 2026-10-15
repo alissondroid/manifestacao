@@ -40,6 +40,7 @@ const FLAG_OPTIONS = [
   { icon: '🎃', title: 'Abóbora', text: 'Moranga fresquinha da feira' },
 ];
 const STEPS = ['lado', 'personagem', 'visual', 'mao'];
+const STEP_NAMES = ['Lado', 'Personagem', 'Visual', 'Na mão'];
 const pickOf = (list) => list[Math.floor(Math.random() * list.length)];
 
 /** Monta o menu "Monte seu personagem". `profile` é alterado no lugar. */
@@ -55,7 +56,19 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
   // ---------- etapas (abas) ----------
   const tabs = [...document.querySelectorAll('.steps [role=tab]')];
   const panels = Object.fromEntries(STEPS.map((id) => [id, $(`#tab-${id}`)]));
+  const prevBtn = $('#prev');
+  const nextBtn = $('#next');
+  const nav = $('.stepnav');
+  const syncMore = () => {
+    const box = $('.panels');
+    nav.classList.toggle('more', box.scrollTop + box.clientHeight < box.scrollHeight - 6);
+  };
   const go = (id, focus = false) => {
+    const at = STEPS.indexOf(id);
+    prevBtn.hidden = at === 0;
+    nextBtn.hidden = at === STEPS.length - 1;
+    if (at > 0) prevBtn.textContent = `← ${STEP_NAMES[at - 1]}`;
+    if (at < STEPS.length - 1) nextBtn.textContent = `${STEP_NAMES[at + 1]} →`;
     tabs.forEach((t) => {
       const on = t.dataset.tab === id;
       t.setAttribute('aria-selected', on);
@@ -64,8 +77,13 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
       if (on) { t.scrollIntoView({ block: 'nearest', inline: 'center' }); if (focus) t.focus(); }
     });
     STEPS.forEach((k) => { panels[k].hidden = k !== id; });
-    panels[id].scrollTop = 0;
+    $('.panels').scrollTop = 0;
+    syncMore();
   };
+  $('.panels').addEventListener('scroll', syncMore, { passive: true });
+  window.addEventListener('resize', syncMore);
+  prevBtn.onclick = () => go(STEPS[Math.max(0, STEPS.findIndex((k) => !panels[k].hidden) - 1)]);
+  nextBtn.onclick = () => go(STEPS[Math.min(STEPS.length - 1, STEPS.findIndex((k) => !panels[k].hidden) + 1)]);
   tabs.forEach((t, i) => {
     t.onclick = () => go(t.dataset.tab);
     t.onkeydown = (e) => {
@@ -73,8 +91,10 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
       if (d) { e.preventDefault(); go(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true); }
     };
   });
-  document.querySelectorAll('[data-go]').forEach((b) => { b.onclick = () => go(b.dataset.go); });
-  tabs[0].classList.add('on');
+  document.querySelectorAll('.legal').forEach((d) => d.addEventListener('toggle', () => {
+    if (d.open) document.querySelectorAll('.legal').forEach((o) => { if (o !== d) o.open = false; });
+  }));
+  go('lado');
 
   // ---------- 1. lado ----------
   const sides = $('#sides');
@@ -193,7 +213,7 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
   nick.value = profile.nick;
   const syncNick = () => {
     $('#nickcount').textContent = `${nick.value.length}/${nick.maxLength}`;
-    $('#nickhint').textContent = nick.disabled ? 'Este é o apelido da sua conta.' : 'Em branco: entra como Visitante.';
+    $('#nickhint').hidden = !nick.disabled;
   };
   nick.addEventListener('input', () => { profile.nick = nick.value; syncNick(); onChange(); });
   nick.addEventListener('keydown', (e) => { if (e.key === 'Enter') onEnter(); });
@@ -216,6 +236,7 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
     const def = CHARACTERS[modelId(look.body, look.face)];
     $('#tint-group').hidden = !def.outfit;
     $('#visual-note').hidden = !!def.outfit;
+    syncMore();
     $('#skin-field').hidden = !def.tintable;
     $('#beard-field').hidden = !def.tintable;
 
@@ -229,7 +250,7 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
     document.querySelectorAll('.preset').forEach((n, i) => n.classList.toggle('on', presets[i].id === profile.preset));
 
     const preset = presets.find((p) => p.id === profile.preset);
-    $('#summary').innerHTML = `<i style="background:${side.color}"></i><b>${side.name}</b><span>${preset ? preset.name : 'Personalizado'} · ${BODIES[look.body]}${look.age ? ' idoso' : ''}</span>`;
+    $('#summary').innerHTML = `<i style="background:${side.color}"></i><b>${side.name}</b><span>${preset ? preset.name : `Personalizado · ${BODIES[look.body]}`}${look.age ? ' · Idoso' : ''}</span>`;
     syncNick();
   }
   refresh();

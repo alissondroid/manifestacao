@@ -336,7 +336,6 @@ body[data-mode='play'] .lobby-only { display: none !important; }
 .preset canvas { width: 100%; aspect-ratio: 176 / 208; display: block; background: #15211b; }
 .preset b { font-weight: 600; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .preset.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
-@media (max-width: 420px) { .presets { grid-template-columns: repeat(3, 1fr); } }
 
 .loading {
   position: fixed; inset: 0; z-index: 40; display: grid; place-items: center;
@@ -468,12 +467,6 @@ body[data-mode='play'] .lobby-only { display: none !important; }
 .option small { display: block; color: var(--muted); font-size: 12px; margin-top: 1px; }
 .option.on { border-color: var(--accent); background: rgba(230, 195, 74, 0.1); }
 
-.next {
-  justify-self: end; background: none; border: 0; color: var(--accent); font: inherit; font-size: 13.5px;
-  font-weight: 600; padding: 6px 2px; cursor: pointer;
-}
-.next:hover { text-decoration: underline; }
-
 /* rodapé sempre visível */
 .card-foot {
   display: grid; gap: 10px; padding: 14px 20px 16px;
@@ -505,31 +498,24 @@ body[data-mode='play'] .lobby-only { display: none !important; }
   .panels { padding: 12px 16px 8px; }
   .presets { grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .card-foot { padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); gap: 8px; }
-  .summary, .legal { display: none; }
+  .summary { display: none; }
   .nickhint { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   #lobby .side, #lobby .preset, .segbtn, .option { transition: none; }
 }
 #lobby .card { align-self: end; }
-.panels { min-height: min(300px, 40vh); }
 
 @media (max-width: 640px) {
   #lobby { grid-template-columns: minmax(0, 1fr); }
   .hero { min-width: 0; }
   .hero .herobottom { display: none; }
   #lobby .card { max-height: 74vh; }
-  .panels { min-height: 0; }
-  .nickbox > span { display: none; }
   .sides { gap: 8px; }
   #lobby .side { padding: 10px; gap: 8px; }
   #lobby .side .num { width: 34px; height: 34px; font-size: 13px; }
 }
 
-/* personagens prontos numa fila só, como no original */
-.presets { grid-template-columns: repeat(6, 1fr); gap: 6px; }
-.preset b { font-size: 12px; padding: 2px 3px 4px; line-height: 1.15; }
-@media (max-width: 640px) { .presets { grid-template-columns: repeat(3, 1fr); gap: 6px; } .preset b { font-size: 11px; } }
 
 /* =====================================================================
    Tema do menu por lado: fundo do cartão, destaques e botão mudam de cor
@@ -550,7 +536,7 @@ body[data-mode='play'] .lobby-only { display: none !important; }
 }
 #lobby .card-foot { background: rgba(0, 0, 0, 0.4); }
 #lobby .steps { background: rgba(0, 0, 0, 0.28); }
-#lobby .card-head .eyebrow, #lobby .hero .eyebrow, #lobby .next { color: var(--accent); }
+#lobby .card-head .eyebrow, #lobby .hero .eyebrow { color: var(--accent); }
 #lobby .group, #lobby .option, #lobby .side { background: rgba(0, 0, 0, 0.22); }
 #lobby .option:hover, #lobby .side:hover { background: rgba(255, 255, 255, 0.1); }
 #lobby .option.on { background: color-mix(in srgb, var(--accent) 14%, transparent); }
@@ -570,3 +556,75 @@ body[data-mode='play'] .lobby-only { display: none !important; }
 .emotes.disabled { opacity: 0.4; pointer-events: none; }
 
 #lobby .legal.credits a { color: var(--accent); text-underline-offset: 2px; }
+
+/* =====================================================================
+   Refinos do menu: altura fixa, navegação entre etapas, rodapé enxuto
+   ===================================================================== */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* o cartão não muda de tamanho ao trocar de etapa */
+#lobby .card { height: min(760px, calc(100vh - 88px)); height: min(760px, calc(100dvh - 88px)); max-height: none; }
+.panel-tab { animation: tabin 0.18s ease-out; }
+@keyframes tabin { from { opacity: 0; transform: translateY(6px); } }
+
+/* 1. lado: quatro cartões grandes */
+#lobby .sides { grid-auto-rows: minmax(92px, 1fr); }
+#lobby .side { padding: 14px; gap: 12px; }
+#lobby .side .num { width: 46px; height: 46px; font-size: 16px; }
+
+/* 2. personagens: 3 por linha, nome inteiro */
+#lobby .presets { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+#lobby .preset { position: relative; padding: 0 0 8px; gap: 6px; }
+#lobby .preset canvas { aspect-ratio: 1 / 1.05; object-fit: cover; object-position: top; }
+#lobby .preset b { font-size: 13px; padding: 0 6px; }
+#lobby .preset.on::after {
+  content: '✓'; position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--accent); color: var(--accent-ink, #1c1917); font: 800 12px/1 system-ui;
+}
+
+/* 3. visual: alvos de toque maiores */
+#lobby .segbtn { padding: 9px 14px; }
+
+/* navegação fixa entre as etapas */
+.stepnav { position: relative; display: flex; align-items: center; gap: 8px; padding: 8px 20px 10px; }
+.stepnav::before {
+  content: ''; position: absolute; left: 0; right: 0; top: -24px; height: 24px; pointer-events: none;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.45)); opacity: 0; transition: opacity 0.2s;
+}
+.stepnav.more::before { opacity: 1; }
+.navbtn {
+  padding: 9px 16px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.06);
+  color: var(--text); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: background 0.15s;
+}
+.navbtn:hover { background: rgba(255, 255, 255, 0.14); }
+.navbtn.go { margin-left: auto; border-color: var(--accent); color: var(--accent); }
+.navbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* rodapé: resumo, apelido, ação principal e avisos numa faixa curta */
+.card-foot { position: relative; gap: 8px; padding: 12px 20px 12px; }
+.nickrow input { padding: 12px 54px 12px 14px; }
+#lobby .primary { padding: 14px; }
+.legal-row { display: flex; justify-content: center; gap: 18px; }
+.legal summary { padding: 2px 0; }
+.legal summary:hover { color: var(--text); }
+.legal[open] p {
+  position: absolute; left: 12px; right: 12px; bottom: calc(100% + 6px); z-index: 3; margin: 0; padding: 12px 14px;
+  background: #0b120e; border: 1px solid var(--line); border-radius: 12px; font-size: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+@media (max-width: 640px) {
+  #lobby .card { height: min(68vh, 600px); height: min(68dvh, 600px); }
+  .stepnav { padding: 6px 16px 8px; }
+  .card-foot { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); gap: 6px; }
+  #lobby .sides { grid-auto-rows: minmax(76px, 1fr); }
+  #lobby .side { padding: 10px; gap: 10px; }
+  #lobby .side .num { width: 38px; height: 38px; font-size: 14px; }
+  #lobby .presets { gap: 8px; }
+  #lobby .preset canvas { aspect-ratio: 1 / 0.9; }
+  #lobby .preset b { font-size: 12px; }
+  .legal { font-size: 10.5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel-tab { animation: none; }
+  .stepnav::before, .navbtn { transition: none; }
+}

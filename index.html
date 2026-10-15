@@ -63,7 +63,6 @@
           <section id="tab-lado" class="panel-tab" role="tabpanel" aria-labelledby="t-lado">
             <p class="hint-line">De que lado você vai estar na avenida?</p>
             <div id="sides" class="sides"></div>
-            <button class="next" type="button" data-go="personagem">Escolher personagem →</button>
           </section>
 
           <section id="tab-personagem" class="panel-tab" role="tabpanel" aria-labelledby="t-personagem" hidden>
@@ -72,7 +71,6 @@
               <button id="random" class="ghost-btn" type="button">🎲 Sortear</button>
             </div>
             <div id="presets" class="presets"></div>
-            <button class="next" type="button" data-go="visual">Ajustar visual →</button>
           </section>
 
           <section id="tab-visual" class="panel-tab" role="tabpanel" aria-labelledby="t-visual" hidden>
@@ -89,7 +87,6 @@
               <div class="field"><span>Bermuda</span><div id="pants" class="seg wrap"></div></div>
             </div>
             <p id="visual-note" class="note-line" hidden>Este personagem usa a roupa original, que não dá para trocar.</p>
-            <button class="next" type="button" data-go="mao">Escolher o que levar →</button>
           </section>
 
           <section id="tab-mao" class="panel-tab" role="tabpanel" aria-labelledby="t-mao" hidden>
@@ -103,19 +100,25 @@
           </section>
         </div>
 
+        <nav class="stepnav" aria-label="Navegar entre as etapas">
+          <button id="prev" class="navbtn" type="button" hidden>← Voltar</button>
+          <button id="next" class="navbtn go" type="button">Próximo →</button>
+        </nav>
+
         <footer class="card-foot">
           <div id="summary" class="summary" aria-live="polite"></div>
           <label class="nickbox">
-            <span>Seu apelido</span>
+            <span class="sr-only">Seu apelido</span>
             <div class="nickrow">
-              <input id="nick" maxlength="16" autocomplete="off" placeholder="Como quer ser chamado?" />
+              <input id="nick" maxlength="16" autocomplete="off" placeholder="Seu apelido (em branco: Visitante)" />
               <small id="nickcount">0/16</small>
             </div>
-            <small id="nickhint" class="nickhint">Em branco: entra como Visitante.</small>
+            <small id="nickhint" class="nickhint" hidden>Este é o apelido da sua conta.</small>
           </label>
           <button id="enter" class="primary" type="button">Entrar na manifestação</button>
           <button id="watch" class="link" type="button">Só quero assistir</button>
           <p id="error" class="error" hidden></p>
+          <div class="legal-row">
           <details class="legal">
             <summary>Aviso</summary>
             <p>Projeto independente, sem vínculo com candidatos, partidos ou campanhas. Nomes e números identificam apenas os lados da disputa. Acesso anônimo, direto no navegador.</p>
@@ -124,6 +127,7 @@
             <summary>Créditos</summary>
             <p>Animações de chute, murro e aceno: <a href="https://www.patreon.com/Zsky" target="_blank" rel="noopener noreferrer">Zsky</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>), adaptadas para os personagens deste jogo. Outras animações: <a href="https://quaternius.com/" target="_blank" rel="noopener noreferrer">Quaternius</a> (CC0) e <a href="https://www.mixamo.com/" target="_blank" rel="noopener noreferrer">Mixamo</a>. Personagens: Mixamo, Ready Player Me, Sketchfab e Tripo (ver o README).</p>
           </details>
+          </div>
         </footer>
       </div>
     </section>
