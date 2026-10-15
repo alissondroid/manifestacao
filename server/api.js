@@ -1,15 +1,15 @@
 import { db } from './db.js';
 import {
   hashPassword, verifyPassword, burnPasswordTime, createSession, destroySession,
-  userFromRequest, tokenFromRequest, sessionCookie, clearCookie, rateLimit,
+  userFromRequest, tokenFromRequest, sessionCookie, clearCookie, rateLimit, deleteAccount,
   validEmail, validNick, validPassword,
 } from './auth.js';
 import {
-  ownedIds, equippedMap, owns, createOrder, getOrder, setOrderRef, setOrderStatus, fulfill, equip, designsOf, saveDesign,
+  ownedIds, equippedMap, owns, createOrder, pendingOrder, inventoryOf, vipUntil, hasPremiumEmotes, canBuy, getOrder, setOrderRef, setOrderStatus, fulfill, equip, designsOf, saveDesign,
 } from './shop.js';
 import { filterText } from './moderation.js';
 import {
-  PROVIDER, WEBHOOK_CONFIGURED, createCheckout, fetchStatus, verifyWebhook,
+  PROVIDER, PAYMENTS_ENABLED, WEBHOOK_CONFIGURED, createCheckout, fetchStatus, verifyWebhook,
 } from './payments.js';
 import { SHOP, SHOP_BY_ID, SLOTS, DESIGN } from '../shared/config.js';
 
@@ -59,13 +59,19 @@ function sameOrigin(req) {
 
 const accountPayload = (user) => (user
   ? {
-    user: { nick: user.nick, email: user.email }, owned: ownedIds(user.id), equipped: equippedMap(user.id), custom: designsOf(user.id),
+    user: { nick: user.nick, email: user.email },
+    owned: ownedIds(user.id),
+    equipped: equippedMap(user.id),
+    custom: designsOf(user.id),
+    inventory: inventoryOf(user.id),
+    vipUntil: vipUntil(user.id),
+    premium: hasPremiumEmotes(user.id),
   }
   : {
-    user: null, owned: [], equipped: {}, custom: {},
+    user: null, owned: [], equipped: {}, custom: {}, inventory: {}, vipUntil: 0, premium: false,
   });
 
-const publicShop = () => ({ items: SHOP, provider: PROVIDER });
+const publicShop = () => ({ items: SHOP.filter((i) => !i.hidden), provider: PROVIDER });
 
 /**
  * Trata rotas /api/* e /pagar/*. Retorna true se tratou a requisição.
@@ -90,8 +96,12 @@ export async function handleApi(req, res, hooks = {}) {
         || (event.type === 'checkout.session.completed' && s?.payment_status === 'paid');
       if (paidEvent && s) {
         const order = getOrder(s.client_reference_id || s.metadata?.order_id);
-        // só entrega se a sessão é a mesma que criamos para esse pedido
-        if (order && order.provider === 'stripe' && order.provider_ref === s.id) fulfill(order.id);
+        // só entrega se a sessão é a do pedido (o webhook pode chegar antes de gravarmos a referência) e o valor confere
+        const sameSession = order && (order.provider_ref === s.id || !order.provider_ref);
+        if (sameSession && order.provider === 'stripe' && s.amount_total === order.amount_cents && s.currency === 'brl') {
+          if (!order.provider_ref) setOrderRef(order.id, s.id, null);
+          if (fulfill(order.id)) hooks.onEquip?.(order.user_id);
+        }
       }
       return json(res, 200, { received: true }), true;
     }
@@ -115,6 +125,7 @@ export async function handleApi(req, res, hooks = {}) {
       const email = String(body.email ?? '').trim();
       const nick = String(body.nick ?? '').trim();
       const password = body.password;
+      if (body.terms !== true) return json(res, 400, { error: 'Aceite os Termos de uso e a Política de privacidade para criar a conta.' }), true;
       if (!validEmail(email)) return json(res, 400, { error: 'E-mail inválido.' }), true;
       if (!validNick(nick)) return json(res, 400, { error: 'Apelido: 3 a 16 caracteres (letras, números, espaço, _ . -).' }), true;
       if (!validPassword(password)) return json(res, 400, { error: 'A senha precisa ter pelo menos 8 caracteres.' }), true;
@@ -124,8 +135,8 @@ export async function handleApi(req, res, hooks = {}) {
       const passHash = await hashPassword(password);
       let id;
       try {
-        id = Number(db.prepare('INSERT INTO users (email, nick, pass_hash, created_at) VALUES (?, ?, ?, ?)')
-          .run(email, nick, passHash, Date.now()).lastInsertRowid);
+        id = Number(db.prepare('INSERT INTO users (email, nick, pass_hash, created_at, terms_at) VALUES (?, ?, ?, ?, ?)')
+          .run(email, nick, passHash, Date.now(), Date.now()).lastInsertRowid);
       } catch {
         return json(res, 409, { error: 'E-mail ou apelido já em uso.' }), true; // corrida entre duas contas
       }
@@ -153,6 +164,20 @@ export async function handleApi(req, res, hooks = {}) {
       return json(res, 200, { ok: true }, { 'set-cookie': clearCookie({ secure }) }), true;
     }
 
+    // Exclusão da conta (LGPD): anonimiza o usuário e apaga itens, desenhos e sessões; os pedidos ficam (obrigação fiscal).
+    if (method === 'POST' && pathname === '/api/auth/delete') {
+      if (!user) return json(res, 401, { error: 'Entre na sua conta.' }), true;
+      if (!rateLimit(`delete:${user.id}`, 5, 10 * 60_000)) return json(res, 429, { error: 'Muitas tentativas. Aguarde um pouco.' }), true;
+      const body = await readJson(req);
+      const row = db.prepare('SELECT pass_hash FROM users WHERE id = ?').get(user.id);
+      if (typeof body.password !== 'string' || !row || !(await verifyPassword(body.password, row.pass_hash))) {
+        return json(res, 403, { error: 'Senha incorreta.' }), true;
+      }
+      deleteAccount(user.id);
+      hooks.onDelete?.(user.id);
+      return json(res, 200, { ok: true }, { 'set-cookie': clearCookie({ secure }) }), true;
+    }
+
     // ---------- Loja ----------
 
     if (method === 'GET' && pathname === '/api/shop') return json(res, 200, publicShop()), true;
@@ -168,14 +193,17 @@ export async function handleApi(req, res, hooks = {}) {
     if (method === 'POST' && pathname === '/api/shop/checkout') {
       const body = await readJson(req);
       const item = SHOP_BY_ID[body.item];
-      if (!item) return json(res, 404, { error: 'Item não encontrado.' }), true;
-      if (owns(user.id, item.id)) return json(res, 409, { error: 'Você já tem esse item.' }), true;
+      if (!item || item.hidden || item.price <= 0) return json(res, 404, { error: 'Item não encontrado.' }), true;
+      if (!PAYMENTS_ENABLED) return json(res, 503, { error: 'Pagamentos indisponíveis no momento.' }), true;
+      if (!canBuy(user.id, item)) return json(res, 409, { error: 'Você já tem esse item.' }), true;
       if (!rateLimit(`checkout:${user.id}`, 10, 10 * 60_000)) return json(res, 429, { error: 'Muitas tentativas. Aguarde um pouco.' }), true;
 
+      const open = pendingOrder(user.id, item.id, PROVIDER);
+      if (open) return json(res, 200, { url: open.pay_url, order: open.id }), true;
       const order = createOrder(user.id, item, PROVIDER);
       try {
         const { url: checkoutUrl, ref } = await createCheckout({ order, item, baseUrl: baseUrl(req) });
-        setOrderRef(order.id, ref);
+        setOrderRef(order.id, ref, checkoutUrl);
         return json(res, 200, { url: checkoutUrl, order: order.id }), true;
       } catch (err) {
         console.error('[pagamentos] falha ao criar checkout:', err.message);
@@ -192,7 +220,7 @@ export async function handleApi(req, res, hooks = {}) {
       if (order.status === 'pending' && order.provider === 'stripe' && order.provider_ref) {
         try {
           const st = await fetchStatus(order.provider_ref);
-          if (st.paid) fulfill(order.id);
+          if (st.paid && fulfill(order.id)) hooks.onEquip?.(user.id);
           else if (st.expired) setOrderStatus(order.id, 'expired');
         } catch (err) {
           console.error('[pagamentos] falha ao consultar pedido:', err.message);
@@ -228,18 +256,18 @@ export async function handleApi(req, res, hooks = {}) {
 
     // ---------- Checkout simulado (só quando não há chave Stripe de teste) ----------
 
-    if (PROVIDER === 'simulated' && method === 'POST' && pathname === '/api/shop/simulate') {
+    if (PROVIDER === 'simulated' && PAYMENTS_ENABLED && method === 'POST' && pathname === '/api/shop/simulate') {
       const body = await readJson(req);
       const order = UUID.test(String(body.order)) ? getOrder(body.order) : null;
       if (!order || order.user_id !== user.id || order.provider !== 'simulated') {
         return json(res, 404, { error: 'Pedido não encontrado.' }), true;
       }
-      if (body.result === 'paid') fulfill(order.id);
+      if (body.result === 'paid') { if (fulfill(order.id)) hooks.onEquip?.(user.id); }
       else setOrderStatus(order.id, 'cancelled');
       return json(res, 200, { status: getOrder(order.id).status }), true;
     }
 
-    if (PROVIDER === 'simulated' && method === 'GET' && pathname === '/pagar/simulado') {
+    if (PROVIDER === 'simulated' && PAYMENTS_ENABLED && method === 'GET' && pathname === '/pagar/simulado') {
       const orderId = url.searchParams.get('order') || '';
       const order = UUID.test(orderId) ? getOrder(orderId) : null;
       if (!order || order.user_id !== user.id || order.status !== 'pending') {

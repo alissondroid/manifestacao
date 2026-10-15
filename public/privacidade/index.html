@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Política de privacidade · Avenida Online</title>
+<meta name="description" content="Como o Avenida Online trata seus dados pessoais: o que coletamos, por quê, por quanto tempo e como exercer seus direitos (LGPD)." />
+<meta name="robots" content="index, follow" />
+<link rel="canonical" href="https://avenidaonline.com/privacidade" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/favicon.ico" sizes="48x48" />
+<meta name="theme-color" content="#101915" />
+<!-- Modelo para revisão: confira com um advogado e preencha os campos destacados antes de publicar. -->
+<style>
+:root{--bg:#101915;--card:#16231c;--text:#f2f4ef;--muted:#9aa89d;--accent:#e6c34a;--line:rgba(190,205,190,.22)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 system-ui,-apple-system,'Segoe UI',sans-serif}
+header{border-bottom:1px solid var(--line);padding:14px 20px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+header a.brand{color:var(--text);text-decoration:none;font-weight:800;letter-spacing:.08em}
+header a.brand span{color:var(--accent)}
+header nav{margin-left:auto;display:flex;gap:16px;font-size:14px}
+header nav a{color:var(--muted);text-decoration:none}
+header nav a:hover,header nav a[aria-current]{color:var(--accent)}
+main{max-width:800px;margin:0 auto;padding:28px 20px 70px}
+h1{font-size:32px;line-height:1.2;margin:0 0 6px}
+h2{font-size:20px;margin:34px 0 8px;color:var(--accent)}
+h3{font-size:16px;margin:18px 0 4px}
+p,li{color:#d8e0d9}
+li{margin:4px 0}
+a{color:var(--accent)}
+.upd{color:var(--muted);font-size:14px;margin:0 0 24px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:18px 0}
+mark{background:#f5c518;color:#1c1917;border-radius:4px;padding:0 4px;font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:14.5px;margin:12px 0}
+th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:8px 10px 8px 0}
+th{color:var(--muted);font-weight:600}
+footer{border-top:1px solid var(--line);padding:20px;text-align:center;color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<header>
+<a class="brand" href="/">AVENIDA<span> ONLINE</span></a>
+<nav><a href="/">Jogar</a><a href="/termos">Termos de uso</a><a href="/privacidade" aria-current="page">Privacidade</a></nav>
+</header>
+<main>
+<h1>Política de privacidade</h1>
+<p class="upd">Última atualização: 15 de outubro de 2026</p>
+
+<div class="box"><p><b>Resumo:</b> coletamos o mínimo para o jogo funcionar: e-mail, apelido e senha (criptografada) de quem cria conta, o que você compra e a aparência do seu personagem. <b>Não vendemos dados, não usamos publicidade nem rastreadores de terceiros.</b> Pagamentos são feitos pela Stripe. Você pode apagar sua conta a qualquer momento.</p></div>
+
+<h2>1. Quem é o controlador</h2>
+<p>O controlador dos dados pessoais é <mark>[PREENCHER: nome completo ou razão social]</mark>, inscrito(a) no <mark>[PREENCHER: CPF ou CNPJ]</mark>, com sede em <mark>[PREENCHER: cidade/UF]</mark>. Contato do encarregado (DPO) e para exercer seus direitos: <mark>[PREENCHER: e-mail de contato, ex.: contato@avenidaonline.com]</mark>. Esta política segue a Lei Geral de Proteção de Dados (Lei 13.709/2018, “LGPD”).</p>
+
+<h2>2. Quais dados tratamos</h2>
+<table>
+<tr><th>Dado</th><th>Quando</th><th>Para quê</th></tr>
+<tr><td><b>Conta:</b> e-mail, apelido, senha (guardada apenas como hash scrypt, nunca em texto), data de criação e de aceite dos Termos</td><td>Ao criar conta</td><td>Identificar você, entrar no jogo, guardar itens, comprovar o aceite</td></tr>
+<tr><td><b>Sessão:</b> cookie <code>sid</code> (identificador aleatório, guardado como hash no servidor), válido por 30 dias</td><td>Ao entrar na conta</td><td>Manter você conectado</td></tr>
+<tr><td><b>Jogo:</b> lado, aparência do personagem, posição na avenida, gestos, mensagens de chat, reações</td><td>Ao jogar</td><td>Mostrar você aos outros jogadores em tempo real. Mensagens de chat são transmitidas na hora e <b>não são guardadas</b> no banco de dados</td></tr>
+<tr><td><b>Compras:</b> item, valor, método, status, datas e identificador do pedido; itens e saldo de consumíveis; VIP</td><td>Ao comprar</td><td>Entregar o que você comprou, atender reembolsos e cumprir obrigações fiscais</td></tr>
+<tr><td><b>Personalizações:</b> texto, cores e símbolos de cartaz, bandeira e camisa</td><td>Ao editar</td><td>Exibir seus itens para os outros jogadores</td></tr>
+<tr><td><b>Corrida:</b> apelido, lado e tempo</td><td>Ao completar uma corrida</td><td>Mostrar o ranking dos melhores tempos</td></tr>
+<tr><td><b>Dados técnicos:</b> endereço IP e dados da conexão</td><td>Ao acessar</td><td>Segurança, limite de conexões e de tentativas de login, prevenção de fraude e abuso. O IP é usado em memória para esses limites e pode aparecer em registros de erro do servidor</td></tr>
+<tr><td><b>Armazenamento no seu navegador</b> (localStorage): apelido digitado, aparência escolhida, preferência de som</td><td>Ao jogar</td><td>Lembrar suas escolhas neste aparelho</td></tr>
+</table>
+<p>Os dados de pagamento (número do cartão, dados do Pix) são coletados e processados <b>diretamente pela Stripe</b>. Nós não os recebemos nem guardamos; recebemos só a confirmação do pagamento.</p>
+
+<h2>3. Finalidades e bases legais</h2>
+<ul>
+<li><b>Execução de contrato</b> (art. 7º, V): criar e manter sua conta, entregar itens comprados, fazer o jogo funcionar.</li>
+<li><b>Obrigação legal ou regulatória</b> (art. 7º, II): guardar registros de pedidos e de pagamentos pelo prazo fiscal e atender ordens de autoridades.</li>
+<li><b>Legítimo interesse</b> (art. 7º, IX): segurança, prevenção de fraude e abuso, moderação e melhoria do serviço, sempre respeitando seus direitos.</li>
+<li><b>Consentimento</b> (art. 7º, I), quando necessário, como o aceite dos Termos e desta política no cadastro. Você pode retirá-lo excluindo a conta.</li>
+</ul>
+<p>Não tomamos decisões automatizadas que afetem você de forma significativa, nem criamos perfis para publicidade.</p>
+
+<h2>4. Com quem compartilhamos</h2>
+<ul>
+<li><b>Outros jogadores:</b> seu apelido, lado, aparência, itens equipados, posição e mensagens são visíveis a quem está na avenida. <b>Não escreva dados pessoais no chat, no apelido ou em cartazes.</b></li>
+<li><b>Stripe:</b> processa os pagamentos (cartão e Pix).</li>
+<li><b>Hospedagem:</b> o servidor roda em infraestrutura de <mark>[PREENCHER: provedor, ex.: Hostinger]</mark>, que armazena os dados em nosso nome.</li>
+<li><b>Autoridades:</b> quando houver ordem judicial ou exigência legal.</li>
+</ul>
+<p>Não vendemos nem alugamos dados pessoais. Não usamos ferramentas de publicidade ou de análise de terceiros.</p>
+
+<h2>5. Transferência internacional</h2>
+<p>A Stripe e outros prestadores podem tratar dados fora do Brasil (por exemplo, nos Estados Unidos). Isso é feito com salvaguardas previstas no art. 33 da LGPD, como cláusulas contratuais e as políticas de privacidade e segurança desses prestadores.</p>
+
+<h2>6. Por quanto tempo guardamos</h2>
+<ul>
+<li><b>Conta e itens:</b> enquanto a conta existir. Ao excluí-la, e-mail, senha, apelido, itens, desenhos e sessões são apagados ou anonimizados na hora.</li>
+<li><b>Pedidos e pagamentos:</b> por até <b>5 anos</b> após a compra, por obrigação fiscal e para defesa em disputas, sem ligação ao seu e-mail depois da exclusão da conta.</li>
+<li><b>Cópias de segurança:</b> até 14 dias; depois, os dados apagados somem delas.</li>
+<li><b>Registros técnicos (logs):</b> pelo tempo necessário para segurança, em regra poucos dias.</li>
+<li><b>Mensagens de chat:</b> não são guardadas.</li>
+</ul>
+
+<h2>7. Seus direitos (LGPD, art. 18)</h2>
+<p>Você pode pedir, a qualquer momento: confirmação de que tratamos seus dados; acesso e cópia; correção; anonimização, bloqueio ou eliminação de dados desnecessários; portabilidade; informação sobre compartilhamentos; revogação do consentimento; e revisão de decisões automatizadas.</p>
+<ul>
+<li><b>Excluir a conta:</b> botão “Excluir conta” na tela inicial (precisa da senha).</li>
+<li><b>Demais pedidos:</b> escreva para <mark>[PREENCHER: e-mail de contato, ex.: contato@avenidaonline.com]</mark>. Respondemos em até <b>15 dias</b>. Podemos pedir uma confirmação de identidade.</li>
+<li>Você também pode reclamar à <b>Autoridade Nacional de Proteção de Dados (ANPD)</b>: <a href="https://www.gov.br/anpd" rel="noopener">gov.br/anpd</a>.</li>
+</ul>
+
+<h2>8. Segurança</h2>
+<p>Usamos conexão criptografada (HTTPS), senhas com hash (scrypt), cookies de sessão <code>HttpOnly</code>, limites contra tentativas de invasão, acesso restrito ao servidor e backups. Nenhum sistema é 100% seguro; se houver um incidente que possa causar risco relevante, avisaremos você e a ANPD conforme a lei.</p>
+
+<h2>9. Crianças e adolescentes</h2>
+<p>O Jogo é recomendado para maiores de 14 anos. Menores de 18 anos devem usar a conta e fazer compras apenas com autorização e acompanhamento de um responsável, que pode pedir a exclusão dos dados a qualquer momento. Se soubermos que coletamos dados de uma criança sem o consentimento exigido, vamos apagá-los.</p>
+
+<h2>10. Cookies e armazenamento local</h2>
+<p>Usamos apenas o <b>cookie essencial</b> de sessão (<code>sid</code>) e o armazenamento local do navegador descritos acima, necessários para o funcionamento do Jogo. Não usamos cookies de publicidade, de rastreamento nem de análise de terceiros. Você pode apagá-los nas configurações do navegador, mas poderá sair da conta e perder suas preferências neste aparelho. Se isso mudar, atualizaremos esta política e pediremos seu consentimento quando for necessário.</p>
+
+<h2>11. Alterações desta política</h2>
+<p>Podemos atualizar esta política. Mudanças relevantes serão avisadas no Jogo ou por e-mail, e a data no topo será atualizada.</p>
+
+<h2>12. Contato</h2>
+<p><mark>[PREENCHER: e-mail de contato, ex.: contato@avenidaonline.com]</mark></p>
+</main>
+<footer>Avenida Online · <a href="/">avenidaonline.com</a></footer>
+</body>
+</html>

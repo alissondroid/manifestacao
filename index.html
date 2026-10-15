@@ -4,14 +4,89 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#101915" />
-    <meta name="description" content="Entre na Avenida Paulista pelo navegador: escolha seu lado nas eleições, monte seu personagem, converse e participe em tempo real." />
-    <title>Avenida Online · Eleições 2026 na Paulista</title>
+    <meta name="color-scheme" content="dark" />
+    <title>Avenida Online · Jogo multiplayer na Avenida Paulista</title>
+    <meta name="description" content="Jogo multiplayer grátis no navegador: ande pela Avenida Paulista em 3D, monte seu personagem, converse, dispute trechos e corra com outros jogadores." />
+    <meta name="keywords" content="avenida online, jogo online, jogo multiplayer, avenida paulista, jogo 3d no navegador, jogo brasileiro, mmo no navegador, eleições 2026" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="author" content="Avenida Online" />
+    <link rel="canonical" href="https://avenidaonline.com/" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="application-name" content="Avenida Online" />
+    <meta name="apple-mobile-web-app-title" content="Avenida Online" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Avenida Online" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:url" content="https://avenidaonline.com/" />
+    <meta property="og:title" content="Avenida Online · Jogo multiplayer na Avenida Paulista" />
+    <meta property="og:description" content="Entre na Avenida Paulista pelo navegador: monte seu personagem, converse, dispute trechos e corra com outros jogadores. Grátis." />
+    <meta property="og:image" content="https://avenidaonline.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Avenida Online: jogo multiplayer na Avenida Paulista" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Avenida Online · Jogo multiplayer na Avenida Paulista" />
+    <meta name="twitter:description" content="Entre na Avenida Paulista pelo navegador: monte seu personagem, converse, dispute trechos e corra com outros jogadores. Grátis." />
+    <meta name="twitter:image" content="https://avenidaonline.com/og-image.png" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://avenidaonline.com/#site",
+            "url": "https://avenidaonline.com/",
+            "name": "Avenida Online",
+            "inLanguage": "pt-BR"
+          },
+          {
+            "@type": "VideoGame",
+            "@id": "https://avenidaonline.com/#game",
+            "name": "Avenida Online",
+            "url": "https://avenidaonline.com/",
+            "description": "Jogo multiplayer 3D no navegador ambientado na Avenida Paulista: personagem personalizável, chat, corrida, disputa de trechos e loja de itens cosméticos.",
+            "image": "https://avenidaonline.com/og-image.png",
+            "inLanguage": "pt-BR",
+            "genre": ["Multiplayer", "Social", "Simulação"],
+            "gamePlatform": "Navegador web",
+            "applicationCategory": "Game",
+            "operatingSystem": "Qualquer sistema com navegador moderno",
+            "playMode": "MultiPlayer",
+            "isAccessibleForFree": true,
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "BRL" }
+          }
+        ]
+      }
+    </script>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body data-mode="lobby">
+    <noscript>
+      <h1>Avenida Online</h1>
+      <p>Jogo multiplayer grátis na Avenida Paulista, direto no navegador: monte seu personagem, converse, dispute trechos, corra e use itens da loja. Ative o JavaScript para jogar. Projeto independente, sem vínculo com candidatos, partidos ou campanhas.</p>
+    </noscript>
     <canvas id="c"></canvas>
-    <div id="loading" class="loading">Carregando personagens…</div>
+    <div id="loading" class="loading" role="status" aria-live="polite">
+      <div class="load-box">
+        <span class="load-logo" aria-hidden="true"><i></i><i></i><i></i></span>
+        <b class="load-title">AVENIDA<span>ONLINE</span></b>
+        <div id="loadbar" class="load-bar" role="progressbar" aria-label="Carregando o jogo" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+        <p class="load-row"><span id="loadtext">Iniciando…</span><b id="loadpct">0%</b></p>
+        <p id="loadtip" class="load-tip"></p>
+        <p id="loaderr" class="load-err" hidden></p>
+        <button id="loadretry" class="primary" type="button" hidden>Recarregar a página</button>
+      </div>
+    </div>
     <div id="labels"></div>
+    <div id="hurt"></div>
 
     <!-- Barra do topo (lobby e jogo) -->
     <header id="topbar">
@@ -32,7 +107,7 @@
     <section id="lobby">
       <div class="hero">
         <p class="eyebrow">São Paulo / Avenida Paulista</p>
-        <h1>A sua presença.<br />Do seu jeito.</h1>
+        <h1>Entre na Paulista.<br />Do seu jeito.</h1>
         <div class="herobottom">
           <div id="anims" class="anims">
             <button data-anim="idle" class="on">Parado</button>
@@ -63,7 +138,6 @@
           <section id="tab-lado" class="panel-tab" role="tabpanel" aria-labelledby="t-lado">
             <p class="hint-line">De que lado você vai estar na avenida?</p>
             <div id="sides" class="sides"></div>
-            <button class="next" type="button" data-go="personagem">Escolher personagem →</button>
           </section>
 
           <section id="tab-personagem" class="panel-tab" role="tabpanel" aria-labelledby="t-personagem" hidden>
@@ -72,7 +146,6 @@
               <button id="random" class="ghost-btn" type="button">🎲 Sortear</button>
             </div>
             <div id="presets" class="presets"></div>
-            <button class="next" type="button" data-go="visual">Ajustar visual →</button>
           </section>
 
           <section id="tab-visual" class="panel-tab" role="tabpanel" aria-labelledby="t-visual" hidden>
@@ -88,8 +161,7 @@
               <div class="field"><span>Camiseta</span><div id="sw-shirt" class="swatches"></div></div>
               <div class="field"><span>Bermuda</span><div id="pants" class="seg wrap"></div></div>
             </div>
-            <p id="visual-note" class="note-line" hidden>Este personagem vem com a roupa original e não troca de roupa.</p>
-            <button class="next" type="button" data-go="mao">Escolher o que levar →</button>
+            <p id="visual-note" class="note-line" hidden>Este personagem usa a roupa original, que não dá para trocar.</p>
           </section>
 
           <section id="tab-mao" class="panel-tab" role="tabpanel" aria-labelledby="t-mao" hidden>
@@ -103,19 +175,25 @@
           </section>
         </div>
 
+        <nav class="stepnav" aria-label="Navegar entre as etapas">
+          <button id="prev" class="navbtn" type="button" hidden>← Voltar</button>
+          <button id="next" class="navbtn go" type="button">Próximo →</button>
+        </nav>
+
         <footer class="card-foot">
           <div id="summary" class="summary" aria-live="polite"></div>
           <label class="nickbox">
-            <span>Seu apelido</span>
+            <span class="sr-only">Seu apelido</span>
             <div class="nickrow">
-              <input id="nick" maxlength="16" autocomplete="off" placeholder="Como quer ser chamado?" />
+              <input id="nick" maxlength="16" autocomplete="off" placeholder="Seu apelido (em branco: Visitante)" />
               <small id="nickcount">0/16</small>
             </div>
-            <small id="nickhint" class="nickhint">Em branco: entra como Visitante.</small>
+            <small id="nickhint" class="nickhint" hidden>Este é o apelido da sua conta.</small>
           </label>
           <button id="enter" class="primary" type="button">Entrar na manifestação</button>
           <button id="watch" class="link" type="button">Só quero assistir</button>
           <p id="error" class="error" hidden></p>
+          <div class="legal-row">
           <details class="legal">
             <summary>Aviso</summary>
             <p>Projeto independente, sem vínculo com candidatos, partidos ou campanhas. Nomes e números identificam apenas os lados da disputa. Acesso anônimo, direto no navegador.</p>
@@ -124,6 +202,9 @@
             <summary>Créditos</summary>
             <p>Animações de chute, murro e aceno: <a href="https://www.patreon.com/Zsky" target="_blank" rel="noopener noreferrer">Zsky</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>), adaptadas para os personagens deste jogo. Outras animações: <a href="https://quaternius.com/" target="_blank" rel="noopener noreferrer">Quaternius</a> (CC0) e <a href="https://www.mixamo.com/" target="_blank" rel="noopener noreferrer">Mixamo</a>. Personagens: Mixamo, Ready Player Me, Sketchfab e Tripo (ver o README).</p>
           </details>
+          <a href="/termos" target="_blank" rel="noopener">Termos</a>
+          <a href="/privacidade" target="_blank" rel="noopener">Privacidade</a>
+          </div>
         </footer>
       </div>
     </section>
@@ -135,7 +216,16 @@
         <button id="pvpbtn" class="pill mode" type="button">🍅 PvP</button>
         <button id="throwbtn" class="pill mode throw" type="button" hidden>Arremessar (F)</button>
         <button id="drivebtn" class="pill mode" type="button">🚗 Carro (C)</button>
+<button id="fogosbtn" class="pill mode" type="button" hidden>🎆 Fogos</button>
+        <button id="telaobtn" class="pill mode" type="button" hidden>📺 Telão</button>
+        <button id="whobtn" class="pill mode" type="button" title="Quem está na avenida (Tab)">👥 Jogadores</button>
       </div>
+      <div id="radar">
+        <canvas id="radarmap"></canvas>
+        <div id="zoneinfo"></div>
+        <div id="domscore"></div>
+      </div>
+      <div id="who" class="panel" hidden></div>
       <div id="racepanel" class="panel" hidden></div>
       <div id="pvppanel" class="panel pvp" hidden></div>
 
@@ -143,11 +233,26 @@
         <button data-emote="2" title="Acenar (1)">👋</button>
         <button data-emote="3" title="Dançar (2)">💃</button>
         <button data-emote="4" title="Aplaudir (3)">👏</button>
+<button id="jumpbtn" title="Pular (Espaço)">⤴️</button>
+        <button id="emotebtn" title="Mais gestos">🎭</button>
+        <button id="reactbtn" title="Reações (7 a 0)">😀</button>
         <span class="sep" aria-hidden="true"></span>
         <button data-attack="punch" title="Murro (4)">👊</button>
         <button data-attack="kick" title="Chute (5)">🦵</button>
         <button data-attack="baton" title="Cassetete (6)">🏏</button>
       </div>
+
+      <div id="emotemenu" class="popmenu" hidden></div>
+      <div id="banner" hidden></div>
+      <div id="reacts" hidden>
+        <button data-react="0">👍</button><button data-react="1">😂</button><button data-react="2">🔥</button><button data-react="3">❤️</button>
+        <button data-react="4">😡</button><button data-react="5">🇧🇷</button><button data-react="6">✊</button><button data-react="7">🎉</button>
+      </div>
+      <div id="vitals">
+        <div id="hpbar" class="bar hp" hidden><i></i><span>100</span></div>
+        <div id="stbar" class="bar st"><i></i></div>
+      </div>
+      <div id="ko" hidden></div>
 
       <div id="chat">
         <div id="chatlog"></div>
@@ -157,7 +262,7 @@
       </div>
 
       <div id="stick" hidden><div id="knob"></div></div>
-      <p class="hint">WASD/setas mover · Shift correr · 1-3 gestos · 4-6 golpes · C carro · arraste para girar a câmera · Enter chat</p>
+      <p class="hint">WASD/setas mover · Shift correr · 1-3 gestos · 4-6 golpes · 7-0 reações · C carro · Tab jogadores · arraste para girar a câmera · Enter chat</p>
     </section>
 
     <div id="modal" class="modal" hidden>

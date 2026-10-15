@@ -1,5 +1,5 @@
 import {
-  SIDES, SHIRTS, SKINS, BODIES, AGES, MODELS, HEIGHTS, BEARDS, PANTS, RACE,
+  SIDES, SHIRTS, SKINS, BODIES, AGES, MODELS, HEIGHTS, BEARDS, PANTS, RACE, SHOP_BY_ID, EMOTES,
 } from '../shared/config.js';
 import { CHARACTERS, modelId } from './models.js';
 
@@ -21,6 +21,53 @@ export function setOnline(counts) {
   }
 }
 
+const LOADING_TIPS = [
+  'WASD ou setas para andar, Shift para correr.',
+  'Enter abre o chat. Os outros jogadores veem o que você escrever.',
+  'As teclas 1, 2 e 3 acenam, dançam e aplaudem.',
+  'A tecla C chama o carro; C de novo para sair.',
+  'No celular, use o joystick na tela para andar.',
+  'Em "Só quero assistir" você passeia de câmera livre, sem avatar.',
+];
+
+/** Tela de carregamento: barra com porcentagem, etapa atual e dicas. */
+export const loadingScreen = (() => {
+  let shown = 0;
+  let timer = 0;
+  let tip = Math.floor(Math.random() * LOADING_TIPS.length);
+  const showTip = () => { $('#loadtip').textContent = `Dica: ${LOADING_TIPS[tip]}`; tip = (tip + 1) % LOADING_TIPS.length; };
+  return {
+    start() {
+      showTip();
+      timer = setInterval(showTip, 4000);
+      $('#loadretry').onclick = () => location.reload();
+    },
+    set(pct, text) {
+      shown = Math.max(shown, Math.min(100, Math.round(pct)));
+      $('#loadbar').firstElementChild.style.width = `${shown}%`;
+      $('#loadbar').setAttribute('aria-valuenow', shown);
+      $('#loadpct').textContent = `${shown}%`;
+      if (text) $('#loadtext').textContent = text;
+    },
+    fail(msg) {
+      clearInterval(timer);
+      $('#loading').classList.add('failed');
+      $('#loaderr').textContent = msg;
+      $('#loaderr').hidden = false;
+      $('#loadretry').hidden = false;
+      $('#loadtip').hidden = true;
+      $('#loadtext').textContent = 'Falha ao carregar';
+    },
+    done() {
+      clearInterval(timer);
+      this.set(100, 'Pronto');
+      const el = $('#loading');
+      el.classList.add('done');
+      setTimeout(() => { el.hidden = true; }, 450);
+    },
+  };
+})();
+
 export function setStatus(text) {
   $('#status').textContent = text;
 }
@@ -35,11 +82,12 @@ const FLAG_OPTIONS = [
   { icon: '✋', title: 'Nada', text: 'Mãos livres para acenar e dançar' },
   { icon: '🇧🇷', title: 'Bandeira do Brasil', text: 'Verde e amarela, para todo mundo' },
   { icon: '🚩', title: 'Bandeira do lado', text: '' }, // texto muda com o lado escolhido
-  { icon: '🪧', title: 'Cartaz', text: 'Escreva o que quiser (até 24 letras)' },
+  { icon: '🪧', title: 'Cartaz', text: 'Escreva o que quiser, até 24 caracteres' },
   { icon: '🥩', title: 'Picanha no espeto', text: 'Direto da churrasqueira da calçada' },
   { icon: '🎃', title: 'Abóbora', text: 'Moranga fresquinha da feira' },
 ];
 const STEPS = ['lado', 'personagem', 'visual', 'mao'];
+const STEP_NAMES = ['Lado', 'Personagem', 'Visual', 'Na mão'];
 const pickOf = (list) => list[Math.floor(Math.random() * list.length)];
 
 /** Monta o menu "Monte seu personagem". `profile` é alterado no lugar. */
@@ -55,7 +103,19 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
   // ---------- etapas (abas) ----------
   const tabs = [...document.querySelectorAll('.steps [role=tab]')];
   const panels = Object.fromEntries(STEPS.map((id) => [id, $(`#tab-${id}`)]));
+  const prevBtn = $('#prev');
+  const nextBtn = $('#next');
+  const nav = $('.stepnav');
+  const syncMore = () => {
+    const box = $('.panels');
+    nav.classList.toggle('more', box.scrollTop + box.clientHeight < box.scrollHeight - 6);
+  };
   const go = (id, focus = false) => {
+    const at = STEPS.indexOf(id);
+    prevBtn.hidden = at === 0;
+    nextBtn.hidden = at === STEPS.length - 1;
+    if (at > 0) prevBtn.textContent = `← ${STEP_NAMES[at - 1]}`;
+    if (at < STEPS.length - 1) nextBtn.textContent = `${STEP_NAMES[at + 1]} →`;
     tabs.forEach((t) => {
       const on = t.dataset.tab === id;
       t.setAttribute('aria-selected', on);
@@ -64,8 +124,13 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
       if (on) { t.scrollIntoView({ block: 'nearest', inline: 'center' }); if (focus) t.focus(); }
     });
     STEPS.forEach((k) => { panels[k].hidden = k !== id; });
-    panels[id].scrollTop = 0;
+    $('.panels').scrollTop = 0;
+    syncMore();
   };
+  $('.panels').addEventListener('scroll', syncMore, { passive: true });
+  window.addEventListener('resize', syncMore);
+  prevBtn.onclick = () => go(STEPS[Math.max(0, STEPS.findIndex((k) => !panels[k].hidden) - 1)]);
+  nextBtn.onclick = () => go(STEPS[Math.min(STEPS.length - 1, STEPS.findIndex((k) => !panels[k].hidden) + 1)]);
   tabs.forEach((t, i) => {
     t.onclick = () => go(t.dataset.tab);
     t.onkeydown = (e) => {
@@ -73,8 +138,10 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
       if (d) { e.preventDefault(); go(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true); }
     };
   });
-  document.querySelectorAll('[data-go]').forEach((b) => { b.onclick = () => go(b.dataset.go); });
-  tabs[0].classList.add('on');
+  document.querySelectorAll('.legal').forEach((d) => d.addEventListener('toggle', () => {
+    if (d.open) document.querySelectorAll('.legal').forEach((o) => { if (o !== d) o.open = false; });
+  }));
+  go('lado');
 
   // ---------- 1. lado ----------
   const sides = $('#sides');
@@ -193,7 +260,7 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
   nick.value = profile.nick;
   const syncNick = () => {
     $('#nickcount').textContent = `${nick.value.length}/${nick.maxLength}`;
-    $('#nickhint').textContent = nick.disabled ? 'Este é o apelido da sua conta.' : 'Em branco: entra como Visitante.';
+    $('#nickhint').hidden = !nick.disabled;
   };
   nick.addEventListener('input', () => { profile.nick = nick.value; syncNick(); onChange(); });
   nick.addEventListener('keydown', (e) => { if (e.key === 'Enter') onEnter(); });
@@ -216,6 +283,7 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
     const def = CHARACTERS[modelId(look.body, look.face)];
     $('#tint-group').hidden = !def.outfit;
     $('#visual-note').hidden = !!def.outfit;
+    syncMore();
     $('#skin-field').hidden = !def.tintable;
     $('#beard-field').hidden = !def.tintable;
 
@@ -229,7 +297,7 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
     document.querySelectorAll('.preset').forEach((n, i) => n.classList.toggle('on', presets[i].id === profile.preset));
 
     const preset = presets.find((p) => p.id === profile.preset);
-    $('#summary').innerHTML = `<i style="background:${side.color}"></i><b>${side.name}</b><span>${preset ? preset.name : 'Personalizado'} · ${BODIES[look.body]}${look.age ? ' idoso' : ''}</span>`;
+    $('#summary').innerHTML = `<i style="background:${side.color}"></i><b>${side.name}</b><span>${preset ? preset.name : `Personalizado · ${BODIES[look.body]}`}${look.age ? ' · Idoso' : ''}</span>`;
     syncNick();
   }
   refresh();
@@ -246,7 +314,9 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
 }
 
 /** HUD: chat, emotes e joystick virtual. */
-export function initHud({ onChat, onEmote, onAttack, onLeave, onSound, soundOn }) {
+export function initHud({
+  onChat, onEmote, onAttack, onReact, onWho, onFireworks, onBillboard, onLeave, onSound, soundOn,
+}) {
   const hud = $('#hud');
   const log = $('#chatlog');
   const input = $('#chatinput');
@@ -275,6 +345,44 @@ export function initHud({ onChat, onEmote, onAttack, onLeave, onSound, soundOn }
     b.addEventListener('click', () => onAttack(b.dataset.attack));
   });
   $('#leave').onclick = onLeave;
+
+  // menu de gestos (os premium aparecem com 🔒 para quem não tem)
+  const menu = $('#emotemenu');
+  let premium = false;
+  const paintMenu = () => {
+    menu.replaceChildren(...EMOTES.map((e) => {
+      const b = document.createElement('button');
+      b.dataset.emote = e.anim;
+      b.title = `${e.name}${e.key ? ` (${e.key})` : ''}${e.premium && !premium ? ' · premium' : ''}`;
+      b.textContent = e.icon;
+      if (e.premium && !premium) b.classList.add('locked');
+      b.addEventListener('click', () => { menu.hidden = true; onEmote(e.anim); });
+      return b;
+    }));
+  };
+  paintMenu();
+  $('#emotebtn').onclick = () => { menu.hidden = !menu.hidden; $('#reacts').hidden = true; };
+  $('#jumpbtn').onclick = () => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
+  $('#fogosbtn').onclick = onFireworks;
+  $('#telaobtn').onclick = onBillboard;
+
+  // reações flutuantes (7 a 0 no teclado)
+  const reacts = $('#reacts');
+  $('#reactbtn').onclick = () => { reacts.hidden = !reacts.hidden; menu.hidden = true; };
+  document.querySelectorAll('[data-react]').forEach((b) => {
+    b.addEventListener('click', () => { onReact(Number(b.dataset.react)); reacts.hidden = true; });
+  });
+
+  // lista de jogadores (Tab)
+  const who = $('#who');
+  let whoTimer = null;
+  const toggleWho = (force) => {
+    const open = force ?? who.hidden;
+    who.hidden = !open;
+    clearInterval(whoTimer);
+    if (open) { onWho(); whoTimer = setInterval(onWho, 3000); }
+  };
+  $('#whobtn').onclick = () => toggleWho();
 
   const sound = $('#sound');
   let on = soundOn;
@@ -318,6 +426,51 @@ export function initHud({ onChat, onEmote, onAttack, onLeave, onSound, soundOn }
       $('#drivebtn').hidden = watching;
     },
     isTyping: () => document.activeElement === input,
+    toggleWho,
+    prefillChat(text) { input.value = text; input.focus(); },
+    /** Itens da loja no HUD: só aparecem para quem tem unidades. */
+    setInventory(inv, canUsePremium) {
+      const f = inv.fogos || 0;
+      const t = inv.telao || 0;
+      $('#fogosbtn').hidden = !f;
+      $('#fogosbtn').textContent = `🎆 Fogos (${f})`;
+      $('#telaobtn').hidden = !t;
+      $('#telaobtn').textContent = `📺 Telão (${t})`;
+      if (premium !== canUsePremium) { premium = canUsePremium; paintMenu(); }
+    },
+    /** Mensagem paga no topo da tela de todo mundo. */
+    showBanner(nick, side, text) {
+      const el = $('#banner');
+      el.replaceChildren();
+      const who = document.createElement('b');
+      who.style.color = SIDES[side]?.color ?? '#fff';
+      who.textContent = `📺 ${nick}`;
+      el.append(who, document.createTextNode(` ${text}`));
+      el.hidden = false;
+      clearTimeout(el.timer);
+      el.timer = setTimeout(() => { el.hidden = true; }, 9000);
+    },
+    setWho(list, total) {
+      const rows = list.map(([nick, side, hits, kos]) => `<div class="row"><i style="background:${SIDES[side]?.color}"></i><span>${esc(nick)}</span><small>👊 ${hits} · ☠️ ${kos}</small></div>`).join('');
+      who.innerHTML = `<h4>Na avenida: ${total}</h4>${rows}`;
+    },
+    /** Barra de vida (só com PvP ligado) e de fôlego. */
+    setVitals({ hp, shield, pvp, stamina, tired }) {
+      const bar = $('#hpbar');
+      bar.hidden = !pvp;
+      bar.classList.toggle('shield', shield);
+      bar.firstElementChild.style.width = `${hp}%`;
+      bar.lastElementChild.textContent = shield ? `🛡 ${Math.round(hp)}` : Math.round(hp);
+      const st = $('#stbar');
+      st.firstElementChild.style.width = `${stamina}%`;
+      st.classList.toggle('tired', tired);
+      st.classList.toggle('full', stamina >= 99.5);
+    },
+    setKo(text) {
+      const el = $('#ko');
+      el.hidden = !text;
+      if (text) el.innerHTML = text;
+    },
     setEmote(anim) {
       document.querySelectorAll('[data-emote]').forEach((b) => b.classList.toggle('on', Number(b.dataset.emote) === anim));
     },
@@ -401,18 +554,33 @@ export function initModes({ onRace, onPvp, onThrow, onDrive }) {
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /** Rótulo flutuante com nome e balão de fala. */
-export function createLabel(nick, color) {
+export function createLabel(nick, color, equip = {}) {
   const el = document.createElement('div');
   el.className = 'label';
   const name = document.createElement('div');
   name.className = 'name';
   const dot = document.createElement('i');
   dot.style.background = color;
-  name.append(dot, document.createTextNode(nick));
+  const badge = document.createElement('span');
+  const text = document.createTextNode(nick);
+  name.append(dot, badge, text);
+  const style = (eq = {}) => {
+    const icon = SHOP_BY_ID[eq.badge]?.icon ?? '';
+    badge.textContent = icon ? `${icon} ` : '';
+    name.classList.toggle('vip', !!eq.vip);
+  };
+  style(equip);
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
   bubble.hidden = true;
-  el.append(bubble, name);
+  const hpbar = document.createElement('div');
+  hpbar.className = 'hpbar';
+  hpbar.hidden = true;
+  hpbar.append(document.createElement('i'));
+  const status = document.createElement('div');
+  status.className = 'status';
+  status.hidden = true;
+  el.append(bubble, name, hpbar, status);
   $('#labels').append(el);
 
   let timer;
@@ -423,6 +591,34 @@ export function createLabel(nick, color) {
       bubble.hidden = false;
       clearTimeout(timer);
       timer = setTimeout(() => { bubble.hidden = true; }, 6000);
+    },
+    setStyle: style,
+    /** Barra de vida sobre a cabeça: só aparece ferido ou protegido. */
+    setHp(hp, shield) {
+      hpbar.hidden = hp >= 100 && !shield;
+      hpbar.classList.toggle('shield', shield);
+      hpbar.firstChild.style.width = `${Math.max(0, hp)}%`;
+    },
+    /** Emoji girando sobre a cabeça (ex.: 💫 no nocaute). Vazio remove. */
+    setStatus(emoji) {
+      status.textContent = emoji || '';
+      status.hidden = !emoji;
+    },
+    /** Número flutuante (dano). */
+    pop(text, color = '#ff5a5a') {
+      const r = document.createElement('span');
+      r.className = 'dmg';
+      r.textContent = text;
+      r.style.color = color;
+      r.addEventListener('animationend', () => r.remove());
+      el.append(r);
+    },
+    react(emoji) {
+      const r = document.createElement('span');
+      r.className = 'react';
+      r.textContent = emoji;
+      r.addEventListener('animationend', () => r.remove());
+      el.append(r);
     },
     place(x, y, show) {
       if (show !== visible) { el.style.display = show ? '' : 'none'; visible = show; }

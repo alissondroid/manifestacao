@@ -155,8 +155,7 @@ export class Avatar {
   buildBody(id) {
     if (this.char) {
       this.group.remove(this.char.root);
-      this.mixer.stopAllAction();
-      Object.values(this.char.mats).forEach((m) => m.dispose());
+      this.releaseChar();
     }
     const c = createCharacter(id);
     this.char = c;
@@ -177,6 +176,14 @@ export class Avatar {
     this.mixer.update(this.t % 1.5); // dessincroniza dos outros
 
     if (c.tintable) c.meshes.Wolf3D_Teeth && (c.meshes.Wolf3D_Teeth.visible = true);
+  }
+
+  /** Libera o que o personagem atual ocupa na GPU/memória (textura dos ossos, materiais, cache do mixer). */
+  releaseChar() {
+    this.mixer.stopAllAction();
+    this.mixer.uncacheRoot(this.char.root);
+    this.char.root.traverse((o) => { if (o.isSkinnedMesh) o.skeleton.dispose(); });
+    Object.values(this.char.mats).forEach((m) => m.dispose());
   }
 
   setLook(look) {
@@ -216,6 +223,8 @@ export class Avatar {
     c.bones.hips.scale.setScalar(hs);
     this.height = c.height * hs;
     this.buildAccessories(equip, side);
+    this.buildBack(equip, side);
+    this.buildFx(equip, side);
     this.buildHeld(look, equip, side);
     if (c.outfit) this.buildDecals(equip, side, look.custom?.shirt);
     if (elderly) {
@@ -288,6 +297,52 @@ export class Avatar {
         { geo: new THREE.CylinderGeometry(0.106, 0.106, 0.03, 18), color: side.color, pos: [0, 0.036, 0] },
       ])), b.head, [hx, headTop - 0.065, hz]); // aba ~4,5 cm abaixo do topo, copa cobre a cabeça
     }
+    const ringY = headTop - 0.07; // altura da testa
+    if (equip.head === 'cartola') {
+      this.attach(sized(g([
+        { geo: new THREE.CylinderGeometry(0.095, 0.1, 0.2, 18), color: '#161616', pos: [0, 0.12, 0] },
+        { geo: new THREE.CylinderGeometry(0.17, 0.17, 0.012, 24), color: '#161616', pos: [0, 0.02, 0] },
+        { geo: new THREE.CylinderGeometry(0.1, 0.1, 0.04, 18), color: side.color, pos: [0, 0.045, 0] },
+      ])), b.head, [hx, headTop - 0.055, hz]);
+    } else if (equip.head === 'capacete') {
+      this.attach(sized(g([
+        { geo: new THREE.SphereGeometry(0.12, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), color: '#f2c20f', pos: [0, 0, 0] },
+        { geo: new THREE.CylinderGeometry(0.15, 0.15, 0.012, 22), color: '#f2c20f', pos: [0, 0.004, 0.015] },
+        { geo: new THREE.BoxGeometry(0.03, 0.02, 0.2), color: '#e0ac00', pos: [0, 0.12, 0] },
+      ])), b.head, [hx, headTop - 0.11, hz]);
+    } else if (equip.head === 'bandana') {
+      this.attach(sized(g([
+        { geo: new THREE.TorusGeometry(0.108, 0.013, 6, 24).rotateX(Math.PI / 2), color: side.color, pos: [0, 0, 0] },
+        { geo: new THREE.BoxGeometry(0.04, 0.05, 0.02), color: side.color, pos: [0.1, -0.02, -0.07] },
+        { geo: new THREE.BoxGeometry(0.04, 0.05, 0.02), color: side.color, pos: [0.12, -0.05, -0.05] },
+      ])), b.head, [hx, ringY, hz]);
+    } else if (equip.head === 'coroa') {
+      const spikes = [];
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        spikes.push({ geo: new THREE.ConeGeometry(0.02, 0.07, 6), color: '#f5c518', pos: [Math.sin(a) * 0.09, 0.05, Math.cos(a) * 0.09] });
+      }
+      this.attach(sized(g([
+        { geo: new THREE.CylinderGeometry(0.095, 0.095, 0.05, 20, 1, true), color: '#f5c518', pos: [0, 0, 0] },
+        ...spikes,
+      ])), b.head, [hx, headTop - 0.04, hz]);
+    }
+    if (equip.face === 'oculos-aviador') {
+      this.attach(g([
+        { geo: new THREE.BoxGeometry(0.06, 0.05, 0.01), color: '#3b2a12', pos: [0.04, -0.005, 0] },
+        { geo: new THREE.BoxGeometry(0.06, 0.05, 0.01), color: '#3b2a12', pos: [-0.04, -0.005, 0] },
+        { geo: new THREE.BoxGeometry(0.1, 0.006, 0.012), color: '#d4a017', pos: [0, 0.018, 0] },
+        { geo: new THREE.BoxGeometry(0.006, 0.006, 0.11), color: '#d4a017', pos: [0.075, 0.012, -0.055] },
+        { geo: new THREE.BoxGeometry(0.006, 0.006, 0.11), color: '#d4a017', pos: [-0.075, 0.012, -0.055] },
+      ]), b.head, [0, 0.075, 0.1]);
+    } else if (equip.face === 'mascara-festa') {
+      this.attach(g([
+        { geo: new THREE.BoxGeometry(0.17, 0.05, 0.012), color: '#5b2a86', pos: [0, 0, 0] },
+        { geo: new THREE.BoxGeometry(0.17, 0.008, 0.014), color: '#f5c518', pos: [0, 0.028, 0] },
+        { geo: new THREE.BoxGeometry(0.04, 0.09, 0.01), color: '#e11d74', pos: [0.1, 0.04, -0.01] },
+        { geo: new THREE.BoxGeometry(0.04, 0.09, 0.01), color: '#2dd4bf', pos: [0.115, 0.03, -0.01] },
+      ]), b.head, [0, 0.076, 0.1]);
+    }
     if (equip.face === 'oculos') {
       this.attach(g([
         { geo: new THREE.BoxGeometry(0.058, 0.036, 0.01), color: '#0a0a0a', pos: [0.04, 0, 0] },
@@ -297,6 +352,73 @@ export class Avatar {
         { geo: new THREE.BoxGeometry(0.006, 0.008, 0.11), color: '#0a0a0a', pos: [-0.075, 0.008, -0.055] },
       ]), b.head, [0, 0.075, 0.1]);
     }
+  }
+
+  buildBack(equip, side) {
+    const b = this.char.bones;
+    const mk = (parts) => {
+      const grp = new THREE.Group();
+      for (const { geo, color, pos, rot, metal } of parts) {
+        const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: metal ?? 0, side: THREE.DoubleSide }));
+        m.position.set(...pos);
+        if (rot) m.rotation.set(...rot);
+        m.castShadow = true;
+        grp.add(m);
+      }
+      return grp;
+    };
+    if (equip.back === 'mochila') {
+      this.attach(mk([
+        { geo: new THREE.BoxGeometry(0.26, 0.34, 0.12), color: '#2f4f2f', pos: [0, 0, 0] },
+        { geo: new THREE.BoxGeometry(0.2, 0.14, 0.04), color: '#3f6b3f', pos: [0, -0.06, -0.075] },
+        { geo: new THREE.BoxGeometry(0.03, 0.3, 0.14), color: '#1d2d1d', pos: [0.1, 0.02, 0.0] },
+        { geo: new THREE.BoxGeometry(0.03, 0.3, 0.14), color: '#1d2d1d', pos: [-0.1, 0.02, 0.0] },
+      ]), b.spine2, [0, 0.02, -0.19]);
+    } else if (equip.back === 'capa') {
+      this.attach(mk([
+        { geo: new THREE.PlaneGeometry(0.4, 0.85), color: side.color, pos: [0, -0.34, 0], rot: [0.12, 0, 0] },
+        { geo: new THREE.BoxGeometry(0.34, 0.03, 0.04), color: '#f5c518', pos: [0, 0.08, 0.03] },
+      ]), b.spine2, [0, 0.16, -0.17]);
+    } else if (equip.back === 'asas') {
+      const wing = (sx) => {
+        const parts = [];
+        for (let i = 0; i < 4; i++) parts.push({ geo: new THREE.BoxGeometry(0.34 - i * 0.04, 0.05, 0.02), color: '#fafafa', pos: [sx * (0.2 + i * 0.045), 0.17 - i * 0.075, 0], rot: [0, 0, sx * (0.35 + i * 0.1)] });
+        parts.push({ geo: new THREE.BoxGeometry(0.14, 0.1, 0.02), color: '#fafafa', pos: [sx * 0.1, 0.02, 0] });
+        return mk(parts);
+      };
+      const w = new THREE.Group();
+      const l = wing(1); const r = wing(-1);
+      l.rotation.y = 0.5; r.rotation.y = -0.5;
+      w.add(l, r);
+      this.attach(w, b.spine2, [0, 0.12, -0.2]);
+    }
+  }
+
+  buildFx(equip, side) {
+    if (this.fx) { this.group.remove(this.fx.group); this.fx.group.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); }); this.fx = null; }
+    const kind = equip.fx;
+    if (!kind) return;
+    const color = kind === 'aura-dourada' ? '#ffd54a' : side.color;
+    const group = new THREE.Group();
+    const mat = (op) => new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: op, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+    });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.62, 40).rotateX(-Math.PI / 2), mat(0.7));
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.5, 40).rotateX(-Math.PI / 2), mat(0.18));
+    ring.position.y = disc.position.y = 0.04;
+    group.add(ring, disc);
+    const sparks = [];
+    if (kind === 'aura-dourada') {
+      for (let i = 0; i < 8; i++) {
+        const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.03), mat(0.9));
+        m.userData.phase = i / 8;
+        m.userData.ang = (i / 8) * Math.PI * 2;
+        sparks.push(m);
+        group.add(m);
+      }
+    }
+    this.group.add(group);
+    this.fx = { group, ring, disc, sparks };
   }
 
   buildDecals(equip, side, shirtDesign) {
@@ -420,6 +542,7 @@ export class Avatar {
       this.actions.walk.timeScale = THREE.MathUtils.clamp(speed / 2.2, 0.6, 2.4) * (this.elderly ? 0.75 : 1);
       this.actions.run.timeScale = THREE.MathUtils.clamp(speed / 5.5, 0.8, 1.6);
     } else if (anim === 'dance') this.play('dance');
+    else if ((anim === 'dance2' || anim === 'call' || anim === 'yes' || anim === 'no') && this.actions[anim]) this.play(anim);
     else if (anim === 'clap' && this.actions.clap) this.play('clap');
     else if (anim === 'wave' && this.actions.wave) this.play('wave');
     else this.play('idle');
@@ -468,6 +591,18 @@ export class Avatar {
       aimBone(b.leftArm, b.leftForeArm, world(0.75, 0.3 + 0.5 * k, -0.2), k);
       aimBone(b.rightArm, b.rightForeArm, world(-0.75, 0.3 + 0.5 * k, -0.2), k);
     }
+    if (this.fx) {
+      const f = this.fx;
+      f.ring.scale.setScalar(1 + Math.sin(t * 3) * 0.06);
+      f.disc.material.opacity = 0.14 + Math.sin(t * 2.2) * 0.05;
+      for (const sp of f.sparks) {
+        const k = (t * 0.4 + sp.userData.phase) % 1;
+        const a = sp.userData.ang + t * 1.2;
+        sp.position.set(Math.sin(a) * 0.5, 0.1 + k * 1.7, Math.cos(a) * 0.5);
+        sp.material.opacity = 0.9 * Math.sin(k * Math.PI);
+        sp.rotation.y = t * 3;
+      }
+    }
     if (this.baton) {
       if (t > this.batonUntil) this.baton.visible = false;
       else updateBaton(this.baton, b.rightForeArm, b.rightHand, this.group);
@@ -499,9 +634,23 @@ export class Avatar {
   }
 
   /** Levou um golpe: cambaleia (clipe de reação; atropelamento usa o de ser jogado para trás). */
-  staggerNow(kind = 'punch') {
-    if (this.actions.hit) this.playOnce(kind === 'car' && this.actions.knockback ? 'knockback' : (Math.random() < 0.5 ? 'hit' : 'hitHead'), 0.06);
-    else this.stun = 0.7;
+  staggerNow(kind = 'punch', hp = 100) {
+    const A = this.actions;
+    if (!A.hit) { this.stun = 0.7; return; }
+    const fall = A.knockback ? 'knockback' : 'hit';
+    let clip = 'hitHead'; // soco, cassetete e tomate: cabeça vai para trás
+    let speed = 1;
+    if (kind === 'car') clip = fall; // atropelado: é jogado para trás
+    else if (kind === 'kick') clip = hp < 40 ? fall : 'hit'; // chute no peito
+    else if (kind === 'baton') clip = hp < 55 ? fall : 'hitHead';
+    else if (kind === 'tomato') speed = 1.35; // susto rápido
+    else if (kind === 'punch' && hp < 30) clip = fall;
+    this.playOnce(clip, 0.05, speed);
+  }
+
+  /** Gesticula ao falar no chat. */
+  talkNow() {
+    if (this.actions.talk && !this.once && (this.current === 'idle')) this.playOnce('talk', 0.2, 1);
   }
 
   /** Arremesso (tomate, picanha, abóbora). */
@@ -516,9 +665,8 @@ export class Avatar {
   dispose() {
     this.group.parent?.remove(this.group);
     this.clearAcc();
-    if (this.char) {
-      this.mixer.stopAllAction();
-      Object.values(this.char.mats).forEach((m) => m.dispose());
-    }
+    if (this.fx) { this.fx.group.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); }); this.fx = null; }
+    if (this.char) this.releaseChar();
+    if (this.baton) { this.group.remove(this.baton); this.baton.traverse((o) => o.geometry?.dispose()); this.baton = null; }
   }
 }
