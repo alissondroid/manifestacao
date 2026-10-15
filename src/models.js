@@ -12,13 +12,36 @@ import { MODELS } from '../shared/config.js';
 
 // `direct`: o esqueleto é o padrão do Mixamo e a animação é aplicada como diferença de rotação local
 // em relação à pose de repouso (o retargetClip não funcionou com esses arquivos).
+// `outfit`: as malhas da roupa original viram camiseta e bermuda (ver outfitRegions): `top` é a parte
+// de cima, `bottom` a de baixo, `mixed` tem as duas (o que é azul na textura é o short jeans) e
+// `hide` some. `skinFrom`: malha do corpo de onde sai o tom de pele das mangas e canelas repintadas.
+// `detail`: quanto do relevo da textura original fica na roupa repintada.
+// `drop`: peças soltas da parte de cima que somem, pelo número de vértices de cada uma (no terno do
+// Ready Player Me: gravata-borboleta 220 e 63, flor 99 e 13, botões 41 e fivela 24).
+// Sem `outfit` (Lula, Renan, Bolsonaro), o personagem fica com a roupa original e não troca de roupa.
 export const CHARACTERS = {
-  rpm: { file: 'readyplayer.me.glb', prefix: '', tintable: true, direct: true },
+  rpm: {
+    file: 'readyplayer.me.glb', prefix: '', tintable: true, direct: true, detail: 0.1,
+    outfit: { top: ['Wolf3D_Outfit_Top'], bottom: ['Wolf3D_Outfit_Bottom'] },
+    drop: [220, 63, 99, 13, 41, 24],
+  },
   michelle: { file: 'Michelle.glb', prefix: 'mixamorig', direct: true },
-  ch16: { file: 'ch16.glb', prefix: 'mixamorig', direct: true },
-  ch33: { file: 'ch33.glb', prefix: 'mixamorig', direct: true },
-  ch08: { file: 'ch08.glb', prefix: 'mixamorig', direct: true },
-  ch02: { file: 'ch02.glb', prefix: 'mixamorig', direct: true },
+  ch16: {
+    file: 'ch16.glb', prefix: 'mixamorig', direct: true, skinFrom: 'Ch16_Body1',
+    outfit: { top: ['Ch16_Shirt'], bottom: ['Ch16_Pants'] },
+  },
+  ch33: {
+    file: 'ch33.glb', prefix: 'mixamorig', direct: true, skinFrom: 'Ch33_Body',
+    outfit: { top: ['Ch33_Suit'], bottom: ['Ch33_Pants', 'Ch33_Belt'], hide: ['Ch33_Shirt', 'Ch33_Tie'] },
+  },
+  ch08: {
+    file: 'ch08.glb', prefix: 'mixamorig', direct: true, skinFrom: 'Ch08_Body',
+    outfit: { top: ['Ch08_Hoodie'], bottom: ['Ch08_Pants'] },
+  },
+  ch02: {
+    file: 'ch02.glb', prefix: 'mixamorig', direct: true, skinFrom: 'Ch02_Body',
+    outfit: { mixed: ['Ch02_Cloth'] },
+  },
   // montados em src/dev-rig.js sobre o esqueleto do ch33 (ver README)
   renan: { file: 'renan.glb', prefix: 'mixamorig', direct: true },
   bolsonaro: { file: 'bolsonaro.glb', prefix: 'mixamorig', direct: true },
@@ -31,7 +54,185 @@ export const models = {
   clips: {},
   height: {},
   head: {}, // { top, radius }: topo e raio da cabeça (com cabelo) em relação ao osso da cabeça, para boné e chapéu
+  skin: {}, // tom de pele da textura de cada modelo do Mixamo (o do Ready Player Me vem do visual)
 };
+
+// ---------- roupa simples: camiseta e bermuda ----------
+
+// Região de cada vértice da roupa: 0 camiseta, 1 bermuda, 2 pele (mangas e canelas), 3 escondido (capuz).
+const ARM_SKIN = /(ForeArm|Hand)/;
+const LEG_SKIN = /(Left|Right)(Leg|Foot|Toe)/; // canela e pé; "LeftUpLeg" (coxa) não casa
+const HEAD = /Head/;
+
+const pixelCache = new Map();
+/** Pixels de uma textura (lidos uma vez, para amostrar cores na carga). */
+function texPixels(tex) {
+  if (pixelCache.has(tex.uuid)) return pixelCache.get(tex.uuid);
+  const { image } = tex;
+  const c = document.createElement('canvas');
+  c.width = image.width;
+  c.height = image.height;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(image, 0, 0);
+  const px = { d: ctx.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, flipY: tex.flipY };
+  pixelCache.set(tex.uuid, px);
+  return px;
+}
+
+/** Cor (sRGB, 0 a 255) da textura no UV do vértice i. */
+function texel(px, uv, i) {
+  const x = Math.min(px.w - 1, Math.max(0, Math.floor((uv.getX(i) % 1 + 1) % 1 * px.w)));
+  const v = px.flipY ? 1 - uv.getY(i) : uv.getY(i);
+  const y = Math.min(px.h - 1, Math.max(0, Math.floor(v * px.h)));
+  const p = (y * px.w + x) * 4;
+  return [px.d[p], px.d[p + 1], px.d[p + 2]];
+}
+
+const _col = new THREE.Color();
+const lum = ([r, g, b]) => {
+  _col.setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace);
+  return 0.2126 * _col.r + 0.7152 * _col.g + 0.0722 * _col.b;
+};
+
+/**
+ * Marca a região de cada vértice da roupa original pelos ossos que o movem: o que segue o antebraço
+ * e a mão vira braço à mostra (manga curta), o que segue a canela vira perna à mostra (bermuda) e o
+ * que segue a cabeça (capuz) ou desce mais de 12 cm abaixo do quadril (abas do paletó) some.
+ * Lê as posições na pose de repouso, então roda na carga. Guarda também o brilho médio da textura
+ * em cada região, para o shader manter as dobras do tecido sem escurecer a cor escolhida.
+ */
+function outfitRegions(mesh, role, drop) {
+  const g = mesh.geometry;
+  if (g.attributes.outfitRegion) return;
+  const names = mesh.skeleton.bones.map((b) => b.name);
+  const si = g.attributes.skinIndex;
+  const sw = g.attributes.skinWeight;
+  const uv = g.attributes.uv;
+  const px = mesh.material.map && uv ? texPixels(mesh.material.map) : null;
+  const n = g.attributes.position.count;
+  const region = new Float32Array(n);
+  mesh.updateMatrixWorld(true);
+  const hem = mesh.skeleton.bones.find((b) => /Hips$/.test(b.name)).getWorldPosition(new THREE.Vector3()).y - 0.12;
+  const p = new THREE.Vector3();
+  const part = role === 'top' && drop ? partSizes(g) : null;
+  const sum = [0, 0, 0];
+  const cnt = [0, 0, 0];
+  for (let i = 0; i < n; i++) {
+    let arm = 0;
+    let leg = 0;
+    let head = 0;
+    for (let k = 0; k < 4; k++) {
+      const name = names[si.getComponent(i, k)];
+      const w = sw.getComponent(i, k);
+      if (ARM_SKIN.test(name)) arm += w;
+      else if (LEG_SKIN.test(name)) leg += w;
+      else if (HEAD.test(name)) head += w;
+    }
+    const c = px ? texel(px, uv, i) : null;
+    let r = role === 'bottom' ? 1 : 0;
+    if (role === 'mixed' && c && c[2] > c[0]) r = 1; // jeans azul no meio do moletom
+    if (r === 0) {
+      p.fromBufferAttribute(g.attributes.position, i);
+      mesh.applyBoneTransform(i, p);
+      p.applyMatrix4(mesh.matrixWorld);
+    }
+    if (r === 0 && (head > 0.5 || p.y < hem || part?.[i] && drop.includes(part[i]))) r = 3;
+    else if (r === 0 && arm > 0.5) r = 2;
+    else if (r === 1 && leg > 0.5) r = 2;
+    region[i] = r;
+    if (c && r < 3) { sum[r] += lum(c); cnt[r] += 1; }
+  }
+  g.setAttribute('outfitRegion', new THREE.BufferAttribute(region, 1));
+  g.userData.outfitRef = new THREE.Vector3(...sum.map((s, i) => (cnt[i] ? s / cnt[i] : 1)));
+}
+
+/** Número de vértices da peça (parte conectada da malha, com vértices soldados pela posição) de cada vértice. */
+function partSizes(g) {
+  const pos = g.attributes.position;
+  const n = pos.count;
+  const weld = new Int32Array(n);
+  const seen = new Map();
+  for (let i = 0; i < n; i++) {
+    const k = `${pos.getX(i).toFixed(4)},${pos.getY(i).toFixed(4)},${pos.getZ(i).toFixed(4)}`;
+    if (!seen.has(k)) seen.set(k, i);
+    weld[i] = seen.get(k);
+  }
+  const parent = Int32Array.from({ length: n }, (_, i) => i);
+  const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+  const idx = g.index.array;
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = find(weld[idx[t]]);
+    parent[find(weld[idx[t + 1]])] = a;
+    parent[find(weld[idx[t + 2]])] = a;
+  }
+  const count = new Map();
+  const root = Int32Array.from({ length: n }, (_, i) => find(weld[i]));
+  for (const r of root) count.set(r, (count.get(r) ?? 0) + 1);
+  return Array.from(root, (r) => count.get(r));
+}
+
+/** Tom de pele médio da textura, nos vértices das mãos da malha do corpo. */
+function sampleSkin(mesh) {
+  const g = mesh.geometry;
+  const map = mesh.material.map;
+  if (!map || !g.attributes.uv) return new THREE.Color('#c98d62');
+  const px = texPixels(map);
+  const names = mesh.skeleton.bones.map((b) => b.name);
+  const si = g.attributes.skinIndex;
+  const sw = g.attributes.skinWeight;
+  const acc = [0, 0, 0];
+  let n = 0;
+  for (let i = 0; i < g.attributes.position.count; i++) {
+    let w = 0;
+    for (let k = 0; k < 4; k++) if (/Hand$/.test(names[si.getComponent(i, k)])) w += sw.getComponent(i, k);
+    if (w < 0.9) continue;
+    const c = texel(px, g.attributes.uv, i);
+    acc[0] += c[0]; acc[1] += c[1]; acc[2] += c[2];
+    n += 1;
+  }
+  if (!n) return new THREE.Color('#c98d62');
+  return new THREE.Color().setRGB(acc[0] / n / 255, acc[1] / n / 255, acc[2] / n / 255, THREE.SRGBColorSpace);
+}
+
+/**
+ * Material da roupa repintada: cada região ganha a cor do `outfit` (camiseta, bermuda, pele), com um
+ * pouco do relevo da textura original. As cores são referências: mudar `outfit.top` muda a camiseta.
+ */
+function outfitMaterial(src, outfit, ref, detail = 0.35) {
+  const m = src.clone();
+  m.color.set('#ffffff');
+  // tecido liso: sem os mapas que desenham lapelas, colete e botões de metal do terno
+  m.normalMap = m.aoMap = m.roughnessMap = m.metalnessMap = m.emissiveMap = null;
+  m.metalness = 0;
+  m.roughness = 0.85;
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uOutfit = { value: [outfit.top, outfit.bottom, outfit.skin] };
+    sh.uniforms.uOutfitRef = { value: ref };
+    sh.uniforms.uOutfitDetail = { value: detail };
+    // a região vai interpolada (uma por canal) e o pixel fica com a mais forte: a divisa passa pelo
+    // meio do triângulo, mesmo nos compridos (abas do paletó), em vez de seguir um vértice só
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float outfitRegion;\nvarying vec4 vOutfit;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvOutfit = vec4(equal(vec4(outfitRegion), vec4(0.0, 1.0, 2.0, 3.0)));');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec4 vOutfit;\nuniform vec3 uOutfit[3];\nuniform vec3 uOutfitRef;\nuniform float uOutfitDetail;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+  if (vOutfit.w > 0.5) discard;
+  int outfitIdx = vOutfit.x >= vOutfit.y && vOutfit.x >= vOutfit.z ? 0 : vOutfit.y >= vOutfit.z ? 1 : 2;
+  float outfitRef = outfitIdx == 0 ? uOutfitRef.x : outfitIdx == 1 ? uOutfitRef.y : uOutfitRef.z;
+  float outfitLum = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+  diffuseColor.rgb = uOutfit[outfitIdx] * mix(1.0, clamp(outfitLum / max(outfitRef, 0.001), 0.6, 1.3), uOutfitDetail);`);
+  };
+  m.customProgramCacheKey = () => 'outfit';
+  return m;
+}
+
+/** Malha (não o nó pai) com esse nome. */
+function meshByName(root, name) {
+  let found = null;
+  root.traverse((o) => { if (!found && o.isMesh && o.name === name) found = o; });
+  return found;
+}
 
 /** Mede a cabeça pelos vértices presos ao osso Head (na pose de ligação). */
 function measureHead(root, prefix) {
@@ -126,7 +327,20 @@ export async function loadModels() {
     models.height[id] = box.max.y - box.min.y;
     models.head[id] = measureHead(root, CHARACTERS[id].prefix);
     skins[id] = id === 'rpm' ? findSkinned(root, 'Wolf3D_Body') : findSkinned(root);
+    const { outfit, skinFrom, drop } = CHARACTERS[id];
+    for (const [role, names] of Object.entries(outfit ?? {})) {
+      if (role === 'hide') continue;
+      for (const name of names) {
+        const m = meshByName(root, name);
+        if (m) outfitRegions(m, role, drop);
+      }
+    }
+    if (skinFrom) {
+      const body = meshByName(root, skinFrom);
+      if (body) models.skin[id] = sampleSkin(body);
+    }
   });
+  pixelCache.clear(); // os pixels só servem para medir na carga
 
   const ualSkin1 = findSkinned(ual1.scene);
   const ualSkin2 = findSkinned(ual2.scene);
@@ -470,8 +684,6 @@ export function createCharacter(id) {
       m.material = m.material.clone();
       mats[key] = m.material;
     };
-    tint('Wolf3D_Outfit_Top', 'top');
-    tint('Wolf3D_Outfit_Bottom', 'bottom');
     tint('Wolf3D_Head', 'skinHead');
     tint('Wolf3D_Body', 'skinBody');
   } else {
@@ -483,10 +695,26 @@ export function createCharacter(id) {
     }
   }
 
+  // camiseta e bermuda: cores trocadas por quem usa (avatar.js, crowd.js); a pele começa no tom da textura
+  let outfit = null;
+  if (def.outfit) {
+    outfit = { top: new THREE.Color('#f4f4f2'), bottom: new THREE.Color('#35507a'), skin: (models.skin[id] ?? new THREE.Color('#c98d62')).clone() };
+    for (const [role, names] of Object.entries(def.outfit)) {
+      for (const name of names) {
+        const m = meshes[name];
+        if (!m) continue;
+        if (role === 'hide') m.visible = false;
+        else m.material = outfitMaterial(m.material, outfit, m.geometry.userData.outfitRef, def.detail);
+      }
+    }
+  }
+
   return {
     id,
     kind: MODELS.female.includes(id) ? 'female' : 'male',
     tintable: !!def.tintable,
+    outfit,
+    skinTone: models.skin[id] ?? null,
     root,
     skin: id === 'rpm' ? findSkinned(root, 'Wolf3D_Body') : findSkinned(root),
     meshes,

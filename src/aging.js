@@ -37,6 +37,7 @@ export function ageCharacter(char) {
     const m = mats[key];
     if (m) m.color.lerp(new THREE.Color('#d8d2cc'), 0.25); // pele mais pálida
   }
+  if (char.tintable && char.outfit) char.outfit.skin.lerp(new THREE.Color('#d8d2cc'), 0.25); // braços e canelas também
 }
 
 /** Óculos de leitura finos (grupo a ser preso ao osso da cabeça). */

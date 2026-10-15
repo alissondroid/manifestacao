@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SIDES, SKINS, MODELS, WORLD } from '../shared/config.js';
 import { createCharacter } from './models.js';
-import { grayMap, aimBone, HEIGHT_SCALE } from './avatar.js';
+import { aimBone, HEIGHT_SCALE } from './avatar.js';
 import { flagTexture } from './textures.js';
 import { picanhaSkewerGeometry, propMaterial } from './props.js';
 import {
@@ -89,11 +89,13 @@ export function createCrowd(scene, rng, avoid, count = 110) {
       const tint = new THREE.Color(skin.r / BASE_SKIN.r, skin.g / BASE_SKIN.g, skin.b / BASE_SKIN.b);
       c.mats.skinHead.color.copy(tint);
       c.mats.skinBody.color.copy(tint);
-      for (const key of ['top', 'bottom']) if (c.mats[key]?.map) c.mats[key].map = grayMap(c.mats[key].map);
-      c.mats.top.color.set(rng() < 0.85 ? pick(SHIRT_BY_SIDE[side]) : pick(SHIRT_BY_SIDE[3]));
-      c.mats.bottom.color.set(pick(PANTS_COLORS));
+      c.outfit.skin.copy(skin);
       if (c.meshes.Wolf3D_Beard) c.meshes.Wolf3D_Beard.visible = rng() < 0.5;
       for (const name of HIDE_FAR) if (c.meshes[name]) c.meshes[name].visible = false;
+    }
+    if (c.outfit) { // camiseta nas cores do lado e bermuda
+      c.outfit.top.set(rng() < 0.85 ? pick(SHIRT_BY_SIDE[side]) : pick(SHIRT_BY_SIDE[3]));
+      c.outfit.bottom.set(pick(PANTS_COLORS));
     }
     let cane = null;
     if (elderly) {

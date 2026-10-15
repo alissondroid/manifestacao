@@ -1,7 +1,7 @@
 import {
   SIDES, SHIRTS, SKINS, BODIES, AGES, MODELS, HEIGHTS, BEARDS, PANTS, RACE,
 } from '../shared/config.js';
-import { modelId } from './models.js';
+import { CHARACTERS, modelId } from './models.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -131,7 +131,7 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
       const b = el('button', 'sw');
       b.type = 'button';
       b.style.background = c;
-      b.setAttribute('aria-label', `${key === 'skin' ? 'Pele' : 'Camisa'} ${i + 1}`);
+      b.setAttribute('aria-label', `${key === 'skin' ? 'Pele' : 'Camiseta'} ${i + 1}`);
       b.onclick = () => { look[key] = i; profile.preset = null; refresh(); onChange(); };
       $(`#sw-${key}`).append(b);
     });
@@ -211,10 +211,13 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
     if (look.face >= MODELS[look.body === 1 ? 'female' : 'male'].length) look.face = 0;
     renderFaces();
 
-    // só o modelo do Ready Player Me aceita tingir pele, camisa e calça
-    const tintable = modelId(look.body, look.face) === 'rpm';
-    $('#tint-group').hidden = !tintable;
-    $('#visual-note').hidden = tintable;
+    // camiseta e bermuda em todos os personagens comuns; pele e barba só no Ready Player Me;
+    // os políticos ficam com a roupa original
+    const def = CHARACTERS[modelId(look.body, look.face)];
+    $('#tint-group').hidden = !def.outfit;
+    $('#visual-note').hidden = !!def.outfit;
+    $('#skin-field').hidden = !def.tintable;
+    $('#beard-field').hidden = !def.tintable;
 
     const side = SIDES[profile.side];
     FLAG_OPTIONS[2].text = `${side.name}, nas cores do lado`;

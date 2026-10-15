@@ -27,11 +27,12 @@ export const HAIRS = ['#16120f', '#3b2616', '#6b4423', '#b98a3e', '#8a3b1e', '#b
 export const BEARDS = ['Sem barba', 'Bigode', 'Barba'];
 export const SHIRTS = ['#f4f4f2', '#1f2933', '#f2c20f', '#1e8a47', '#d7192b', '#2f5fbf', '#e86aa6'];
 export const TOPS = ['Camiseta', 'Regata'];
+// Cor da bermuda (todos os personagens comuns usam camiseta e bermuda).
 export const PANTS = [
-  { name: 'Jeans', color: '#35507a', len: 'long' },
-  { name: 'Bermuda', color: '#b9a37c', len: 'knee' },
-  { name: 'Calça preta', color: '#20252b', len: 'long' },
-  { name: 'Short jeans', color: '#4b6b9c', len: 'short' },
+  { name: 'Jeans', color: '#35507a' },
+  { name: 'Cáqui', color: '#b9a37c' },
+  { name: 'Preta', color: '#20252b' },
+  { name: 'Jeans claro', color: '#4b6b9c' },
 ];
 export const FLAGS = ['Sem bandeira', 'Bandeira do Brasil', 'Bandeira do candidato', 'Cartaz', 'Picanha no espeto', 'Abóbora'];
 

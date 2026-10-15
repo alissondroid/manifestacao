@@ -32,7 +32,7 @@ Variáveis do servidor (arquivo `.env`, veja `.env.example`): `PORT`, `MAX_PLAYE
 | `src/aging.js` | Idosos: sem gorro e barba grisalha no homem, pele mais pálida, óculos de leitura, tronco curvado, bengala na mão direita e passo mais lento (não há modelos de idosos; são os mesmos corpos envelhecidos) |
 | `src/crowd.js` | Multidão de 110 figurantes com os mesmos modelos humanos (20% idosos) (cada um com seu esqueleto e animação; quem está a mais de 55 m anima a 1/3 da taxa), agrupada por lado com as cores de camisa de cada um |
 | `src/models.js` | Carrega os modelos humanos glTF (`public/models`), retargeta as animações do Mixamo para os dois corpos e clona personagens com materiais próprios |
-| `src/avatar.js` | Avatar com modelo humano real animado por `AnimationMixer` (parado, andando, correndo, dançando; aceno por cinemática nos ossos do braço). Corpo masculino aceita pele, camisa, calça e barba; os dois aceitam a opção Idoso; acessórios da loja, bandeira e cartaz seguem os ossos |
+| `src/avatar.js` | Avatar com modelo humano real animado por `AnimationMixer` (parado, andando, correndo, dançando; aceno por cinemática nos ossos do braço). Os personagens comuns vestem camiseta e bermuda com cores à escolha (o Rosto 1 masculino também troca pele e barba); Lula, Renan e Bolsonaro ficam com a roupa original e não trocam de roupa; todos aceitam a opção Idoso; acessórios da loja, bandeira e cartaz seguem os ossos |
 | `server/db.js` | SQLite embutido do Node (`node:sqlite`): usuários, sessões, pedidos, itens e equipados |
 | `server/auth.js` | Senhas com scrypt, sessões por cookie HttpOnly, limite de tentativas, validações |
 | `server/api.js` | Rotas HTTP: conta, loja, checkout, retorno do pagamento, webhook e checkout simulado |
@@ -59,7 +59,7 @@ O servidor limita a velocidade, recorta a posição ao mapa, sanitiza textos e a
 ## Contas e loja (modo de teste)
 
 - **Conta:** e-mail, apelido único e senha (mín. 8). A sessão fica num cookie `HttpOnly; SameSite=Lax` (30 dias), no banco só o hash do token. Quem tem conta joga com o apelido dela; convidados continuam sem cadastro, mas não podem usar o apelido de uma conta.
-- **Itens:** camisa amarela, camisa do lado (número, círculo-A ou "sem partido" no peito e nas costas), camisa simples (cor à escolha) e "sua camisa" (cor, símbolo e texto no peito e nas costas, só no Rosto 1 masculino), boné do time, chapéu de palha, óculos escuros e bandeira gigante (catálogo em `shared/config.js`, preços em centavos de BRL). O que está equipado vem do banco, nunca do cliente, e muda ao vivo para quem está vendo (mensagem `look`).
+- **Itens:** camisa amarela, camisa do lado (número, círculo-A ou "sem partido" no peito e nas costas), camisa simples (cor à escolha) e "sua camisa" (cor, símbolo e texto no peito e nas costas); as camisas não valem para Lula, Renan e Bolsonaro, boné do time, chapéu de palha, óculos escuros e bandeira gigante (catálogo em `shared/config.js`, preços em centavos de BRL). O que está equipado vem do banco, nunca do cliente, e muda ao vivo para quem está vendo (mensagem `look`).
 - **Pagamento sem chave:** provedor **simulado**, uma página local marcada como teste com "Simular Pix pago", "Simular cartão aprovado" e "Cancelar". Nada é cobrado.
 - **Pagamento Stripe (teste):** copie `.env.example` para `.env` e preencha `STRIPE_SECRET_KEY` com uma chave `sk_test_…`. O servidor cria uma sessão do Stripe Checkout em BRL sem fixar o método, então aparecem os ativos no Dashboard (ative o **Pix** em Configurações > Métodos de pagamento). Chaves `sk_live_` são recusadas, a menos que `ALLOW_LIVE_PAYMENTS=1`.
 - **Entrega do item:** pelo webhook `POST /api/stripe/webhook` (eventos `checkout.session.completed` com pagamento confirmado e `checkout.session.async_payment_succeeded`, este é o do Pix), com assinatura verificada por `STRIPE_WEBHOOK_SECRET`. Ao voltar do checkout o cliente também consulta o pedido, então funciona mesmo antes do webhook chegar. A entrega é idempotente.
@@ -68,16 +68,16 @@ O servidor limita a velocidade, recorta a posição ao mapa, sanitiza textos e a
 
 ## Modelos 3D e créditos
 
-Os personagens são modelos glTF com esqueleto em `public/models` (cada um com ~4 MB):
+Os personagens são modelos glTF com esqueleto em `public/models` (cada um com ~4 MB). Nos personagens comuns, a roupa original (terno, agasalho, uniforme, moletom) vira camiseta e bermuda na carga: `src/models.js` marca cada vértice da roupa pelos ossos que o movem (antebraço e canela viram pele, capuz e abas do paletó somem) e um shader pinta cada região com a cor escolhida:
 
 | Arquivo | Quem é | Origem |
 |---|---|---|
-| `readyplayer.me.glb` | Homem (Rosto 1): aceita pele, camisa, calça e barba | avatar de exemplo do Ready Player Me (repositório de exemplos do three.js) |
-| `ch33.glb` | Homem de terno e gravata (Rosto 2) | Mixamo (`character.fbx`) |
-| `ch08.glb` | Homem de agasalho (Rosto 3) | Mixamo (`character (1).fbx`) |
+| `readyplayer.me.glb` | Homem (Rosto 1): aceita pele e barba | avatar de exemplo do Ready Player Me (repositório de exemplos do three.js) |
+| `ch33.glb` | Homem (Rosto 2) | Mixamo (`character.fbx`) |
+| `ch08.glb` | Homem (Rosto 3) | Mixamo (`character (1).fbx`) |
 | `Michelle.glb` | Não aparece mais no jogo: serve só de fonte da animação de samba e da pose de referência | Mixamo (exemplo do three.js) |
-| `ch16.glb` | Mulher de uniforme azul, sem máscara (Rosto 2) | Mixamo (`Ch16_nonPBR.fbx`) |
-| `ch02.glb` | Mulher de moletom laranja e short jeans (Rosto 1) | Mixamo (`Ch02_nonPBR.fbx`) |
+| `ch16.glb` | Mulher de touca, sem máscara (Rosto 2) | Mixamo (`Ch16_nonPBR.fbx`) |
+| `ch02.glb` | Mulher (Rosto 1) | Mixamo (`Ch02_nonPBR.fbx`) |
 | `renan.glb` | Renan Santos (Homem, Rosto 4) | malha estática do Tripo (`assets-src/renan.glb`) com o esqueleto do ch33 ajustado às proporções dela e pesos copiados do ch33 (`/rig.html?make=renan&save=1`) |
 | `bolsonaro.glb` | Bolsonaro (Homem, Rosto 5) | cabeça do Sketchfab (`assets-src/bolsonaro-head.glb`) presa ao osso da cabeça do ch33, que perde a cabeça e o cabelo (`/rig.html?make=bolsonaro&save=1`) |
 | `lula.glb` | Lula (Homem, Rosto 6) | malha estática do Sketchfab (`assets-src/lula.glb`, em pose "A" e de costas): virada de frente, esqueleto do ch33 com os braços inclinados até a pose dela, pesos copiados do ch33 e suavizados pela malha; fica ligada na pose "A" e traz um clipe `TPose` de referência (`/rig.html?make=lula&save=1`) |

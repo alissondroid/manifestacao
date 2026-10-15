@@ -13,8 +13,9 @@ import {
 } from './aging.js';
 
 // Avatar com modelo humano de verdade (glTF com esqueleto, ver models.js), animado por
-// AnimationMixer e com acessórios que seguem os ossos. O corpo masculino aceita tingir
-// pele, camisa e calça; o feminino usa a textura original.
+// AnimationMixer e com acessórios que seguem os ossos. Os personagens comuns vestem camiseta e
+// bermuda com cores escolhidas (o Rosto 1 masculino também troca a pele); Lula, Renan e Bolsonaro
+// ficam com a roupa original.
 
 const BASE_SKIN = new THREE.Color('#f3d2b8'); // tom mais claro da lista = textura sem alteração
 // Variação de rosto e corpo por escala de ossos: cabeça (largura, altura, profundidade) e quadril (tudo).
@@ -175,13 +176,7 @@ export class Avatar {
     this.actions.idle.setEffectiveWeight(1);
     this.mixer.update(this.t % 1.5); // dessincroniza dos outros
 
-    if (c.tintable) { // roupas em cinza para a cor tingir limpo
-      for (const key of ['top', 'bottom']) {
-        const m = c.mats[key];
-        if (m?.map) m.map = grayMap(m.map);
-      }
-      c.meshes.Wolf3D_Teeth && (c.meshes.Wolf3D_Teeth.visible = true);
-    }
+    if (c.tintable) c.meshes.Wolf3D_Teeth && (c.meshes.Wolf3D_Teeth.visible = true);
   }
 
   setLook(look) {
@@ -200,16 +195,20 @@ export class Avatar {
       const tint = new THREE.Color(skin.r / BASE_SKIN.r, skin.g / BASE_SKIN.g, skin.b / BASE_SKIN.b);
       c.mats.skinHead?.color.copy(tint);
       c.mats.skinBody?.color.copy(tint);
+      if (c.meshes.Wolf3D_Beard) c.meshes.Wolf3D_Beard.visible = look.beard > 0 || elderly;
+      if (c.meshes.Mesh) c.meshes.Mesh.visible = look.hairStyle !== 2 && !equip.head && !elderly; // gorro
+    }
+    if (c.outfit) { // camiseta e bermuda; sem outfit (os políticos), a roupa original não muda
       const item = SHOP_BY_ID[equip.shirt];
       let shirt = SHIRTS[look.shirt] ?? SHIRTS[0];
       if (equip.shirt === 'camisa-numero') shirt = side.color;
       else if (item?.color) shirt = item.color;
       else if (equip.shirt === 'camisa-simples') shirt = look.custom?.plainshirt?.bg ?? DESIGN.colors[0];
       else if (equip.shirt === 'camisa-custom') shirt = look.custom?.shirt?.bg ?? DESIGN.colors[0];
-      c.mats.top?.color.set(shirt);
-      c.mats.bottom?.color.set((PANTS[look.pants] ?? PANTS[0]).color);
-      if (c.meshes.Wolf3D_Beard) c.meshes.Wolf3D_Beard.visible = look.beard > 0 || elderly;
-      if (c.meshes.Mesh) c.meshes.Mesh.visible = look.hairStyle !== 2 && !equip.head && !elderly; // gorro
+      c.outfit.top.set(shirt);
+      c.outfit.bottom.set((PANTS[look.pants] ?? PANTS[0]).color);
+      if (c.tintable) c.outfit.skin.set(SKINS[look.skin] ?? SKINS[0]);
+      else c.outfit.skin.copy(c.skinTone);
     }
 
     if (elderly) ageCharacter(c); // depois das cores, para a pele pálida não ser sobrescrita
@@ -218,7 +217,7 @@ export class Avatar {
     this.height = c.height * hs;
     this.buildAccessories(equip, side);
     this.buildHeld(look, equip, side);
-    this.buildDecals(equip, side, look.custom?.shirt, c.tintable);
+    if (c.outfit) this.buildDecals(equip, side, look.custom?.shirt);
     if (elderly) {
       if (equip.face !== 'oculos') this.attach(createReadingGlasses(), c.bones.head, [0, 0.075, 0.1]);
       this.cane = createCane();
@@ -300,10 +299,10 @@ export class Avatar {
     }
   }
 
-  buildDecals(equip, side, shirtDesign, tintable) {
+  buildDecals(equip, side, shirtDesign) {
     let map;
     if (equip.shirt === 'camisa-numero') map = shirtDecalTexture(side.id);
-    else if (equip.shirt === 'camisa-custom' && tintable && shirtDesign && (shirtDesign.text || shirtDesign.emblem)) map = shirtPrintTexture(shirtDesign);
+    else if (equip.shirt === 'camisa-custom' && shirtDesign && (shirtDesign.text || shirtDesign.emblem)) map = shirtPrintTexture(shirtDesign);
     if (!map) return;
     const mat = new THREE.MeshStandardMaterial({
       map, transparent: true, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2,
