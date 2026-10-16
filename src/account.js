@@ -1,5 +1,5 @@
 import {
-  SHOP, DESIGN, SLOTS, SLOT_NAMES,
+  SHOP, DESIGN, SLOTS, SLOT_NAMES, ACCOUNT,
 } from '../shared/config.js';
 import { drawDesign } from './textures.js';
 import { api } from './api.js';
@@ -146,48 +146,144 @@ export function initAccount({ onChange }) {
     }
   }
 
+  // ---------- Peças das telas de conta ----------
+
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  const NICK_RE = /^[\p{L}\p{N}_.\- ]+$/u;
+  const NICK_HELP = `${ACCOUNT.nickMin} a ${ACCOUNT.nickMax} caracteres: letras, números, espaço, _ . -`;
+  const emailError = (v) => (EMAIL_RE.test(v) && v.length <= 120 ? '' : 'Digite um e-mail válido, como voce@exemplo.com.');
+  const nickError = (v) => {
+    if (v.length < ACCOUNT.nickMin) return `O apelido precisa ter pelo menos ${ACCOUNT.nickMin} caracteres.`;
+    if (v.length > ACCOUNT.nickMax) return `O apelido pode ter no máximo ${ACCOUNT.nickMax} caracteres.`;
+    return NICK_RE.test(v) ? '' : 'Use só letras, números, espaço, _ . -';
+  };
+
+  const remember = {
+    get() { try { return localStorage.getItem('avenida.email') || ''; } catch { return ''; } },
+    set(v) { try { localStorage.setItem('avenida.email', v); } catch { /* sem armazenamento: tudo bem */ } },
+  };
+
+  function passwordStrength(p) {
+    if (p.length < ACCOUNT.passwordMin) return { level: 0, label: `Faltam ${ACCOUNT.passwordMin - p.length} caracteres` };
+    const pts = (p.length >= 12) + (/[a-z]/.test(p) && /[A-Z]/.test(p)) + /\d/.test(p) + /[^\w\s]/.test(p);
+    return pts <= 1 ? { level: 1, label: 'Senha fraca' } : pts <= 3 ? { level: 2, label: 'Senha boa' } : { level: 3, label: 'Senha forte' };
+  }
+
+  let fieldSeq = 0;
+  /** Campo com rótulo, mensagem embaixo e estado (erro/ok). `extra` fica ao lado do campo (ex.: mostrar senha). */
+  function field(label, input, extra) {
+    fieldSeq += 1;
+    input.id = `f${fieldSeq}`;
+    const msg = h('small', { class: 'fmsg', id: `m${fieldSeq}` });
+    input.setAttribute('aria-describedby', msg.id);
+    const el = h('div', { class: 'field' }, h('label', { for: input.id }, label), h('div', { class: 'inwrap' }, input, extra), msg);
+    const set = (text, kind = 'error') => {
+      msg.textContent = text;
+      el.dataset.state = text ? kind : '';
+      input.setAttribute('aria-invalid', text && kind === 'error' ? 'true' : 'false');
+    };
+    return { el, set };
+  }
+
+  function passwordField(label, input) {
+    const toggle = h('button', { class: 'reveal', type: 'button', 'aria-pressed': 'false', 'aria-label': 'Mostrar senha' }, 'Mostrar');
+    toggle.addEventListener('click', () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      toggle.textContent = show ? 'Ocultar' : 'Mostrar';
+      toggle.setAttribute('aria-pressed', String(show));
+      toggle.setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha');
+      input.focus();
+    });
+    input.classList.add('padr');
+    return field(label, input, toggle);
+  }
+
+  const termsLine = () => h(
+    'span',
+    {},
+    'Li e aceito os ',
+    h('a', { href: '/termos', target: '_blank', rel: 'noopener' }, 'Termos de uso'),
+    ' e a ',
+    h('a', { href: '/privacidade', target: '_blank', rel: 'noopener' }, 'Política de privacidade'),
+    '.',
+  );
+
+  /** Botão de envio com estado de carregamento. */
+  function submitButton(label, busyLabel) {
+    const el = h('button', { class: 'primary', type: 'submit' }, label);
+    el.busy = (on) => {
+      el.disabled = on;
+      el.replaceChildren(...(on ? [h('i', { class: 'spin', 'aria-hidden': 'true' }), busyLabel] : [label]));
+    };
+    return el;
+  }
+
+  const shake = (el) => {
+    el.classList.remove('shake');
+    void el.offsetWidth; // reinicia a animação
+    el.classList.add('shake');
+  };
+
+  /** Moldura comum das telas de conta: marca, título e subtítulo. */
+  const authShell = (title, sub, ...children) => h(
+    'div',
+    { class: 'auth' },
+    h(
+      'header',
+      { class: 'auth-head' },
+      h('div', { class: 'auth-logo', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')),
+      h('h2', {}, title),
+      sub && h('p', {}, sub),
+    ),
+    ...children,
+  );
+
   /** Primeiro acesso com Google: escolher o apelido e aceitar os Termos. */
   function openGoogleProfile(credential, { email, suggestedNick }) {
     const error = h('p', { class: 'error', role: 'alert', hidden: true });
     const nick = h('input', {
-      type: 'text', required: true, maxlength: 16, minlength: 3, value: suggestedNick, autocomplete: 'nickname',
+      type: 'text', maxlength: ACCOUNT.nickMax, value: suggestedNick, autocomplete: 'nickname', autocapitalize: 'none', spellcheck: 'false',
     });
-    const terms = h('input', { type: 'checkbox', required: true });
-    const submit = h('button', { class: 'primary', type: 'submit' }, 'Criar conta');
-    openModal(
-      h('h2', {}, 'Quase lá'),
-      h('p', { class: 'note' }, `Entrando com ${email}. Escolha como você aparece na avenida.`),
-      h(
-        'form',
-        {
-          class: 'authform',
-          async onsubmit(e) {
-            e.preventDefault();
-            error.hidden = true;
-            submit.disabled = true;
-            try {
-              const data = await api.google(credential, nick.value.trim(), terms.checked);
-              closeModal();
-              apply(data, 'login');
-              toast(`Olá, ${data.user.nick}!`);
-            } catch (err) {
-              error.textContent = err.message;
-              error.hidden = false;
-              submit.disabled = false;
-            }
-          },
+    const nickF = field('Apelido na avenida', nick);
+    const terms = h('input', { type: 'checkbox' });
+    const termsMsg = h('small', { class: 'fmsg' });
+    const submit = submitButton('Criar conta', 'Criando…');
+    const check = () => { const msg = nickError(nick.value.trim()); nickF.set(msg); return !msg; };
+    nick.addEventListener('input', () => { if (nickF.el.dataset.state) check(); });
+    nick.addEventListener('blur', check);
+    const form = h(
+      'form',
+      {
+        class: 'authform',
+        novalidate: true,
+        async onsubmit(e) {
+          e.preventDefault();
+          error.hidden = true;
+          termsMsg.textContent = '';
+          if (!check()) { nick.focus(); shake(form); return; }
+          if (!terms.checked) { termsMsg.textContent = 'Aceite os Termos para criar a conta.'; shake(form); return; }
+          submit.busy(true);
+          try {
+            const data = await api.google(credential, nick.value.trim(), true);
+            closeModal();
+            apply(data, 'login');
+            toast(`Olá, ${data.user.nick}!`);
+          } catch (err) {
+            error.textContent = err.message;
+            error.hidden = false;
+            shake(form);
+            submit.busy(false);
+          }
         },
-        h('label', { class: 'field' }, h('span', {}, 'Apelido'), nick),
-        h(
-          'label',
-          { class: 'terms' },
-          terms,
-          h('span', {}, 'Li e aceito os ', h('a', { href: '/termos', target: '_blank', rel: 'noopener' }, 'Termos de uso'), ' e a ', h('a', { href: '/privacidade', target: '_blank', rel: 'noopener' }, 'Política de privacidade'), '.'),
-        ),
-        error,
-        submit,
-      ),
+      },
+      nickF.el,
+      h('label', { class: 'terms' }, terms, termsLine()),
+      termsMsg,
+      error,
+      submit,
     );
+    openModal(authShell('Quase lá', `Entrando com ${email}. Escolha como você aparece na avenida.`, form));
     nick.focus();
     nick.select();
   }
@@ -197,62 +293,107 @@ export function initAccount({ onChange }) {
   function openAuth(mode = 'login') {
     const isRegister = mode === 'register';
     const error = h('p', { class: 'error', role: 'alert', hidden: true });
-    const email = h('input', { type: 'email', autocomplete: 'email', required: true, maxlength: 120, placeholder: 'voce@exemplo.com' });
-    const nick = h('input', { type: 'text', autocomplete: 'nickname', required: true, maxlength: 16, minlength: 3, placeholder: 'Como aparece na avenida' });
-    const pass = h('input', {
-      type: 'password', autocomplete: isRegister ? 'new-password' : 'current-password', required: true, minlength: 8, maxlength: 200, placeholder: 'Mínimo de 8 caracteres',
+    const email = h('input', {
+      type: 'email', autocomplete: isRegister ? 'email' : 'username', maxlength: 120, placeholder: 'voce@exemplo.com', inputmode: 'email', autocapitalize: 'none', spellcheck: 'false', value: remember.get(),
     });
-    const terms = h('input', { type: 'checkbox', required: true });
-    const submit = h('button', { class: 'primary', type: 'submit' }, isRegister ? 'Criar conta' : 'Entrar');
+    const nick = h('input', {
+      type: 'text', autocomplete: 'nickname', maxlength: ACCOUNT.nickMax, placeholder: 'Como aparece na avenida', autocapitalize: 'none', spellcheck: 'false',
+    });
+    const pass = h('input', {
+      type: 'password', autocomplete: isRegister ? 'new-password' : 'current-password', maxlength: 200, placeholder: isRegister ? `Mínimo de ${ACCOUNT.passwordMin} caracteres` : 'Sua senha',
+    });
+    const terms = h('input', { type: 'checkbox' });
+    const termsMsg = h('small', { class: 'fmsg' });
+    const submit = submitButton(isRegister ? 'Criar conta' : 'Entrar', isRegister ? 'Criando…' : 'Entrando…');
+
+    const emailF = field('E-mail', email);
+    const nickF = field('Apelido', nick);
+    const passF = passwordField('Senha', pass);
+    const meterBar = h('i');
+    const meterText = h('small', {}, '');
+    const meter = h('div', { class: 'meter', 'aria-live': 'polite' }, h('span', { class: 'bar' }, meterBar), meterText);
+
+    const rules = [
+      [email, emailF, (v) => emailError(v.trim())],
+      ...(isRegister ? [[nick, nickF, (v) => nickError(v.trim())]] : []),
+      [pass, passF, (v) => (isRegister && v.length < ACCOUNT.passwordMin ? `A senha precisa ter pelo menos ${ACCOUNT.passwordMin} caracteres.` : !v ? 'Digite sua senha.' : '')],
+    ];
+    const validate = ([input, f, test]) => { const msg = test(input.value); f.set(msg); return !msg; };
+    for (const rule of rules) {
+      const [input, f] = rule;
+      input.addEventListener('blur', () => { if (input.value || f.el.dataset.state) validate(rule); });
+      input.addEventListener('input', () => { if (f.el.dataset.state === 'error') validate(rule); });
+    }
+    if (isRegister) {
+      nick.addEventListener('input', () => { if (nick.value.trim() && !nickError(nick.value.trim())) nickF.set('Apelido disponível para usar.', 'ok'); });
+      pass.addEventListener('input', () => {
+        const st = passwordStrength(pass.value);
+        meter.dataset.level = String(pass.value ? st.level : '');
+        meterBar.style.width = pass.value ? `${[Math.min(30, (pass.value.length / ACCOUNT.passwordMin) * 30), 55, 80, 100][st.level]}%` : '0';
+        meterText.textContent = pass.value ? st.label : '';
+      });
+    }
 
     const form = h(
       'form',
       {
         class: 'authform',
+        novalidate: true,
         async onsubmit(e) {
           e.preventDefault();
           error.hidden = true;
-          submit.disabled = true;
+          termsMsg.textContent = '';
+          const bad = rules.filter((r) => !validate(r));
+          if (bad.length) { bad[0][0].focus(); shake(form); return; }
+          if (isRegister && !terms.checked) { termsMsg.textContent = 'Aceite os Termos para criar a conta.'; shake(form); return; }
+          submit.busy(true);
           try {
             const data = isRegister
-              ? await api.register(email.value, nick.value.trim(), pass.value, terms.checked)
-              : await api.login(email.value, pass.value);
+              ? await api.register(email.value.trim(), nick.value.trim(), pass.value, terms.checked)
+              : await api.login(email.value.trim(), pass.value);
+            remember.set(email.value.trim());
             closeModal();
             apply(data, 'login');
             toast(`Olá, ${data.user.nick}!`);
           } catch (err) {
             error.textContent = err.message;
             error.hidden = false;
-          } finally {
-            submit.disabled = false;
+            shake(form);
+            submit.busy(false);
+            if (err.status === 401) { pass.focus(); pass.select(); }
           }
         },
       },
-      h('label', { class: 'field' }, h('span', {}, 'E-mail'), email),
-      isRegister && h('label', { class: 'field' }, h('span', {}, 'Apelido'), nick),
-      h('label', { class: 'field' }, h('span', {}, 'Senha'), pass),
-      isRegister && h(
-        'label',
-        { class: 'terms' },
-        terms,
-        h('span', {}, 'Li e aceito os ', h('a', { href: '/termos', target: '_blank', rel: 'noopener' }, 'Termos de uso'), ' e a ', h('a', { href: '/privacidade', target: '_blank', rel: 'noopener' }, 'Política de privacidade'), '.'),
-      ),
+      emailF.el,
+      isRegister && nickF.el,
+      passF.el,
+      isRegister && meter,
+      isRegister && h('label', { class: 'terms' }, terms, termsLine()),
+      isRegister && termsMsg,
       error,
       submit,
     );
 
     const tab = (m, label) => h('button', {
-      class: `tab${m === mode ? ' on' : ''}`, type: 'button', onclick: () => openAuth(m),
+      type: 'button', role: 'tab', 'aria-selected': String(m === mode), onclick: () => { if (m !== mode) openAuth(m); },
     }, label);
 
-    openModal(
-      h('div', { class: 'tabs' }, tab('login', 'Entrar'), tab('register', 'Criar conta')),
+    openModal(authShell(
+      isRegister ? 'Crie sua conta' : 'Bem-vindo de volta',
+      isRegister ? 'Guarde seus itens e entre na avenida de qualquer aparelho.' : 'Entre para continuar de onde parou.',
+      h('div', { class: 'authseg', role: 'tablist' }, tab('login', 'Entrar'), tab('register', 'Criar conta')),
       account.googleClientId && googleButton(),
       account.googleClientId && h('p', { class: 'or' }, 'ou com e-mail'),
       form,
-      h('p', { class: 'note' }, 'Com a conta, seus itens da loja ficam guardados e o apelido dela passa a ser o seu na avenida.'),
-    );
-    (isRegister ? email : email).focus();
+      isRegister && h('ul', { class: 'perks' }, h('li', {}, 'Seus itens da loja ficam guardados'), h('li', {}, 'O apelido da conta é o seu na avenida')),
+      h(
+        'p',
+        { class: 'switch' },
+        isRegister ? 'Já tem conta? ' : 'Ainda não tem conta? ',
+        h('button', { class: 'link', type: 'button', onclick: () => openAuth(isRegister ? 'login' : 'register') }, isRegister ? 'Entrar' : 'Criar conta'),
+      ),
+    ));
+    (email.value && !isRegister ? pass : email).focus();
   }
 
   // ---------- Loja ----------
