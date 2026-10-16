@@ -1079,5 +1079,5 @@ window.__AVENIDA__ = {
   info: renderer.info,
   movingCars,
   // só para depuração no console
-  THREE, Avatar, renderer, scene, world, me, effects,
+  THREE, Avatar, renderer, scene, world, me, effects, remotes,
 };
