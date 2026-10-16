@@ -12,6 +12,7 @@ const VIP = SHOP.find((i) => i.kind === 'vip' && !i.hidden && i.price > 0);
 async function fakeAbacate() {
   const charges = new Map();
   const calls = [];
+  const fake = { qrOverride: undefined };
   const srv = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
     let raw = '';
@@ -24,7 +25,7 @@ async function fakeAbacate() {
         const body = JSON.parse(raw);
         const id = `pix_char_${charges.size + 1}`;
         const charge = {
-          id, amount: body.amount, status: 'PENDING', devMode: true, method: 'PIX', brCode: `00020126580014br.gov.bcb.pix${id}`, brCodeBase64: 'data:image/png;base64,iVBORw0KGgo=', expiresAt: new Date(Date.now() + body.expiresIn * 1000).toISOString(),
+          id, amount: body.amount, status: 'PENDING', devMode: true, method: 'PIX', brCode: `00020126580014br.gov.bcb.pix${id}`, brCodeBase64: fake.qrOverride ?? 'data:image/png;base64,iVBORw0KGgo=', expiresAt: new Date(Date.now() + body.expiresIn * 1000).toISOString(),
         };
         charges.set(id, charge);
         return send(200, { data: charge, error: null });
@@ -37,7 +38,7 @@ async function fakeAbacate() {
     });
   });
   await new Promise((r) => { srv.listen(0, '127.0.0.1', r); });
-  return { url: `http://127.0.0.1:${srv.address().port}`, charges, calls, close: () => new Promise((r) => { srv.close(r); }) };
+  return { url: `http://127.0.0.1:${srv.address().port}`, charges, calls, set qrOverride(v) { fake.qrOverride = v; }, close: () => new Promise((r) => { srv.close(r); }) };
 }
 
 async function setup(env = {}) {
@@ -57,32 +58,32 @@ async function setup(env = {}) {
   return { srv, abacate, api, checkout, stop };
 }
 
-test('checkout cria a cobrança Pix no valor do item e leva para a página do QR', async () => {
+test('checkout cria a cobrança Pix no valor do item e devolve QR e copia e cola para o modal', async () => {
   const t = await setup();
   try {
     assert.equal((await (await t.api('/api/me')).json()).shop.provider, 'abacatepay');
-    const { url, order } = await t.checkout();
-    assert.match(url, new RegExp(`/pagar/pix\\?order=${order}$`));
+    const { order, pix } = await t.checkout();
+    assert.ok(order);
     const create = t.abacate.calls.find((c) => c.path === '/v1/pixQrCode/create');
     assert.equal(create.body.amount, VIP.price);
     assert.ok(create.body.expiresIn >= 600);
     assert.ok(String(create.body.description).length <= 140);
+    assert.equal(create.body.metadata.externalId, order);
 
-    const page = await t.api(new URL(url).pathname + new URL(url).search);
-    assert.equal(page.status, 200);
-    const html = await page.text();
-    assert.match(html, /pix_char_1/); // copia e cola
-    assert.match(html, /data:image\/png;base64,iVBORw0KGgo=/); // QR code
-    assert.match(html, /\/api\/shop\/confirm/); // a página consulta sozinha
+    assert.equal(pix.brCode, '00020126580014br.gov.bcb.pixpix_char_1'); // copia e cola
+    assert.equal(pix.qr, 'data:image/png;base64,iVBORw0KGgo='); // QR Code
+    assert.equal(pix.devMode, true);
+    assert.ok(Date.parse(pix.expiresAt) > Date.now());
   } finally { await t.stop(); }
 });
 
-test('a página do Pix exige estar logado e ser dono do pedido', async () => {
+test('QR com conteúdo estranho não vai para o cliente', async () => {
   const t = await setup();
   try {
-    const { url } = await t.checkout();
-    const anon = await fetch(`${t.srv.url}${new URL(url).pathname}${new URL(url).search}`);
-    assert.equal(anon.status, 401);
+    t.abacate.qrOverride = '"><script>alert(1)</script>';
+    const { pix } = await t.checkout();
+    assert.equal(pix.qr, '');
+    assert.ok(pix.brCode);
   } finally { await t.stop(); }
 });
 
@@ -92,6 +93,7 @@ test('só entrega o item quando o AbacatePay confirma o pagamento; clicar de nov
     const first = await t.checkout();
     const again = await t.checkout();
     assert.equal(again.order, first.order);
+    assert.equal(again.pix.brCode, first.pix.brCode); // o modal reabre com o mesmo QR
     assert.equal(t.abacate.calls.filter((c) => c.path === '/v1/pixQrCode/create').length, 1);
 
     assert.equal((await (await t.api(`/api/shop/confirm?order=${first.order}`)).json()).status, 'pending');

@@ -42,7 +42,7 @@ async function abacate(path, { method = 'GET', body } = {}) {
   return json.data;
 }
 
-/** Cria a cobrança Pix. Guarda o QR e o copia e cola para a nossa página de pagamento. */
+/** Cria a cobrança Pix. Guarda o QR e o copia e cola para o modal do jogo. */
 async function createPix({ order, item, baseUrl }) {
   const charge = await abacate('/pixQrCode/create', {
     method: 'POST',
@@ -55,7 +55,7 @@ async function createPix({ order, item, baseUrl }) {
   });
   if (!charge?.id || !charge.brCode) throw new Error('AbacatePay: resposta sem QR Code');
   return {
-    url: `${baseUrl}/pagar/pix?order=${order.id}`,
+    url: `${baseUrl}/?pago=${order.id}`, // o cliente mostra o Pix em um modal; este link só reabre o jogo
     ref: charge.id,
     data: {
       brCode: String(charge.brCode),

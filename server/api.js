@@ -314,12 +314,12 @@ export async function handleApi(req, res, hooks = {}) {
       if (!rateLimit(`checkout:${user.id}`, 10, 10 * 60_000)) return json(res, 429, { error: 'Muitas tentativas. Aguarde um pouco.' }), true;
 
       const open = pendingOrder(user.id, item.id, PROVIDER);
-      if (open) return json(res, 200, { url: open.pay_url, order: open.id }), true;
+      if (open) return json(res, 200, { url: open.pay_url, order: open.id, pix: pixPublic(open.pay_data) }), true;
       const order = createOrder(user.id, item, PROVIDER);
       try {
         const { url: checkoutUrl, ref, data } = await createCheckout({ order, item, baseUrl: baseUrl(req) });
         setOrderRef(order.id, ref, checkoutUrl, data);
-        return json(res, 200, { url: checkoutUrl, order: order.id }), true;
+        return json(res, 200, { url: checkoutUrl, order: order.id, pix: pixPublic(JSON.stringify(data)) }), true;
       } catch (err) {
         console.error('[pagamentos] falha ao criar checkout:', err.message);
         setOrderStatus(order.id, 'failed');
@@ -371,28 +371,6 @@ export async function handleApi(req, res, hooks = {}) {
 
     // ---------- Checkout simulado (só quando não há chave Stripe de teste) ----------
 
-    // Pix (AbacatePay): página com o QR Code e o copia e cola. Ela consulta /api/shop/confirm até o pagamento cair.
-    if (PROVIDER === 'abacatepay' && method === 'GET' && pathname === '/pagar/pix') {
-      const orderId = url.searchParams.get('order') || '';
-      const order = UUID.test(orderId) ? getOrder(orderId) : null;
-      if (!order || order.user_id !== user.id || order.provider !== 'abacatepay') {
-        res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
-        return res.end('Pedido não encontrado.'), true;
-      }
-      if (order.status === 'paid') {
-        res.writeHead(302, { location: `/?pago=${order.id}` });
-        return res.end(), true;
-      }
-      let pix = null;
-      try { pix = JSON.parse(order.pay_data || 'null'); } catch { /* sem dados */ }
-      if (order.status !== 'pending' || !pix?.brCode) {
-        res.writeHead(410, { 'content-type': 'text/plain; charset=utf-8' });
-        return res.end('Esse Pix não vale mais. Volte ao jogo e gere outro.'), true;
-      }
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      return res.end(pixPage(order, SHOP_BY_ID[order.item_id], pix)), true;
-    }
-
     // Só com chave de desenvolvimento da AbacatePay: marca o Pix como pago para testar o fluxo inteiro.
     if (PROVIDER === 'abacatepay' && method === 'POST' && pathname === '/api/shop/simulate-pix') {
       const body = await readJson(req);
@@ -439,51 +417,14 @@ export async function handleApi(req, res, hooks = {}) {
 
 const brl = (cents) => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-}[c]));
-
-// Página do Pix: QR Code, copia e cola, contagem regressiva e consulta automática do pagamento.
-function pixPage(order, item, pix) {
-  const qr = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(pix.qr) ? pix.qr
-    : /^[A-Za-z0-9+/=]+$/.test(pix.qr) && pix.qr ? `data:image/png;base64,${pix.qr}` : '';
-  const state = JSON.stringify({ order: order.id, expiresAt: pix.expiresAt, devMode: !!pix.devMode }).replace(/</g, '\\u003c');
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Pagar com Pix</title>
-<style>
-body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0e1713;color:#f2f4ef;font:16px system-ui,sans-serif}
-main{width:min(420px,94vw);background:#14211b;border:1px solid rgba(230,195,74,.3);border-radius:18px;padding:24px;display:grid;gap:14px;text-align:center}
-h1{margin:0;font-size:22px}p{margin:0;color:#9aa89d}.price{font-size:26px;font-weight:800;color:#e6c34a}
-.qr{background:#fff;border-radius:14px;padding:12px;width:min(260px,70vw);justify-self:center}.qr img{width:100%;display:block}
-textarea{width:100%;height:76px;resize:none;background:#0b120f;color:#f2f4ef;border:1px solid rgba(190,205,190,.22);border-radius:10px;padding:10px;font:12px ui-monospace,monospace;box-sizing:border-box}
-button,a.b{font:inherit;border-radius:12px;padding:13px;border:1px solid rgba(190,205,190,.22);background:transparent;color:#f2f4ef;cursor:pointer;text-decoration:none;display:block}
-button.ok{background:#e6c34a;border-color:#e6c34a;color:#1c1917;font-weight:700}
-#st{color:#9aa89d;font-size:14px}#st.good{color:#86efac}#st.bad{color:#fca5a5}
-.tag{background:#fbbf24;color:#1c1917;font-weight:700;font-size:12px;border-radius:999px;padding:3px 10px;width:fit-content;justify-self:center}
-</style></head><body><main>
-${pix.devMode ? '<span class="tag">MODO DE TESTE · nenhum dinheiro é cobrado</span>' : ''}
-<h1>${esc(item.name)}</h1><div class="price">${esc(brl(order.amount_cents))}</div>
-${qr ? `<div class="qr"><img alt="QR Code do Pix" src="${qr}"></div>` : ''}
-<p>Abra o app do seu banco, escolha Pix e leia o QR Code, ou use o copia e cola:</p>
-<textarea id="code" readonly>${esc(pix.brCode)}</textarea>
-<button class="ok" id="copy" type="button">Copiar código Pix</button>
-<p id="st">Aguardando o pagamento…</p>
-${pix.devMode ? '<button id="sim" type="button">Simular pagamento (teste)</button>' : ''}
-<a class="b" href="/">Voltar ao jogo</a>
-</main><script>
-const S=${state};const $=id=>document.getElementById(id);let done=false;
-$('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('code').value)}catch{$('code').select();document.execCommand('copy')}$('copy').textContent='Copiado!';setTimeout(()=>{$('copy').textContent='Copiar código Pix'},2000)};
-if($('sim'))$('sim').onclick=async()=>{$('sim').disabled=true;await fetch('/api/shop/simulate-pix',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({order:S.order})})};
-const say=(t,c)=>{$('st').textContent=t;$('st').className=c||''};
-async function poll(){if(done)return;try{const r=await fetch('/api/shop/confirm?order='+S.order,{credentials:'same-origin'});const j=await r.json();
- if(j.status==='paid'){done=true;say('Pagamento confirmado! Voltando ao jogo…','good');location.href='/?pago='+S.order;return}
- if(j.status==='expired'||j.status==='cancelled'||j.status==='failed'){done=true;say('Esse Pix expirou. Volte ao jogo e gere outro.','bad');return}
-}catch{}
- const left=Math.max(0,Math.round((Date.parse(S.expiresAt)-Date.now())/1000));
- if(left>0)say('Aguardando o pagamento… expira em '+Math.floor(left/60)+':'+String(left%60).padStart(2,'0'));
- setTimeout(poll,3000)}
-poll();
-</script></body></html>`;
+/** Dados do Pix que o cliente pode ver (QR sanitizado: só PNG em base64). */
+function pixPublic(raw) {
+  let pix = null;
+  try { pix = JSON.parse(raw || 'null'); } catch { return undefined; }
+  if (!pix?.brCode) return undefined;
+  const qr = String(pix.qr || '');
+  const png = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(qr) ? qr : /^[A-Za-z0-9+/=]+$/.test(qr) && qr ? `data:image/png;base64,${qr}` : '';
+  return { brCode: pix.brCode, qr: png, expiresAt: pix.expiresAt, devMode: !!pix.devMode };
 }
 
 // Página de pagamento de mentira, claramente identificada como teste.
