@@ -34,22 +34,48 @@ if (!ABACATE_KEY && strayNames.length) console.warn(`[pagamentos] variável(is) 
 
 // ---------- AbacatePay (REST, Pix) ----------
 
-async function abacate(path, { method = 'GET', body } = {}) {
-  const res = await fetch(`${ABACATE_URL}/v1${path}`, {
-    method,
-    headers: { authorization: `Bearer ${ABACATE_KEY}`, ...(body ? { 'content-type': 'application/json' } : {}) },
-    body: body ? JSON.stringify(body) : undefined,
+// A AbacatePay tem duas versões de API e a chave só vale em uma delas ("API key version mismatch").
+// Começa pela v2 (ABACATEPAY_API_VERSION=1 força a v1) e troca sozinha se a chave for da outra.
+const ROUTES = {
+  1: { create: '/v1/pixQrCode/create', check: '/v1/pixQrCode/check', simulate: '/v1/pixQrCode/simulate-payment' },
+  2: { create: '/v2/transparents/create', check: '/v2/transparents/check', simulate: '/v2/transparents/simulate-payment' },
+};
+let apiVersion = process.env.ABACATEPAY_API_VERSION === '1' ? 1 : 2;
+
+async function abacateRequest(version, kind, { id, body } = {}) {
+  const post = kind !== 'check';
+  const query = id ? `?id=${encodeURIComponent(id)}` : '';
+  const payload = kind === 'create' && version === 2 ? { method: 'PIX', data: body } : body;
+  const res = await fetch(`${ABACATE_URL}${ROUTES[version][kind]}${query}`, {
+    method: post ? 'POST' : 'GET',
+    headers: { authorization: `Bearer ${ABACATE_KEY}`, ...(post ? { 'content-type': 'application/json' } : {}) },
+    body: post ? JSON.stringify(payload ?? {}) : undefined,
     signal: AbortSignal.timeout(15000),
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok || json.error) throw new Error(`AbacatePay ${res.status}: ${typeof json.error === 'string' ? json.error : json.error?.message || 'erro desconhecido'}`);
+  if (!res.ok || json.error || json.success === false) {
+    const msg = typeof json.error === 'string' ? json.error : json.error?.message || 'erro desconhecido';
+    throw Object.assign(new Error(`AbacatePay ${res.status}: ${msg}`), { versionMismatch: /version mismatch/i.test(msg) });
+  }
   return json.data;
+}
+
+async function abacate(kind, opts) {
+  try {
+    return await abacateRequest(apiVersion, kind, opts);
+  } catch (err) {
+    if (!err.versionMismatch) throw err;
+    const other = apiVersion === 1 ? 2 : 1;
+    const data = await abacateRequest(other, kind, opts);
+    apiVersion = other;
+    console.log(`[pagamentos] a chave da AbacatePay é da API v${other}; usando a v${other}`);
+    return data;
+  }
 }
 
 /** Cria a cobrança Pix. Guarda o QR e o copia e cola para o modal do jogo. */
 async function createPix({ order, item, baseUrl }) {
-  const charge = await abacate('/pixQrCode/create', {
-    method: 'POST',
+  const charge = await abacate('create', {
     body: {
       amount: item.price,
       expiresIn: PIX_TTL_S,
@@ -71,7 +97,7 @@ async function createPix({ order, item, baseUrl }) {
 }
 
 /** Só em chave de desenvolvimento: a AbacatePay marca o Pix como pago sem dinheiro. */
-export const simulatePix = (ref) => abacate(`/pixQrCode/simulate-payment?id=${encodeURIComponent(ref)}`, { method: 'POST', body: { metadata: {} } });
+export const simulatePix = (ref) => abacate('simulate', { id: ref, body: { metadata: {} } });
 
 // ---------- Stripe (REST, sem SDK) ----------
 
@@ -127,7 +153,7 @@ export async function createCheckout({ order, item, baseUrl }) {
 /** Consulta o provedor (ao voltar do checkout, na página do Pix e a cada webhook: é a fonte da verdade). */
 export async function fetchStatus(ref) {
   if (PROVIDER === 'abacatepay') {
-    const { status } = await abacate(`/pixQrCode/check?id=${encodeURIComponent(ref)}`);
+    const { status } = await abacate('check', { id: ref });
     return { paid: status === 'PAID', expired: status === 'EXPIRED' || status === 'CANCELLED' };
   }
   if (PROVIDER !== 'stripe') return { paid: false, expired: false };

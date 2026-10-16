@@ -130,7 +130,7 @@ export async function handleApi(req, res, hooks = {}) {
       }
       let payload = {};
       try { payload = JSON.parse((await readBody(req, 64 * 1024)).toString('utf8')) || {}; } catch { /* corpo inválido: ignora */ }
-      const ref = payload.data?.pixQrCode?.id ?? payload.data?.id ?? payload.id;
+      const ref = payload.data?.transparent?.id ?? payload.data?.pixQrCode?.id ?? payload.data?.id ?? payload.id;
       const order = typeof ref === 'string' ? orderByRef('abacatepay', ref) : null;
       if (order && order.status !== 'paid') {
         try {
