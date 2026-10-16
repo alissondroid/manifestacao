@@ -711,7 +711,7 @@ setInterval(() => {
     ws.isAlive = false;
     ws.ping();
   }
-}, 30000);
+}, Math.max(100, Number(process.env.HEARTBEAT_MS) || 10000));
 
 server.listen(PORT, () => {
   console.log(`Servidor em http://localhost:${PORT}  (WebSocket em /ws)`);

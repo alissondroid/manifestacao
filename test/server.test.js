@@ -137,3 +137,41 @@ test('golpe de costas para o alvo: pede para ficar de frente', async () => {
   assert.equal(r.hit, false);
   assert.ok(r.notices.some((t) => /frente/i.test(t)), JSON.stringify(r.notices));
 });
+
+test('conexão que some sem avisar (rede cai) é removida em até 2 batimentos', async () => {
+  const { default: net } = await import('node:net');
+  const { WebSocket } = await import('ws');
+  const fast = await (await import('./helpers.js')).startServer({ HEARTBEAT_MS: '300' });
+  let hole = false;
+  const socks = [];
+  const proxy = net.createServer((c) => {
+    const u = net.connect(fast.port, '127.0.0.1');
+    socks.push(c, u);
+    c.on('data', (d) => { if (!hole) u.write(d); });
+    u.on('data', (d) => { if (!hole) c.write(d); });
+    c.on('close', () => u.destroy()); u.on('close', () => c.destroy());
+    c.on('error', () => {}); u.on('error', () => {});
+  });
+  await new Promise((r) => { proxy.listen(0, r); });
+  try {
+    const ws = new WebSocket(`ws://127.0.0.1:${proxy.address().port}/ws`);
+    const msgs = [];
+    ws.on('message', (r) => msgs.push(JSON.parse(r)));
+    await new Promise((r) => { ws.on('open', r); });
+    ws.send(JSON.stringify({ t: 'join', nick: 'Sumido', side: 0, look: {} }));
+    while (!msgs.find((m) => m.t === 'welcome')) await sleep(30);
+    const players = async () => (await (await fetch(`${fast.url}/healthz`)).json()).players;
+    assert.equal(await players(), 1);
+    hole = true; // a rede some: nada passa, nenhum fechamento chega ao servidor
+    const t0 = Date.now();
+    while (Date.now() - t0 < 3000 && (await players()) !== 0) await sleep(50);
+    const took = Date.now() - t0;
+    assert.equal(await players(), 0, 'o jogador sumido deveria ter sido removido');
+    assert.ok(took < 1500, `demorou ${took} ms para remover (esperado < 2 batimentos de 300 ms + folga)`);
+    ws.terminate();
+  } finally {
+    socks.forEach((s) => s.destroy());
+    proxy.close();
+    await fast.stop();
+  }
+});

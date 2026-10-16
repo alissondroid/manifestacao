@@ -38,7 +38,8 @@ export class Net {
       this.connected = false;
       const fatal = FATAL_CLOSE[ev?.code];
       this.h.close?.(ev?.code, fatal);
-      if (fatal) { this.stopped = true; return; }
+      if (fatal) this.stopped = true;
+      if (this.stopped) return;
       // espera exponencial com jitter: depois de um reinício do servidor, todos voltam espalhados no tempo
       const base = Math.min(8000, 500 * 2 ** this.retry++);
       setTimeout(() => this.connect(), base * (0.5 + Math.random() * 0.5));
@@ -64,6 +65,12 @@ export class Net {
     this.retry = 0;
     if (this.stopped) { this.stopped = false; this.connect(); return; }
     this.ws?.close();
+  }
+
+  /** Página fechando ou indo para o cache: avisa o servidor já, em vez de esperar o batimento notar. */
+  leave() {
+    this.stopped = true;
+    this.ws?.close(1000);
   }
 
   send(obj) {

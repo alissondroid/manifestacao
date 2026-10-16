@@ -746,6 +746,8 @@ const lobby = initLobby({
 });
 
 net.connect();
+addEventListener('pagehide', () => net.leave());
+addEventListener('pageshow', (e) => { if (e.persisted) net.reconnect(); });
 renderPortraits(renderer, profile.side);
 
 /** Volta do jogo para o lobby (ex.: servidor recusou a entrada). */
