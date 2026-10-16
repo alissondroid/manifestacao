@@ -265,6 +265,15 @@ Segunda rodada: o anti-teleporte permitia ~25 m/s a quem mandasse muitas mensage
 - **Prédios** (`src/world.js`): torres em um ou dois blocos (o de cima recuado), fachadas em resolução dobrada e detalhes instanciados por categoria: marquise sobre a calçada, brises e frisos nos de vidro, varandas com guarda-corpo de vidro nos residenciais, cornijas e aparelhos de ar nos clássicos, condensadores na cobertura e luz vermelha nas antenas.
 - **Barracas** (`src/props.js`): carrinhos de churrasquinho com picanha no espeto, brasa e fumaça, e barracas da feira com abóboras (laranja, moranga e cabotiá). A multidão desvia delas, e alguns figurantes andam com um espetinho na mão.
 
+## Veículos, calçadas e rua (visual)
+
+- **Veículos** (`src/vehicles.js`): carrocerias arredondadas (perfil lateral extrudado com chanfro) em três tipos de carro (sedan, hatch, SUV), vidros escuros e brilhantes, pneus com roda de liga, faróis e lanternas que brilham, retrovisores, placas e tinta metálica com verniz. Ônibus com janelas, porta, ar-condicionado, letreiro e faixa lateral; carro de som com cabine, vidros e caixas com alto-falantes. Cada veículo é um `Mesh` com 6 materiais (tinta, vidro, acabamento por vértice, roda, farol, lanterna) e a geometria é compartilhada entre veículos do mesmo tipo. `carMesh(color, skin, type)` mantém a API antiga (`skin`: `carro-dourado` ou `carro-som`).
+- **Sem piscar (z-fighting):** nenhuma face de uma peça fica no mesmo plano de outra que a atravessa; peças sobrepostas se afastam ao menos 1 cm e calcomanias (vidro, faixa) ficam 2 a 4 cm para fora. O ônibus antigo piscava porque a faixa lateral tinha as faces da frente e de trás coincidentes com a carroceria.
+- **Sombra estável** (`src/shadow.js`): o foco da câmera de sombra é ancorado na grade de texels da luz, e não nos eixos do mundo, então as sombras (e a auto-sombra de carros e ônibus) não tremem quando o jogador anda.
+- **Calçada** (`sidewalkTexture` / `sidewalkNormal` em `src/textures.js`): 7,5 m do meio-fio aos prédios, com meio-fio e faixa de granito, faixa de serviço (árvores, postes) e placas de concreto, faixa podotátil amarela com nervuras, tira de pedra portuguesa preta e branca, e relevo nas juntas. No lado esquerdo a textura é espelhada.
+- **Rua:** faixa de ônibus terracota e sarjeta de concreto junto ao meio-fio, pisos táteis de alerta vermelhos nas rampas das esquinas, grades de ferro nas árvores e balizadores ao longo do meio-fio. Cones com faixas refletivas, lixeiras com tampa e postes com luminária.
+- **Depuração:** `window.__AVENIDA__.setCamera([x,y,z], [alvoX,alvoY,alvoZ])` fixa a câmera para inspecionar o cenário (`setCamera(null)` devolve o controle).
+
 ## Créditos e licenças
 
 - **Zsky** (`@Zsky_01`): animações de chute, murro e aceno do pacote *Animated Character*, **CC BY 4.0**. Crédito obrigatório: <https://www.patreon.com/Zsky>. Licença original em `assets-src/zsky-LICENSE-CCBY.txt`. O crédito também aparece no jogo, em "Créditos", no rodapé do menu. As animações foram adaptadas (rig refeito e convertido para os esqueletos Mixamo).

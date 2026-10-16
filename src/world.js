@@ -257,7 +257,7 @@ export function createWorld(scene, renderer) {
     { geo: B(0.05, 0.05, 1.5), color: '#5a5f67', pos: [0, 7.52, 0.62], rot: [0.55, 0, 0] }, // escora
     { geo: rb(0.82, 0.16, 0.4, 0.07), color: '#3a3d43', pos: [0, 8.12, 2.2] }, // luminária
   ]);
-  const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.5 }), lampSpots.length);
+  const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.2 }), lampSpots.length);
   const lamps = new THREE.InstancedMesh(B(0.62, 0.04, 0.28), new THREE.MeshBasicMaterial({ color: '#fff4cf' }), lampSpots.length);
   lampSpots.forEach(([x, z], i) => {
     const flip = x > 0 ? -1 : 1;
