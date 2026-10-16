@@ -423,14 +423,15 @@ export function initAccount({ onChange }) {
       class: 'primary small',
       type: 'button',
       async onclick(e) {
-        e.currentTarget.disabled = true;
+        const btn = e.currentTarget;
+        btn.disabled = true;
         try {
           const data = await api.checkout(item.id);
           if (data.pix) openPix(item, data.order, data.pix);
           else window.location.href = data.url;
         } catch (err) {
           toast(err.message, 'error');
-          e.currentTarget.disabled = false;
+          btn.disabled = false;
         }
       },
     }, `${item.kind === 'vip' && isVip ? 'Renovar' : item.kind === 'donation' ? 'Apoiar' : 'Comprar'} ${brl(item.price)}`);
@@ -462,13 +463,14 @@ export function initAccount({ onChange }) {
           class: `chip${on ? ' on' : ''}`,
           type: 'button',
           async onclick(e) {
-            e.currentTarget.disabled = true;
+            const btn = e.currentTarget;
+            btn.disabled = true;
             try {
               apply(await api.equip(item.slot, on ? null : item.id), 'items');
               render();
             } catch (err) {
               toast(err.message, 'error');
-              e.currentTarget.disabled = false;
+              btn.disabled = false;
             }
           },
         }, on ? '✓ Equipado · Remover' : 'Equipar');
@@ -565,8 +567,9 @@ export function initAccount({ onChange }) {
       class: 'chip',
       type: 'button',
       async onclick(e) {
-        e.currentTarget.disabled = true;
-        try { await api.simulatePix(orderId); clearTimeout(timer); poll(); } catch (err) { toast(err.message, 'error'); e.currentTarget.disabled = false; }
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        try { await api.simulatePix(orderId); clearTimeout(timer); poll(); } catch (err) { toast(err.message, 'error'); btn.disabled = false; }
       },
     }, 'Simular pagamento (teste)') : null;
 

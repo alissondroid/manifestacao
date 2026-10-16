@@ -26,7 +26,11 @@ export const PROVIDER = ABACATE_KEY ? 'abacatepay'
 export const WEBHOOK_CONFIGURED = !!WEBHOOK_SECRET;
 // O checkout simulado entrega itens sem cobrar: só em desenvolvimento (ou com ALLOW_SIMULATED=1).
 export const PAYMENTS_ENABLED = PROVIDER !== 'simulated' || process.env.NODE_ENV !== 'production' || process.env.ALLOW_SIMULATED === '1';
-if (!PAYMENTS_ENABLED) console.warn('[pagamentos] produção sem chave Stripe: a loja fica desativada (defina ABACATEPAY_API_KEY).');
+if (!PAYMENTS_ENABLED) console.warn('[pagamentos] produção sem chave de pagamento: a loja fica desativada (defina ABACATEPAY_API_KEY no .env e reinicie o serviço).');
+console.log(`[pagamentos] provedor: ${PROVIDER}${PAYMENTS_ENABLED ? '' : ' (loja desativada)'}`);
+// Erro comum: variável com outro nome (ex.: ABACATE_API_KEY). Mostra só os nomes, nunca os valores.
+const strayNames = Object.keys(process.env).filter((k) => /abacate/i.test(k) && !['ABACATEPAY_API_KEY', 'ABACATEPAY_WEBHOOK_SECRET', 'ABACATEPAY_URL'].includes(k));
+if (!ABACATE_KEY && strayNames.length) console.warn(`[pagamentos] variável(is) ${strayNames.join(', ')} ignorada(s): o nome certo é ABACATEPAY_API_KEY.`);
 
 // ---------- AbacatePay (REST, Pix) ----------
 
