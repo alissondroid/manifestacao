@@ -794,3 +794,6 @@ body[data-mode='lobby'] #topbar { padding-inline: max(14px, calc((100vw - 1360px
   .preview { display: none; }
   .hero { padding: 8px 16px; gap: 0; }
 }
+
+/* lado: 2 colunas quando couber, 1 coluna em menus estreitos (sem cortar o nome) */
+#lobby .sides { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
