@@ -2,10 +2,13 @@
 // valor, o que o proxy acrescentou; o primeiro vem do cliente e pode ser falsificado.
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 
+// Socket dual-stack entrega IPv4 como "::ffff:a.b.c.d"; sem normalizar, o ban por "ip:a.b.c.d" nunca casaria.
+const plain = (ip) => (typeof ip === 'string' ? ip.replace(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i, '$1') : ip);
+
 export function clientIp(req) {
   if (TRUST_PROXY) {
     const last = String(req.headers['x-forwarded-for'] ?? '').split(',').pop().trim();
-    if (last) return last;
+    if (last) return plain(last);
   }
-  return req.socket.remoteAddress;
+  return plain(req.socket.remoteAddress);
 }
