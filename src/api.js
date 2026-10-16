@@ -20,6 +20,7 @@ export const api = {
   login: (email, password) => request('/api/auth/login', { method: 'POST', body: { email, password } }),
   logout: () => request('/api/auth/logout', { method: 'POST', body: {} }),
   checkout: (item) => request('/api/shop/checkout', { method: 'POST', body: { item } }),
+  simulatePix: (order) => request('/api/shop/simulate-pix', { method: 'POST', body: { order } }),
   confirm: (order) => request(`/api/shop/confirm?order=${encodeURIComponent(order)}`),
   equip: (slot, item) => request('/api/shop/equip', { method: 'POST', body: { slot, item } }),
   design: (kind, design) => request('/api/shop/design', { method: 'POST', body: { kind, design } }),

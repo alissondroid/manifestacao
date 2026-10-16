@@ -877,3 +877,14 @@ body[data-mode='lobby'] #topbar { padding-inline: max(14px, calc((100vw - 1360px
   .auth input:not([type='checkbox']) { font-size: 16px; }
 }
 @media (prefers-reduced-motion: reduce) { .authform.shake, .spin { animation: none; } }
+
+/* ---------- Pix ---------- */
+.pix { gap: 12px; text-align: center; }
+.pixqr { justify-self: center; width: min(240px, 64vw); background: #fff; border-radius: 14px; padding: 10px; }
+.pixqr img { display: block; width: 100%; image-rendering: pixelated; }
+.pixcode { width: 100%; resize: none; background: rgba(2, 6, 23, 0.6); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: 12px/1.35 ui-monospace, monospace; }
+.pixactions { display: grid; gap: 8px; }
+.pixstatus { margin: 0; font-size: 14px; color: var(--muted); }
+.pixstatus[data-kind='bad'] { color: #fca5a5; }
+.pix .link { justify-self: center; font-size: 12.5px; }
+@media (max-width: 640px) { .pixcode { font-size: 16px; } }

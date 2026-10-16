@@ -58,8 +58,9 @@ export function initAccount({ onChange }) {
     onChange(account, reason);
   };
 
-  const closeModal = () => { modal.hidden = true; body.replaceChildren(); };
-  const openModal = (...nodes) => { body.replaceChildren(...nodes); modal.hidden = false; };
+  let onModalClose = null; // limpeza da tela aberta (ex.: parar de consultar o Pix)
+  const closeModal = () => { onModalClose?.(); onModalClose = null; modal.hidden = true; body.replaceChildren(); };
+  const openModal = (...nodes) => { onModalClose?.(); onModalClose = null; body.replaceChildren(...nodes); modal.hidden = false; };
   $('#modal-close').onclick = closeModal;
   modal.addEventListener('pointerdown', (e) => { if (e.target === modal) closeModal(); });
   window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
@@ -409,7 +410,9 @@ export function initAccount({ onChange }) {
     if (!account.user) { openAuth('login'); return; }
     try { apply(await api.me(), 'items'); } catch { /* usa o que já temos */ }
     const provider = account.shop.provider;
-    const note = provider === 'stripe'
+    const note = provider === 'abacatepay'
+      ? 'Pagamento somente por Pix. O item é liberado assim que o pagamento cair, geralmente em segundos.'
+      : provider === 'stripe'
       ? 'Pagamento em modo de teste (Stripe): use os cartões e o Pix de teste. Nenhum dinheiro é cobrado.'
       : 'Modo de teste: o pagamento é simulado e nenhum dinheiro é cobrado.';
     const isVip = account.vipUntil > Date.now();
@@ -422,8 +425,9 @@ export function initAccount({ onChange }) {
       async onclick(e) {
         e.currentTarget.disabled = true;
         try {
-          const { url } = await api.checkout(item.id);
-          window.location.href = url;
+          const data = await api.checkout(item.id);
+          if (data.pix) openPix(item, data.order, data.pix);
+          else window.location.href = data.url;
         } catch (err) {
           toast(err.message, 'error');
           e.currentTarget.disabled = false;
@@ -503,7 +507,7 @@ export function initAccount({ onChange }) {
 
     openModal(
       h('h2', {}, 'Loja'),
-      h('p', { class: 'note test' }, note),
+      h('p', { class: provider === 'abacatepay' ? 'note' : 'note test' }, note),
       h('p', { class: 'note' }, 'Tudo é cosmético ou de diversão: nada aqui dá vantagem no PvP. A Camisa simples e a Sua camisa só aparecem no Rosto 1 masculino.'),
       tabs,
       slotHolder,
@@ -512,6 +516,77 @@ export function initAccount({ onChange }) {
   }
 
   $('#shopbtn').onclick = () => openShop();
+
+  // ---------- Pix (AbacatePay) ----------
+
+  /** Modal do Pix: QR Code, copia e cola e consulta o pagamento até cair (ou vencer). */
+  function openPix(item, orderId, pix) {
+    const status = h('p', { class: 'pixstatus', role: 'status' }, 'Aguardando o pagamento…');
+    const copy = h('button', { class: 'primary', type: 'button' }, 'Copiar código Pix');
+    const code = h('textarea', { class: 'pixcode', readonly: true, rows: 3, 'aria-label': 'Pix copia e cola' }, pix.brCode);
+    let timer = 0;
+    let stopped = false;
+    const stop = () => { stopped = true; clearTimeout(timer); };
+
+    copy.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(pix.brCode); } catch { code.select(); document.execCommand('copy'); }
+      copy.textContent = 'Copiado!';
+      setTimeout(() => { copy.textContent = 'Copiar código Pix'; }, 2000);
+    });
+
+    const say = (text, kind = '') => { status.textContent = text; status.dataset.kind = kind; };
+    const retry = () => h('button', { class: 'primary', type: 'button', onclick: () => { stop(); openShop(); } }, 'Voltar à loja');
+
+    async function poll() {
+      if (stopped) return;
+      try {
+        const res = await api.confirm(orderId);
+        if (stopped) return;
+        if (res.status === 'paid') {
+          stop();
+          closeModal();
+          apply(res, 'items');
+          toast(`Pagamento confirmado! ${item.name} já é seu.`, 'ok');
+          return;
+        }
+        if (res.status !== 'pending') {
+          stop();
+          say('Esse Pix expirou ou foi cancelado. Gere outro na loja.', 'bad');
+          body.querySelector('.pixactions')?.replaceChildren(retry());
+          return;
+        }
+      } catch { /* sem rede por um instante: tenta de novo */ }
+      const left = Math.max(0, Math.round((Date.parse(pix.expiresAt) - Date.now()) / 1000));
+      say(`Aguardando o pagamento… expira em ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`);
+      timer = setTimeout(poll, 3000);
+    }
+
+    const sim = pix.devMode ? h('button', {
+      class: 'chip',
+      type: 'button',
+      async onclick(e) {
+        e.currentTarget.disabled = true;
+        try { await api.simulatePix(orderId); clearTimeout(timer); poll(); } catch (err) { toast(err.message, 'error'); e.currentTarget.disabled = false; }
+      },
+    }, 'Simular pagamento (teste)') : null;
+
+    openModal(
+      h(
+        'div',
+        { class: 'auth pix' },
+        h('header', { class: 'auth-head' }, h('div', { class: 'auth-logo', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')), h('h2', {}, 'Pague com Pix'), h('p', {}, `${item.name} · ${brl(item.price)}`)),
+        pix.devMode && h('p', { class: 'note test' }, 'Modo de teste: nenhum dinheiro é cobrado.'),
+        pix.qr && h('div', { class: 'pixqr' }, h('img', { src: pix.qr, alt: 'QR Code do Pix' })),
+        h('p', { class: 'note' }, 'Abra o app do seu banco, escolha Pix e leia o QR Code, ou use o copia e cola.'),
+        code,
+        h('div', { class: 'pixactions' }, copy, sim),
+        status,
+        h('button', { class: 'link', type: 'button', onclick: () => { closeModal(); } }, 'Fechar (o Pix continua válido por 30 minutos)'),
+      ),
+    );
+    onModalClose = stop;
+    poll();
+  }
 
   // ---------- Editor de cartaz / bandeira ----------
 

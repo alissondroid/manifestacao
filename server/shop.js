@@ -55,7 +55,8 @@ export function createOrder(userId, item, provider) {
 }
 
 export const getOrder = (id) => db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
-export const setOrderRef = (id, ref, url = null) => db.prepare('UPDATE orders SET provider_ref = ?, pay_url = ? WHERE id = ?').run(ref, url, id);
+export const setOrderRef = (id, ref, url = null, data = null) => db.prepare('UPDATE orders SET provider_ref = ?, pay_url = ?, pay_data = ? WHERE id = ?').run(ref, url, data ? JSON.stringify(data) : null, id);
+export const orderByRef = (provider, ref) => db.prepare('SELECT * FROM orders WHERE provider = ? AND provider_ref = ?').get(provider, ref);
 
 /** Pedido pendente recente do mesmo item: o usuário volta para o mesmo checkout em vez de abrir outro (evita cobrança dupla). */
 export const pendingOrder = (userId, itemId, provider) => db.prepare(

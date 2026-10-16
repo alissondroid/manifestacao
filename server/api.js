@@ -6,7 +6,7 @@ import {
 } from './auth.js';
 import { GOOGLE_CLIENT_ID, verifyGoogleToken } from './google.js';
 import {
-  ownedIds, equippedMap, owns, createOrder, pendingOrder, inventoryOf, vipUntil, hasPremiumEmotes, canBuy, getOrder, setOrderRef, setOrderStatus, fulfill, equip, designsOf, saveDesign,
+  ownedIds, equippedMap, owns, createOrder, pendingOrder, inventoryOf, vipUntil, hasPremiumEmotes, canBuy, getOrder, orderByRef, setOrderRef, setOrderStatus, fulfill, equip, designsOf, saveDesign,
 } from './shop.js';
 import { filterText } from './moderation.js';
 import { clientIp } from './ip.js';
@@ -15,7 +15,7 @@ import {
 } from './bans.js';
 import crypto from 'node:crypto';
 import {
-  PROVIDER, PAYMENTS_ENABLED, WEBHOOK_CONFIGURED, createCheckout, fetchStatus, verifyWebhook,
+  PROVIDER, PAYMENTS_ENABLED, WEBHOOK_CONFIGURED, ABACATE_WEBHOOK_SECRET, createCheckout, fetchStatus, simulatePix, verifyWebhook,
 } from './payments.js';
 import { SHOP, SHOP_BY_ID, SLOTS, DESIGN } from '../shared/config.js';
 
@@ -115,6 +115,31 @@ export async function handleApi(req, res, hooks = {}) {
         if (sameSession && order.provider === 'stripe' && s.amount_total === order.amount_cents && s.currency === 'brl') {
           if (!order.provider_ref) setOrderRef(order.id, s.id, null);
           if (fulfill(order.id)) hooks.onEquip?.(order.user_id);
+        }
+      }
+      return json(res, 200, { received: true }), true;
+    }
+
+    // Webhook da AbacatePay: o segredo vai na URL (?webhookSecret=). O corpo nunca é confiado:
+    // ele só diz qual cobrança olhar, e quem confirma o pagamento é a consulta à API.
+    if (method === 'POST' && pathname === '/api/abacatepay/webhook') {
+      if (PROVIDER !== 'abacatepay' || !ABACATE_WEBHOOK_SECRET) return json(res, 503, { error: 'Webhook não configurado' }), true;
+      const sha = (v) => crypto.createHash('sha256').update(String(v)).digest();
+      if (!crypto.timingSafeEqual(sha(url.searchParams.get('webhookSecret') ?? ''), sha(ABACATE_WEBHOOK_SECRET))) {
+        return json(res, 401, { error: 'Não autorizado' }), true;
+      }
+      let payload = {};
+      try { payload = JSON.parse((await readBody(req, 64 * 1024)).toString('utf8')) || {}; } catch { /* corpo inválido: ignora */ }
+      const ref = payload.data?.pixQrCode?.id ?? payload.data?.id ?? payload.id;
+      const order = typeof ref === 'string' ? orderByRef('abacatepay', ref) : null;
+      if (order && order.status !== 'paid') {
+        try {
+          const st = await fetchStatus(order.provider_ref);
+          if (st.paid && fulfill(order.id)) hooks.onEquip?.(order.user_id);
+          else if (st.expired) setOrderStatus(order.id, 'expired');
+        } catch (err) {
+          console.error('[pagamentos] webhook: falha ao consultar a AbacatePay:', err.message);
+          return json(res, 502, { error: 'Tente de novo' }), true; // a AbacatePay reenvia
         }
       }
       return json(res, 200, { received: true }), true;
@@ -289,12 +314,12 @@ export async function handleApi(req, res, hooks = {}) {
       if (!rateLimit(`checkout:${user.id}`, 10, 10 * 60_000)) return json(res, 429, { error: 'Muitas tentativas. Aguarde um pouco.' }), true;
 
       const open = pendingOrder(user.id, item.id, PROVIDER);
-      if (open) return json(res, 200, { url: open.pay_url, order: open.id }), true;
+      if (open) return json(res, 200, { url: open.pay_url, order: open.id, pix: pixPublic(open.pay_data) }), true;
       const order = createOrder(user.id, item, PROVIDER);
       try {
-        const { url: checkoutUrl, ref } = await createCheckout({ order, item, baseUrl: baseUrl(req) });
-        setOrderRef(order.id, ref, checkoutUrl);
-        return json(res, 200, { url: checkoutUrl, order: order.id }), true;
+        const { url: checkoutUrl, ref, data } = await createCheckout({ order, item, baseUrl: baseUrl(req) });
+        setOrderRef(order.id, ref, checkoutUrl, data);
+        return json(res, 200, { url: checkoutUrl, order: order.id, pix: pixPublic(JSON.stringify(data)) }), true;
       } catch (err) {
         console.error('[pagamentos] falha ao criar checkout:', err.message);
         setOrderStatus(order.id, 'failed');
@@ -307,7 +332,7 @@ export async function handleApi(req, res, hooks = {}) {
       const order = UUID.test(orderId) ? getOrder(orderId) : null;
       if (!order || order.user_id !== user.id) return json(res, 404, { error: 'Pedido não encontrado.' }), true;
 
-      if (order.status === 'pending' && order.provider === 'stripe' && order.provider_ref) {
+      if (order.status === 'pending' && order.provider !== 'simulated' && order.provider_ref) {
         try {
           const st = await fetchStatus(order.provider_ref);
           if (st.paid && fulfill(order.id)) hooks.onEquip?.(user.id);
@@ -346,6 +371,20 @@ export async function handleApi(req, res, hooks = {}) {
 
     // ---------- Checkout simulado (só quando não há chave Stripe de teste) ----------
 
+    // Só com chave de desenvolvimento da AbacatePay: marca o Pix como pago para testar o fluxo inteiro.
+    if (PROVIDER === 'abacatepay' && method === 'POST' && pathname === '/api/shop/simulate-pix') {
+      const body = await readJson(req);
+      const order = UUID.test(String(body.order)) ? getOrder(body.order) : null;
+      let pix = null;
+      try { pix = JSON.parse(order?.pay_data || 'null'); } catch { /* sem dados */ }
+      if (!order || order.user_id !== user.id || order.provider !== 'abacatepay' || order.status !== 'pending') {
+        return json(res, 404, { error: 'Pedido não encontrado.' }), true;
+      }
+      if (!pix?.devMode) return json(res, 403, { error: 'Só vale para cobranças de teste.' }), true;
+      await simulatePix(order.provider_ref);
+      return json(res, 200, { ok: true }), true;
+    }
+
     if (PROVIDER === 'simulated' && PAYMENTS_ENABLED && method === 'POST' && pathname === '/api/shop/simulate') {
       const body = await readJson(req);
       const order = UUID.test(String(body.order)) ? getOrder(body.order) : null;
@@ -377,6 +416,16 @@ export async function handleApi(req, res, hooks = {}) {
 }
 
 const brl = (cents) => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+/** Dados do Pix que o cliente pode ver (QR sanitizado: só PNG em base64). */
+function pixPublic(raw) {
+  let pix = null;
+  try { pix = JSON.parse(raw || 'null'); } catch { return undefined; }
+  if (!pix?.brCode) return undefined;
+  const qr = String(pix.qr || '');
+  const png = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(qr) ? qr : /^[A-Za-z0-9+/=]+$/.test(qr) && qr ? `data:image/png;base64,${qr}` : '';
+  return { brCode: pix.brCode, qr: png, expiresAt: pix.expiresAt, devMode: !!pix.devMode };
+}
 
 // Página de pagamento de mentira, claramente identificada como teste.
 function simulatedPage(order, item) {
