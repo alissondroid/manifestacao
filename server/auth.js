@@ -56,7 +56,7 @@ export function deleteAccount(userId) {
     for (const table of ['sessions', 'owned', 'equipped', 'designs', 'inventory']) {
       db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).run(userId);
     }
-    db.prepare("UPDATE users SET email = ?, nick = ?, pass_hash = '', vip_until = 0, terms_at = NULL WHERE id = ?")
+    db.prepare("UPDATE users SET email = ?, nick = ?, pass_hash = '', google_sub = NULL, vip_until = 0, terms_at = NULL WHERE id = ?")
       .run(`excluido-${userId}@invalid.local`, `Excluído${userId}`, userId);
     db.exec('COMMIT');
   } catch (err) {
@@ -127,3 +127,16 @@ export const validNick = (n) => typeof n === 'string'
 export const validPassword = (p) => typeof p === 'string' && p.length >= ACCOUNT.passwordMin && p.length <= 200;
 
 export const nickTaken = (nick) => !!db.prepare('SELECT 1 FROM users WHERE nick = ?').get(nick);
+
+/** Sugere um apelido válido e livre a partir do nome ou do e-mail da conta Google. */
+export function suggestNick(name, email) {
+  const clean = (t) => String(t ?? '').normalize('NFC').replace(/[^\p{L}\p{N}_.\- ]/gu, '').trim().slice(0, ACCOUNT.nickMax - 3).trim();
+  let base = clean(name) || clean(String(email ?? '').split('@')[0]);
+  if (base.length < ACCOUNT.nickMin) base = 'Jogador';
+  if (validNick(base) && !nickTaken(base)) return base;
+  for (let i = 0; i < 50; i += 1) {
+    const n = `${base}${Math.floor(100 + Math.random() * 900)}`;
+    if (validNick(n) && !nickTaken(n)) return n;
+  }
+  return `Jogador${Date.now() % 100000}`;
+}

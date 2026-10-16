@@ -36,7 +36,7 @@ export function toast(text, kind = 'info') {
  */
 export function initAccount({ onChange }) {
   let account = {
-    user: null, owned: [], equipped: {}, custom: {}, inventory: {}, vipUntil: 0, premium: false, shop: { items: SHOP.filter((i) => !i.hidden), provider: 'simulated' },
+    user: null, owned: [], equipped: {}, custom: {}, inventory: {}, vipUntil: 0, premium: false, googleClientId: null, shop: { items: SHOP.filter((i) => !i.hidden), provider: 'simulated' },
   };
   const modal = $('#modal');
   const body = $('#modal-body');
@@ -52,6 +52,7 @@ export function initAccount({ onChange }) {
       vipUntil: data.vipUntil ?? 0,
       premium: !!data.premium,
       shop: data.shop ?? account.shop,
+      googleClientId: data.googleClientId !== undefined ? data.googleClientId : account.googleClientId,
     };
     renderBar();
     onChange(account, reason);
@@ -87,15 +88,108 @@ export function initAccount({ onChange }) {
 
   async function deleteAccount() {
     if (!window.confirm('Excluir a conta apaga seus itens, desenhos e dados pessoais e não pode ser desfeito. Continuar?')) return;
-    const password = window.prompt('Digite sua senha para confirmar a exclusão:');
-    if (!password) return;
+    const google = account.user?.google; // conta do Google não tem senha
+    const answer = window.prompt(google ? 'Digite EXCLUIR para confirmar a exclusão:' : 'Digite sua senha para confirmar a exclusão:');
+    if (!answer) return;
     try {
-      await api.deleteAccount(password);
+      await api.deleteAccount(google ? { confirm: answer } : { password: answer });
       apply({ user: null, owned: [], equipped: {} }, 'logout');
       toast('Conta excluída. Seus dados pessoais foram apagados.', 'ok');
     } catch (err) {
       toast(err.message, 'error');
     }
+  }
+
+  // ---------- Login com Google ----------
+
+  let gsiLoading;
+  const loadGsi = () => {
+    gsiLoading ??= new Promise((resolve, reject) => {
+      if (window.google?.accounts?.id) { resolve(); return; }
+      const el = document.createElement('script');
+      el.src = 'https://accounts.google.com/gsi/client';
+      el.async = true;
+      el.onload = () => resolve();
+      el.onerror = () => { gsiLoading = null; reject(new Error('gsi')); };
+      document.head.append(el);
+    });
+    return gsiLoading;
+  };
+
+  /** Botão oficial do Google; devolve o contêiner (vazio se o login com Google não estiver ativo). */
+  function googleButton() {
+    const box = h('div', { class: 'gbtn' });
+    if (!account.googleClientId) return box;
+    loadGsi().then(() => {
+      window.google.accounts.id.initialize({
+        client_id: account.googleClientId,
+        callback: ({ credential }) => finishGoogle(credential),
+      });
+      window.google.accounts.id.renderButton(box, {
+        type: 'standard', theme: 'outline', size: 'large', text: 'continue_with', locale: 'pt-BR', width: 280,
+      });
+    }).catch(() => { box.append(h('p', { class: 'note' }, 'Não deu para carregar o login com o Google. Use e-mail e senha.')); });
+    return box;
+  }
+
+  async function finishGoogle(credential, nick, terms) {
+    try {
+      const data = await api.google(credential, nick, terms);
+      if (data.needsProfile) { openGoogleProfile(credential, data); return; }
+      closeModal();
+      apply(data, 'login');
+      toast(data.linked
+        ? `Conta vinculada ao Google. A senha antiga não vale mais: entre sempre pelo Google, ${data.user.nick}.`
+        : `Olá, ${data.user.nick}!`, data.linked ? 'ok' : 'info');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
+  /** Primeiro acesso com Google: escolher o apelido e aceitar os Termos. */
+  function openGoogleProfile(credential, { email, suggestedNick }) {
+    const error = h('p', { class: 'error', role: 'alert', hidden: true });
+    const nick = h('input', {
+      type: 'text', required: true, maxlength: 16, minlength: 3, value: suggestedNick, autocomplete: 'nickname',
+    });
+    const terms = h('input', { type: 'checkbox', required: true });
+    const submit = h('button', { class: 'primary', type: 'submit' }, 'Criar conta');
+    openModal(
+      h('h2', {}, 'Quase lá'),
+      h('p', { class: 'note' }, `Entrando com ${email}. Escolha como você aparece na avenida.`),
+      h(
+        'form',
+        {
+          class: 'authform',
+          async onsubmit(e) {
+            e.preventDefault();
+            error.hidden = true;
+            submit.disabled = true;
+            try {
+              const data = await api.google(credential, nick.value.trim(), terms.checked);
+              closeModal();
+              apply(data, 'login');
+              toast(`Olá, ${data.user.nick}!`);
+            } catch (err) {
+              error.textContent = err.message;
+              error.hidden = false;
+              submit.disabled = false;
+            }
+          },
+        },
+        h('label', { class: 'field' }, h('span', {}, 'Apelido'), nick),
+        h(
+          'label',
+          { class: 'terms' },
+          terms,
+          h('span', {}, 'Li e aceito os ', h('a', { href: '/termos', target: '_blank', rel: 'noopener' }, 'Termos de uso'), ' e a ', h('a', { href: '/privacidade', target: '_blank', rel: 'noopener' }, 'Política de privacidade'), '.'),
+        ),
+        error,
+        submit,
+      ),
+    );
+    nick.focus();
+    nick.select();
   }
 
   // ---------- Login / cadastro ----------
@@ -153,6 +247,8 @@ export function initAccount({ onChange }) {
 
     openModal(
       h('div', { class: 'tabs' }, tab('login', 'Entrar'), tab('register', 'Criar conta')),
+      account.googleClientId && googleButton(),
+      account.googleClientId && h('p', { class: 'or' }, 'ou com e-mail'),
       form,
       h('p', { class: 'note' }, 'Com a conta, seus itens da loja ficam guardados e o apelido dela passa a ser o seu na avenida.'),
     );

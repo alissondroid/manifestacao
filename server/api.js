@@ -2,8 +2,9 @@ import { db } from './db.js';
 import {
   hashPassword, verifyPassword, burnPasswordTime, createSession, destroySession,
   userFromRequest, tokenFromRequest, sessionCookie, clearCookie, rateLimit, deleteAccount,
-  validEmail, validNick, validPassword,
+  validEmail, validNick, validPassword, suggestNick,
 } from './auth.js';
+import { GOOGLE_CLIENT_ID, verifyGoogleToken } from './google.js';
 import {
   ownedIds, equippedMap, owns, createOrder, pendingOrder, inventoryOf, vipUntil, hasPremiumEmotes, canBuy, getOrder, setOrderRef, setOrderStatus, fulfill, equip, designsOf, saveDesign,
 } from './shop.js';
@@ -72,7 +73,7 @@ const isAdmin = (req) => {
 
 const accountPayload = (user) => (user
   ? {
-    user: { nick: user.nick, email: user.email },
+    user: { nick: user.nick, email: user.email, google: !!db.prepare('SELECT google_sub FROM users WHERE id = ?').get(user.id)?.google_sub },
     owned: ownedIds(user.id),
     equipped: equippedMap(user.id),
     custom: designsOf(user.id),
@@ -155,7 +156,7 @@ export async function handleApi(req, res, hooks = {}) {
     // ---------- Conta ----------
 
     if (method === 'GET' && pathname === '/api/me') {
-      return json(res, 200, { ...accountPayload(user), shop: publicShop() }), true;
+      return json(res, 200, { ...accountPayload(user), shop: publicShop(), googleClientId: GOOGLE_CLIENT_ID || null }), true;
     }
 
     if (method === 'POST' && pathname === '/api/auth/register') {
@@ -198,6 +199,54 @@ export async function handleApi(req, res, hooks = {}) {
       return json(res, 200, accountPayload(row), { 'set-cookie': sessionCookie(token, { secure }) }), true;
     }
 
+    // Login com Google: entra, vincula a conta de e-mail ou cria uma nova (pedindo apelido e aceite dos Termos).
+    if (method === 'POST' && pathname === '/api/auth/google') {
+      if (!GOOGLE_CLIENT_ID) return json(res, 404, { error: 'Não encontrado' }), true;
+      if (!rateLimit(`google:${clientIp(req)}`, 30, 10 * 60_000)) return json(res, 429, { error: 'Muitas tentativas. Aguarde alguns minutos.' }), true;
+      const body = await readJson(req);
+      let g;
+      try {
+        g = await verifyGoogleToken(body.credential);
+      } catch (err) {
+        console.warn('[google]', err.message);
+        return json(res, 401, { error: 'Não foi possível confirmar o login com o Google. Tente de novo.' }), true;
+      }
+      const cookie = (id) => ({ 'set-cookie': sessionCookie(createSession(id), { secure }) });
+
+      const known = db.prepare('SELECT id, nick, email FROM users WHERE google_sub = ?').get(g.sub);
+      if (known) return json(res, 200, accountPayload(known), cookie(known.id)), true;
+
+      // Já existe conta com esse e-mail (que o Google confirmou): vincula. A senha antiga e as sessões
+      // caem, porque o e-mail do cadastro por senha nunca foi confirmado e podia ser de outra pessoa.
+      const byEmail = db.prepare('SELECT id, nick, email FROM users WHERE email = ?').get(g.email);
+      if (byEmail) {
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          db.prepare("UPDATE users SET google_sub = ?, pass_hash = '' WHERE id = ?").run(g.sub, byEmail.id);
+          db.prepare('DELETE FROM sessions WHERE user_id = ?').run(byEmail.id);
+          db.exec('COMMIT');
+        } catch (err) {
+          db.exec('ROLLBACK');
+          throw err;
+        }
+        return json(res, 200, { ...accountPayload(byEmail), linked: true }, cookie(byEmail.id)), true;
+      }
+
+      const nick = String(body.nick ?? '').trim();
+      if (!nick) return json(res, 200, { needsProfile: true, email: g.email, suggestedNick: suggestNick(g.name, g.email) }), true;
+      if (body.terms !== true) return json(res, 400, { error: 'Aceite os Termos de uso e a Política de privacidade para criar a conta.' }), true;
+      if (!validNick(nick)) return json(res, 400, { error: 'Apelido: 3 a 16 caracteres (letras, números, espaço, _ . -).' }), true;
+      if (db.prepare('SELECT 1 FROM users WHERE nick = ?').get(nick)) return json(res, 409, { error: 'Esse apelido já está em uso.' }), true;
+      let id;
+      try {
+        id = Number(db.prepare("INSERT INTO users (email, nick, pass_hash, google_sub, created_at, terms_at) VALUES (?, ?, '', ?, ?, ?)")
+          .run(g.email, nick, g.sub, Date.now(), Date.now()).lastInsertRowid);
+      } catch {
+        return json(res, 409, { error: 'E-mail ou apelido já em uso.' }), true;
+      }
+      return json(res, 201, accountPayload({ id, nick, email: g.email }), cookie(id)), true;
+    }
+
     if (method === 'POST' && pathname === '/api/auth/logout') {
       destroySession(tokenFromRequest(req));
       return json(res, 200, { ok: true }, { 'set-cookie': clearCookie({ secure }) }), true;
@@ -208,10 +257,12 @@ export async function handleApi(req, res, hooks = {}) {
       if (!user) return json(res, 401, { error: 'Entre na sua conta.' }), true;
       if (!rateLimit(`delete:${user.id}`, 5, 10 * 60_000)) return json(res, 429, { error: 'Muitas tentativas. Aguarde um pouco.' }), true;
       const body = await readJson(req);
-      const row = db.prepare('SELECT pass_hash FROM users WHERE id = ?').get(user.id);
-      if (typeof body.password !== 'string' || !row || !(await verifyPassword(body.password, row.pass_hash))) {
-        return json(res, 403, { error: 'Senha incorreta.' }), true;
-      }
+      const row = db.prepare('SELECT pass_hash, google_sub FROM users WHERE id = ?').get(user.id);
+      // Conta do Google não tem senha: a confirmação é digitar EXCLUIR.
+      const confirmed = row?.google_sub && !row.pass_hash
+        ? body.confirm === 'EXCLUIR'
+        : typeof body.password === 'string' && row && await verifyPassword(body.password, row.pass_hash);
+      if (!confirmed) return json(res, 403, { error: row?.google_sub && !row.pass_hash ? 'Digite EXCLUIR para confirmar.' : 'Senha incorreta.' }), true;
       deleteAccount(user.id);
       hooks.onDelete?.(user.id);
       return json(res, 200, { ok: true }, { 'set-cookie': clearCookie({ secure }) }), true;
