@@ -1,0 +1,33 @@
+[Unit]
+Description=Avenida Online
+After=network.target
+
+[Service]
+User=@APP_USER@
+WorkingDirectory=@APP_DIR@
+Environment=NODE_ENV=production
+Environment=PORT=8787
+ExecStart=/usr/bin/node --env-file=@APP_DIR@/.env server/index.js
+Restart=always
+RestartSec=3
+
+# Sandbox: se alguém conseguir executar código no servidor, ele não consegue mexer no código, no sistema nem em outros usuários.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=@APP_DIR@/data
+ProtectHome=read-only
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

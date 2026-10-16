@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Menor permissão possível para o token do GitHub: só ler o código.
+permissions:
+  contents: read
+
 concurrency:
   group: deploy
   cancel-in-progress: false
@@ -16,19 +20,21 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm test
       - run: npm run build
 
   deploy:
     needs: test
     if: github.event_name != 'pull_request'
-    timeout-minutes: 10
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Atualiza a VPS
         env:
@@ -36,8 +42,17 @@ jobs:
           HOST: ${{ secrets.VPS_HOST }}
           USER_: ${{ secrets.VPS_USER }}
           PORT: ${{ secrets.VPS_PORT }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
-          ssh -i ~/.ssh/id_deploy -p "${PORT:-22}" -o StrictHostKeyChecking=accept-new \
+          if [ -n "$KNOWN_HOSTS" ]; then
+            # chave do servidor fixada no secret: um intermediário não consegue se passar pela VPS
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+            STRICT=yes
+          else
+            echo "::warning::Sem o secret VPS_KNOWN_HOSTS a chave do servidor é aceita na primeira conexão de cada execução (veja o README)."
+            STRICT=accept-new
+          fi
+          ssh -i ~/.ssh/id_deploy -p "${PORT:-22}" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking="$STRICT" \
             "${USER_:-root}@$HOST" 'cd /opt/avenida && BRANCH=main bash deploy/update.sh'

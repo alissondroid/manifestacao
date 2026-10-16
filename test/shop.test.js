@@ -91,6 +91,31 @@ test('hash de senha: confere a certa, recusa a errada', async () => {
   assert.equal(await auth.verifyPassword('x', 'lixo'), false);
 });
 
+test('hash de senha usa scrypt forte (N=2^15, r=8, p=3) com formato versionado e sal próprio', async () => {
+  const a = await auth.hashPassword('senha-forte-123');
+  const b = await auth.hashPassword('senha-forte-123');
+  assert.match(a, /^s1\$32768\$8\$3\$[0-9a-f]{32}\$[0-9a-f]{128}$/);
+  assert.notEqual(a, b, 'sal repetido');
+  assert.equal(auth.needsRehash(a), false);
+});
+
+test('senha antiga (formato sal:chave, N=16384) ainda confere e é marcada para atualizar', async () => {
+  const crypto = await import('node:crypto');
+  const salt = crypto.randomBytes(16);
+  const key = crypto.scryptSync('senha-antiga-1', salt, 64, { N: 16384, r: 8, p: 1 });
+  const legacy = `${salt.toString('hex')}:${key.toString('hex')}`;
+  assert.equal(await auth.verifyPassword('senha-antiga-1', legacy), true);
+  assert.equal(await auth.verifyPassword('errada', legacy), false);
+  assert.equal(auth.needsRehash(legacy), true);
+  assert.equal(auth.needsRehash(''), true);
+});
+
+test('hashes malformados ou com parâmetros absurdos são recusados sem estourar memória', async () => {
+  for (const bad of ['', 'x', ':', 'a:b', 's1$1$1$1$00$00', 's1$99999999$8$3$aa$bb', 's1$32768$8$3$zz$zz', 's1$32768$8$1000$aa$bb']) {
+    assert.equal(await auth.verifyPassword('qualquer', bad), false, bad);
+  }
+});
+
 test('validações de e-mail, apelido e senha', () => {
   assert.ok(auth.validEmail('a@b.com'));
   assert.ok(!auth.validEmail('a@b'));

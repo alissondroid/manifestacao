@@ -95,6 +95,10 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// Limites contra conexões lentas que seguram o servidor (slowloris): a requisição inteira precisa chegar logo.
+server.headersTimeout = 15_000;
+server.requestTimeout = 30_000;
+
 async function handle(req, res) {
   if (req.url === '/healthz') {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });

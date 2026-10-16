@@ -8,8 +8,21 @@ export const cleanText = (s, max) => String(s ?? '')
   .trim()
   .slice(0, max);
 
-const RESERVED = new Set(['sistema', 'admin', 'administrador', 'moderador', 'moderacao', 'moderação', 'suporte', 'avenida online', 'dominio', 'domínio']);
-export const isReservedNick = (nick) => RESERVED.has(String(nick).trim().toLowerCase());
+// Apelidos que se passam pela equipe ou pelo sistema. A comparação ignora acento, maiúsculas, pontuação, números no lugar
+// de letras (adm1n) e letras parecidas de outros alfabetos (о cirílico no lugar do o).
+const RESERVED = new Set(['sistema', 'admin', 'administrador', 'moderador', 'moderacao', 'suporte', 'avenidaonline', 'dominio', 'staff', 'oficial', 'excluido']);
+const LOOKALIKE = {
+  а: 'a', е: 'e', о: 'o', р: 'p', с: 'c', х: 'x', у: 'y', і: 'i', ѕ: 's', ј: 'j', ԁ: 'd', ο: 'o', α: 'a', ν: 'v', ι: 'i', κ: 'k', ρ: 'p', τ: 't', υ: 'u', ɑ: 'a', ı: 'i',
+};
+const LEET = { 0: 'o', 1: 'i', 3: 'e', 4: 'a', 5: 's', 7: 't', '@': 'a', $: 's', '!': 'i' };
+const letters = (t) => t.replace(/[^a-z]/g, '');
+const base = (nick) => String(nick).normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[\u0400-\u04ff\u0370-\u03ff\u0250-\u02af\u0131]/g, (c) => LOOKALIKE[c] ?? c);
+
+export function isReservedNick(nick) {
+  const b = base(nick);
+  const skeletons = [letters(b), letters(b.replace(/[0-9@$!]/g, (c) => LEET[c] ?? c))];
+  return skeletons.some((sk) => RESERVED.has(sk) || sk.startsWith('excluido'));
+}
 
 /** Apelido de convidado que não repete o de quem já está online (evita se passar por outro jogador). */
 export function uniqueNick(nick, online, max) {

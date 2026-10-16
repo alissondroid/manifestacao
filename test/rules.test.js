@@ -11,6 +11,15 @@ test('cleanText remove controles e < >, junta espaços e corta no limite', () =>
   assert.equal(cleanText(null, 5), '');
 });
 
+test('isReservedNick pega variações: acento, maiúsculas, números no lugar de letras, símbolos e letras parecidas de outros alfabetos', () => {
+  for (const nick of ['Admin', 'ADMIN', 'Admín', 'Adm1n', '4dmin', 'Admin_', 'a.d.m.i.n', 'Аdmin', 'Moderador', 'M0derad0r', 'Moderação', 'Suporte', 'Su p0rte', 'Sistema', 'S1stema', 'Avenida Online', 'AvenidaOnline', 'Excluído', 'Excluído123', 'excluido9', 'EXCLUÍDO1', 'Staff', 'Oficial']) {
+    assert.ok(isReservedNick(nick), `${nick} deveria ser reservado`);
+  }
+  for (const nick of ['Maria', 'Adriano', 'Administrando', 'Pedro Silva', 'Sistemática', 'Zé', 'Suportei', 'Visitante12']) {
+    assert.ok(!isReservedNick(nick), `${nick} não deveria ser reservado`);
+  }
+});
+
 test('isReservedNick bloqueia nomes que imitam o sistema', () => {
   assert.ok(isReservedNick('Sistema'));
   assert.ok(isReservedNick(' ADMIN '));

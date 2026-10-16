@@ -1,6 +1,6 @@
 import { db } from './db.js';
 import {
-  hashPassword, verifyPassword, burnPasswordTime, createSession, destroySession,
+  hashPassword, verifyPassword, needsRehash, burnPasswordTime, createSession, destroySession,
   userFromRequest, tokenFromRequest, sessionCookie, clearCookie, rateLimit, deleteAccount,
   validEmail, validNick, validPassword, suggestNick,
 } from './auth.js';
@@ -11,6 +11,7 @@ import {
 import { filterText } from './moderation.js';
 import { clientIp } from './ip.js';
 import { rankingFor } from './ranking.js';
+import { isReservedNick } from './rules.js';
 import {
   addBan, removeBan, listBans, resolveKey,
 } from './bans.js';
@@ -22,11 +23,14 @@ import { SHOP, SHOP_BY_ID, SLOTS, DESIGN } from '../shared/config.js';
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
-const isHttps = (req) => req.headers['x-forwarded-proto'] === 'https' || (process.env.PUBLIC_URL || '').startsWith('https');
-// Atrás de proxy (Vite em dev, nginx/Cloudflare em produção) o host público vem em x-forwarded-host.
-const publicHost = (req) => req.headers['x-forwarded-host'] || req.headers.host;
+// Atrás de proxy (Vite em dev, Caddy em produção) o endereço público vem em X-Forwarded-*. Em produção só vale com
+// TRUST_PROXY=1: sem isso qualquer cliente poderia forjar esses cabeçalhos.
+const TRUST_FWD = process.env.TRUST_PROXY === '1' || process.env.NODE_ENV !== 'production';
+const fwd = (req, name) => (TRUST_FWD ? req.headers[name] : undefined);
+const isHttps = (req) => fwd(req, 'x-forwarded-proto') === 'https' || (process.env.PUBLIC_URL || '').startsWith('https');
+const publicHost = (req) => fwd(req, 'x-forwarded-host') || req.headers.host;
 const baseUrl = (req) => process.env.PUBLIC_URL
-  || `${req.headers['x-forwarded-proto'] || 'http'}://${publicHost(req)}`;
+  || `${fwd(req, 'x-forwarded-proto') || 'http'}://${publicHost(req)}`;
 
 function json(res, status, body, headers = {}) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers });
@@ -37,11 +41,17 @@ function readBody(req, limit = 16 * 1024) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
-    req.on('data', (c) => {
+    const onData = (c) => {
       size += c.length;
-      if (size > limit) { reject(Object.assign(new Error('Corpo grande demais'), { status: 413 })); req.destroy(); return; }
+      if (size > limit) {
+        chunks.length = 0;
+        req.off('data', onData); // para de guardar; quem responde 413 fecha a conexão
+        reject(Object.assign(new Error('Corpo grande demais'), { status: 413 }));
+        return;
+      }
       chunks.push(c);
-    });
+    };
+    req.on('data', onData);
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
@@ -219,6 +229,7 @@ export async function handleApi(req, res, hooks = {}) {
       const password = body.password;
       if (body.terms !== true) return json(res, 400, { error: 'Aceite os Termos de uso e a Política de privacidade para criar a conta.' }), true;
       if (!validEmail(email)) return json(res, 400, { error: 'E-mail inválido.' }), true;
+      if (isReservedNick(nick)) return json(res, 400, { error: 'Esse apelido é reservado. Escolha outro.' }), true;
       if (!validNick(nick)) return json(res, 400, { error: 'Apelido: 3 a 16 caracteres (letras, números, espaço, _ . -).' }), true;
       if (!validPassword(password)) return json(res, 400, { error: 'A senha precisa ter pelo menos 8 caracteres.' }), true;
       if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) return json(res, 409, { error: 'Esse e-mail já tem conta.' }), true;
@@ -247,6 +258,9 @@ export async function handleApi(req, res, hooks = {}) {
         : null;
       const ok = row ? await verifyPassword(body.password, row.pass_hash) : (await burnPasswordTime(String(body.password ?? '')), false);
       if (!ok) return json(res, 401, { error: 'E-mail ou senha incorretos.' }), true;
+      if (needsRehash(row.pass_hash)) { // senha no formato antigo: regrava com os parâmetros atuais (a senha acabou de ser confirmada)
+        db.prepare('UPDATE users SET pass_hash = ? WHERE id = ?').run(await hashPassword(body.password), row.id);
+      }
       const token = createSession(row.id);
       return json(res, 200, accountPayload(row), { 'set-cookie': sessionCookie(token, { secure }) }), true;
     }
@@ -287,6 +301,7 @@ export async function handleApi(req, res, hooks = {}) {
       const nick = String(body.nick ?? '').trim();
       if (!nick) return json(res, 200, { needsProfile: true, email: g.email, suggestedNick: suggestNick(g.name, g.email) }), true;
       if (body.terms !== true) return json(res, 400, { error: 'Aceite os Termos de uso e a Política de privacidade para criar a conta.' }), true;
+      if (isReservedNick(nick)) return json(res, 400, { error: 'Esse apelido é reservado. Escolha outro.' }), true;
       if (!validNick(nick)) return json(res, 400, { error: 'Apelido: 3 a 16 caracteres (letras, números, espaço, _ . -).' }), true;
       if (db.prepare('SELECT 1 FROM users WHERE nick = ?').get(nick)) return json(res, 409, { error: 'Esse apelido já está em uso.' }), true;
       let id;
@@ -441,6 +456,7 @@ export async function handleApi(req, res, hooks = {}) {
   } catch (err) {
     const status = err.status || 500;
     if (status === 500) console.error('[api]', err);
+    if (status === 413) { res.setHeader('connection', 'close'); res.once('finish', () => req.destroy()); } // corpo grande: responde e derruba a conexão
     return json(res, status, { error: status === 500 ? 'Erro interno.' : err.message }), true;
   }
 }
