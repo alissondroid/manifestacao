@@ -178,6 +178,8 @@ WASD/setas mover · Shift correr · arrastar para girar a câmera (ou Q/E) · En
 
 Quem apanha reage conforme o golpe (`staggerNow(kind, hp)` em `src/avatar.js`): soco e cassetete jogam a cabeça para trás, o chute pega no peito, o carro joga a pessoa para trás, o tomate dá um susto rápido; com a vida baixa, soco, chute e cassetete derrubam (clipe `knockback`). Além disso: faíscas de impacto por tipo (`Effects.hit`), número de dano flutuante, som diferente por golpe, tremor de câmera e flash vermelho para quem apanha, empurrão que desliza em vez de teleportar (`me.slide`), tique de confirmação para quem acerta, e no nocaute a queda para trás, o boneco deitado e 💫 girando sobre a cabeça até levantar.
 
+**Figurantes da multidão.** A multidão é local (não existe no servidor), então um golpe ou tomate que não pegou em jogador (o servidor manda `attack`/`throw` com `hit: null`, inclusive com o PvP desligado) atinge o figurante mais próximo à frente de quem bateu, com o mesmo alcance e arco de `MELEE` (`hitCrowd` em `src/main.js`, `hit` em `src/crowd.js`): ele toca o clipe de reação (soco `hitHead`, chute `hit` e às vezes cai, cassetete `knockback`, tomate `hitHead` rápido), vira para quem bateu, leva um empurrão curto e volta ao que fazia. A reação só aparece para quem vê o golpe e não vale pontos nem dano.
+
 ## Monetização e loja
 
 Tudo é cosmético ou de diversão; **nada dá vantagem no PvP** (catálogo em `SHOP`, `shared/config.js`; entrega em `server/shop.js`). Compra só com conta.

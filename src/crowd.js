@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { SIDES, SKINS, MODELS, WORLD } from '../shared/config.js';
+import {
+  SIDES, SKINS, MODELS, WORLD, MELEE,
+} from '../shared/config.js';
 import { createCharacter } from './models.js';
 import { aimBone, HEIGHT_SCALE } from './avatar.js';
 import { flagTexture } from './textures.js';
@@ -141,6 +143,7 @@ export function createCrowd(scene, rng, avoid, count = 110) {
 
     people.push({
       group, mixer, walker, x, z, yaw, speed: rr(0.6, 1.0) * (elderly ? 0.6 : 1), range: rr(3, 10), phase: rr(0, 6.28), holder, bones: c.bones, cane,
+      clips: c.clips, base: action, hitUntil: 0, hitAction: null, shove: null,
     });
   }
 
@@ -155,6 +158,63 @@ export function createCrowd(scene, rng, avoid, count = 110) {
     p.group.rotation.y = Math.atan2(dx, dz); // de costas para o carro…
     p.group.rotation.x = -Math.PI / 2 + 0.12; // …e deitado
     p.group.rotation.y += Math.PI;
+  }
+
+  /** Toca um clipe de reação uma vez por cima da animação do figurante; `update` o devolve ao que fazia. */
+  function react(p, name, speed, time) {
+    const clip = p.clips[name];
+    if (!clip) return false;
+    const a = p.mixer.clipAction(clip);
+    a.reset().setLoop(THREE.LoopOnce, 1);
+    a.clampWhenFinished = true;
+    a.timeScale = speed;
+    p.base.fadeOut(0.08);
+    a.fadeIn(0.05).play();
+    p.hitAction = a;
+    p.hitUntil = time + clip.duration / speed;
+    return true;
+  }
+
+  // Como cada figurante reage a cada golpe (empurrão em metros e clipe de reação).
+  const REACTIONS = {
+    punch: { clip: 'hitHead', speed: 1, push: 0.45 },
+    kick: { clip: 'hit', speed: 1, push: 1.1, fall: 0.35 }, // o chute às vezes derruba
+    baton: { clip: 'knockback', speed: 1, push: 1.0 },
+    tomato: { clip: 'hitHead', speed: 1.35, push: 0 },
+  };
+
+  /**
+   * Um golpe de quem está em (x, z) virado para `ry`: o figurante mais próximo dentro do alcance e do arco
+   * (mesma geometria do servidor, em `MELEE`) cambaleia. `spec` pode vir de fora (ex.: tomate: alcance = distância).
+   * Retorna o figurante atingido ou null. Só visual: a multidão é local.
+   */
+  function hit(x, z, ry, kind, spec = MELEE[kind]) {
+    const rule = REACTIONS[kind];
+    if (!rule || !spec) return null;
+    let target = null;
+    let best = spec.reach;
+    for (const p of people) {
+      if (p.knocked || p.hitUntil) continue;
+      const ox = p.group.position.x - x;
+      const oz = p.group.position.z - z;
+      const d = Math.hypot(ox, oz);
+      if (d > best || d < 0.05) continue;
+      const a = Math.atan2(ox, oz);
+      if (Math.abs(Math.atan2(Math.sin(a - ry), Math.cos(a - ry))) > spec.arc) continue;
+      best = d;
+      target = p;
+    }
+    if (!target) return null;
+    const dx = target.group.position.x - x;
+    const dz = target.group.position.z - z;
+    const len = Math.hypot(dx, dz) || 1;
+    if (Math.random() < (rule.fall || 0)) knock(target, dx, dz, last);
+    else {
+      if (!target.walker) target.group.rotation.y = Math.atan2(-dx, -dz); // vira para quem bateu
+      react(target, rule.clip, rule.speed, last) || knock(target, dx, dz, last);
+      if (rule.push && !target.knocked) target.shove = { dx: (dx / len) * rule.push / 0.25, dz: (dz / len) * rule.push / 0.25, left: 0.25 };
+    }
+    return target;
   }
 
   /** `cars`: [{ x, z, vx, vz }] em movimento; quem for atingido cai. */
@@ -176,6 +236,20 @@ export function createCrowd(scene, rng, avoid, count = 110) {
           p.group.rotation.y = p.yaw;
         }
         continue;
+      }
+      if (p.shove) { // empurrão curto do golpe
+        const step = Math.min(dt, p.shove.left);
+        p.group.position.x += p.shove.dx * step;
+        p.group.position.z += p.shove.dz * step;
+        if (p.walker) p.z += p.shove.dz * step; // quem anda mantém o novo ponto de partida
+        p.shove.left -= step;
+        if (p.shove.left <= 0) p.shove = null;
+      }
+      if (p.hitUntil && time >= p.hitUntil) { // terminou a reação: volta ao que fazia
+        p.hitUntil = 0;
+        p.hitAction?.fadeOut(0.15);
+        p.base.reset().fadeIn(0.15).play();
+        if (!p.walker) p.group.rotation.y = p.yaw;
       }
       for (const c of cars) {
         const ddx = p.group.position.x - c.x;
@@ -203,5 +277,5 @@ export function createCrowd(scene, rng, avoid, count = 110) {
     }
   }
 
-  return { update, people };
+  return { update, people, hit };
 }

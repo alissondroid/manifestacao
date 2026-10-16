@@ -106,18 +106,27 @@
     <!-- Lobby: escolha de lado e visual -->
     <section id="lobby">
       <div class="hero">
-        <p class="eyebrow">São Paulo / Avenida Paulista</p>
-        <h1>Entre na Paulista.<br />Do seu jeito.</h1>
-        <div class="herobottom">
-          <div id="anims" class="anims">
-            <button data-anim="idle" class="on">Parado</button>
-            <button data-anim="walk">Andando</button>
-            <button data-anim="run">Correndo</button>
-            <button data-anim="wave">Acenando</button>
-            <button data-anim="dance">Dançando</button>
-            <button data-anim="clap">Aplaudindo</button>
+        <div class="herotext">
+          <p class="eyebrow">São Paulo / Avenida Paulista</p>
+          <h1>Entre na Paulista.<br />Do seu jeito.</h1>
+        </div>
+        <div id="preview" class="preview" role="group" aria-label="Prévia do personagem">
+          <div class="preview-head">
+            <span class="eyebrow">Prévia</span>
+            <div id="summary" class="summary" aria-live="polite"></div>
           </div>
-          <p class="tiny">Arraste para girar · alterações em tempo real</p>
+          <div class="preview-stage" aria-hidden="true"></div>
+          <div class="preview-foot">
+            <div id="anims" class="anims">
+              <button data-anim="idle" class="on">Parado</button>
+              <button data-anim="walk">Andando</button>
+              <button data-anim="run">Correndo</button>
+              <button data-anim="wave">Acenando</button>
+              <button data-anim="dance">Dançando</button>
+              <button data-anim="clap">Aplaudindo</button>
+            </div>
+            <p class="tiny">Arraste para girar · alterações em tempo real</p>
+          </div>
         </div>
       </div>
 
@@ -181,7 +190,6 @@
         </nav>
 
         <footer class="card-foot">
-          <div id="summary" class="summary" aria-live="polite"></div>
           <label class="nickbox">
             <span class="sr-only">Seu apelido</span>
             <div class="nickrow">

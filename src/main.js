@@ -126,11 +126,11 @@ function resize() {
 function applyViewOffset() {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  if (mode === 'lobby' && w > 760) {
-    // o conjunto (personagem + cartão) fica centralizado: o personagem vai para o meio da coluna da esquerda
-    const r = document.querySelector('#lobby .hero').getBoundingClientRect();
-    const dx = r.width > 0 ? w / 2 - (r.left + r.width / 2) : w * 0.2;
-    camera.setViewOffset(w, h, dx, 0, w, h);
+  if (mode === 'lobby' && w > 640) {
+    // o personagem fica no centro do card de prévia (coluna da esquerda); o menu fica à direita
+    const r = document.querySelector('#preview').getBoundingClientRect();
+    const ok = r.width > 0;
+    camera.setViewOffset(w, h, ok ? w / 2 - (r.left + r.width / 2) : w * 0.2, ok ? h / 2 - (r.top + r.height / 2) : 0, w, h);
   }
   else if (mode === 'lobby') camera.setViewOffset(w, h, 0, h * 0.2, w, h); // celular: cartão fica embaixo
   else camera.clearViewOffset();
@@ -422,6 +422,7 @@ const net = new Net({
         break;
       case 'throw':
         spawnTomato(m);
+        if (m.hit == null) hitCrowd(m.x, m.z, m.ry, 'tomato', { reach: m.dist, arc: 0.12 }, Math.min(600, 150 + m.dist * 40));
         break;
       case 'hp': {
         const now = performance.now();
@@ -531,6 +532,10 @@ const net = new Net({
           if (Math.hypot(victim.x - me.x, victim.z - me.z) < 30) sound.hit(m.kind);
         }
         if (m.id === myId && m.hit != null) { sound.land(); shakeCam(0.03, 120); } // acertei
+        if (m.hit == null && m.kind !== 'car') { // não pegou em jogador: pode pegar em figurante
+          const attacker = m.id === myId ? me : remotes.get(m.id);
+          if (attacker) hitCrowd(attacker.x, attacker.z, attacker.ry, m.kind);
+        }
         break;
       }
       case 'look': {
@@ -604,6 +609,16 @@ function throwTomato() {
 }
 
 /** Impacto de um golpe: faíscas e número de dano sobre quem apanhou. */
+/** A multidão é local: golpes e tomates que não pegaram em jogador atingem o figurante à frente de quem bateu. */
+function hitCrowd(x, z, ry, kind, spec, delayMs = 180) {
+  setTimeout(() => {
+    const p = world.crowd.hit(x, z, ry, kind, spec);
+    if (!p) return;
+    effects.hit(p.group.position.x, 1.3, p.group.position.z, kind);
+    if (Math.hypot(p.group.position.x - me.x, p.group.position.z - me.z) < 30) sound.hit(kind);
+  }, delayMs); // o golpe só "pega" depois de a animação armar
+}
+
 function impact(target, kind) {
   effects.hit(target.x, 1.3, target.z, kind);
   target.label?.pop(`-${COMBAT.dmg[kind] ?? 0}`);
@@ -1079,5 +1094,5 @@ window.__AVENIDA__ = {
   info: renderer.info,
   movingCars,
   // só para depuração no console
-  THREE, Avatar, renderer, scene, world, me, effects,
+  THREE, Avatar, renderer, scene, world, me, effects, remotes,
 };
