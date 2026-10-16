@@ -76,7 +76,7 @@ git clone -b main https://github.com/alissondroid/avenida-online.git /opt/avenid
 DOMAIN=seu-dominio.com BRANCH=main bash /opt/avenida/deploy/setup.sh               # sem DOMAIN: HTTP no IP, só para testar
 ```
 
-O script instala Node 22 e Caddy (HTTPS automático), faz o build, cria o serviço `systemd` `avenida` (usuário sem login, reinício automático), o `.env`, o firewall (22, 80 e 443) e um backup diário do SQLite em `/var/backups/avenida` (14 dias). Depois edite `/opt/avenida/.env` (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) e rode `systemctl restart avenida`. Para atualizar: `bash /opt/avenida/deploy/update.sh`. Logs: `journalctl -u avenida -f`. Em produção sem chave Stripe a loja fica desligada de propósito.
+O script instala Node 22 e Caddy (HTTPS automático), faz o build, cria o serviço `systemd` `avenida` (usuário sem login, reinício automático), o `.env`, o firewall (22, 80 e 443) e um backup diário do SQLite em `/var/backups/avenida` (14 dias). Depois edite `/opt/avenida/.env` (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) e rode `systemctl restart avenida`. Para atualizar: `bash /opt/avenida/deploy/update.sh`. **Deploy automático:** `.github/workflows/deploy.yml` roda os testes e o build a cada push na `main` e, se passarem, entra na VPS por SSH e roda o `update.sh`. Configure em Settings → Secrets and variables → Actions: `VPS_HOST` (IP ou domínio), `VPS_SSH_KEY` (chave privada; a pública vai em `~/.ssh/authorized_keys` da VPS), e opcionalmente `VPS_USER` (padrão `root`) e `VPS_PORT` (padrão 22). Também dá para disparar à mão em Actions → Deploy → Run workflow. Logs: `journalctl -u avenida -f`. Em produção sem chave Stripe a loja fica desligada de propósito.
 
 ## Termos, privacidade e LGPD
 
