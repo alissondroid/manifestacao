@@ -85,3 +85,10 @@ test('VIP e reações: as reações exclusivas existem e sobram reações gráti
   assert.ok(C.PREMIUM.reactions.every((i) => i >= 0 && i < C.REACTIONS.length));
   assert.ok(C.REACTIONS.length - C.PREMIUM.reactions.length >= 4, 'reações grátis demais poucas');
 });
+
+test('cada lado tem um apelido único para o link de convite', async () => {
+  const { SIDES, SIDE_SLUGS } = await import('../shared/config.js');
+  assert.equal(SIDE_SLUGS.length, SIDES.length);
+  assert.equal(new Set(SIDE_SLUGS).size, SIDES.length);
+  for (const s of SIDE_SLUGS) assert.match(s, /^[a-z-]+$/);
+});

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  WORLD, SIDES, ANIMS, WALK_SPEED, RUN_SPEED, RACE, MELEE, VEHICLE, REACTIONS, PREMIUM, STAMINA, EMOTES, JUMP, ZONES, COMBAT,
+  WORLD, SIDES, SIDE_SLUGS, ANIMS, WALK_SPEED, RUN_SPEED, RACE, MELEE, VEHICLE, REACTIONS, PREMIUM, STAMINA, EMOTES, JUMP, ZONES, COMBAT,
 } from '../shared/config.js';
 import { createWorld, carMesh } from './world.js';
 import { Avatar } from './avatar.js';
@@ -15,6 +15,7 @@ import {
   initLobby, initHud, initModes, initUserMenu, setMyId, createLabel, setOnline, setStatus, showError, loadingScreen,
 } from './ui.js';
 import { toast } from './account.js';
+import { track, trackVisit } from './track.js';
 import { initRadar } from './radar.js';
 import { Effects } from './effects.js';
 import { panFromOffset } from './fireworks-math.js';
@@ -47,6 +48,11 @@ function loadProfile() {
 }
 
 const profile = loadProfile();
+{ // link de convite: ?lado=petista|bolsonarista|anarquia|sem-partido escolhe o lado de quem chega
+  const lado = SIDE_SLUGS.indexOf(new URLSearchParams(location.search).get('lado'));
+  if (lado >= 0) profile.side = lado;
+}
+trackVisit();
 const saveProfile = () => {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(profile)); } catch { /* ignore */ }
 };
@@ -766,6 +772,7 @@ const lobby = initLobby({
     hud.show();
     sound.start();
     me.label = createLabel(profile.nick || 'Você', SIDES[profile.side].color, acct.equipped);
+    track('enter');
     net.join({ nick: profile.nick, side: profile.side, look: profile.look });
   },
   onWatch() {
@@ -791,6 +798,18 @@ net.connect();
 addEventListener('pagehide', () => net.leave());
 addEventListener('pageshow', (e) => { if (e.persisted) net.reconnect(); });
 renderPortraits(renderer, profile.side);
+
+/** Convite: link com o lado de quem convida, pelo compartilhamento do aparelho ou copiado. */
+async function invite() {
+  const url = `${location.origin}/?lado=${SIDE_SLUGS[profile.side]}&src=convite`;
+  const text = `Vem pra Paulista! Entra no lado ${SIDES[profile.side].name} no Avenida Online:`;
+  track('share');
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Avenida Online', text, url }); return; } catch (e) { if (e?.name === 'AbortError') return; }
+  }
+  try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Link de convite copiado! Cole no WhatsApp.'); } catch { toast(url); }
+}
+$('#invitebtn').onclick = invite;
 
 /** Mudar o visual sem sair da avenida: o personagem fica parado e o menu abre como editor. */
 function startEdit() {

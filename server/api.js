@@ -73,6 +73,30 @@ function sameOrigin(req) {
   try { return new URL(origin).host === publicHost(req); } catch { return false; }
 }
 
+const TRACK_EVENTS = ['visit', 'new', 'enter', 'share'];
+const brDay = (at = Date.now()) => new Date(at - 3 * 3600_000).toISOString().slice(0, 10);
+function recordEvent(event, rawSrc) {
+  if (!TRACK_EVENTS.includes(event)) return false;
+  let src = String(rawSrc ?? '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 24) || 'direto';
+  const day = brDay();
+  const known = db.prepare('SELECT 1 FROM stats WHERE day = ? AND src = ? LIMIT 1').get(day, src);
+  if (!known && db.prepare('SELECT COUNT(DISTINCT src) c FROM stats WHERE day = ?').get(day).c >= 100) src = 'outros'; // quem inventa origens não incha o banco
+  db.prepare('INSERT INTO stats (day, event, src, n) VALUES (?, ?, ?, 1) ON CONFLICT (day, event, src) DO UPDATE SET n = n + 1').run(day, event, src);
+  return true;
+}
+function statsSummary(days) {
+  const since = brDay(Date.now() - (Math.min(365, Math.max(1, days)) - 1) * 86_400_000);
+  const rows = db.prepare('SELECT day, event, src, n FROM stats WHERE day >= ? ORDER BY day DESC').all(since);
+  const total = {};
+  const byDay = {};
+  for (const r of rows) {
+    ((total[r.event] ??= {})[r.src] = (total[r.event][r.src] || 0) + r.n);
+    ((byDay[r.day] ??= {})[r.event] = (byDay[r.day][r.event] || 0) + r.n);
+  }
+  for (const e of TRACK_EVENTS) total[e] ??= {};
+  return { total, days: Object.entries(byDay).map(([day, events]) => ({ day, ...events })) };
+}
+
 // Administração: só existe com ADMIN_TOKEN (16+ caracteres) definido; autenticada por `Authorization: Bearer <token>`.
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const ADMIN_ENABLED = ADMIN_TOKEN.length >= 16;
@@ -198,6 +222,7 @@ export async function handleApi(req, res, hooks = {}) {
         const body = await readJson(req);
         return json(res, 200, { removed: removeBan(Number(body.id)) }), true;
       }
+      if (method === 'GET' && pathname === '/api/admin/stats') return json(res, 200, statsSummary(Number(url.searchParams.get('days')) || 30)), true;
       return json(res, 404, { error: 'Não encontrado' }), true;
     }
 
@@ -209,6 +234,14 @@ export async function handleApi(req, res, hooks = {}) {
     }
 
     // ---------- Conta ----------
+
+    // Métricas de divulgação sem cookie e sem dado pessoal: só contadores por dia, evento e origem (?src=).
+    if (method === 'POST' && pathname === '/api/track') {
+      if (!rateLimit(`track:${clientIp(req)}`, 60, 10 * 60_000)) return res.writeHead(204).end(), true;
+      const body = await readJson(req);
+      if (!recordEvent(body.event, body.src)) return json(res, 400, { error: 'Evento inválido' }), true;
+      return res.writeHead(204).end(), true;
+    }
 
     // Ranking de apoio entre os grupos: público, para todo mundo ver quem lidera.
     if (method === 'GET' && pathname === '/api/ranking') {

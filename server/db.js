@@ -89,6 +89,14 @@ db.exec(`
     PRIMARY KEY (user_id, slot)
   );
 
+  CREATE TABLE IF NOT EXISTS stats (
+    day   TEXT NOT NULL,
+    event TEXT NOT NULL,
+    src   TEXT NOT NULL,
+    n     INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, event, src)
+  );
+
   CREATE TABLE IF NOT EXISTS inventory (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     item_id TEXT NOT NULL,
