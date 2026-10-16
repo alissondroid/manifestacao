@@ -27,8 +27,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: npm run build # antes dos testes: os de segurança conferem os cabeçalhos das páginas do site
       - run: npm test
-      - run: npm run build
 
   deploy:
     needs: test

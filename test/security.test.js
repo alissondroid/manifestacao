@@ -46,6 +46,7 @@ test('cabeçalhos de segurança no HTML e sem pistas do servidor', async () => {
   const srv = await startServer(PROD);
   try {
     const res = await fetch(`${srv.url}/`);
+    assert.equal(res.status, 200, 'o site não está compilado: rode "npm run build" antes dos testes');
     const h = res.headers;
     assert.match(h.get('content-security-policy'), /default-src 'self'/);
     assert.match(h.get('content-security-policy'), /frame-ancestors 'none'/);
