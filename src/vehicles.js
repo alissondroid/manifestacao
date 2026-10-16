@@ -210,7 +210,12 @@ function buildBus() {
   add('paint', rbox(2.5, 2.8, L, 0.3, [0, 1.8, 0], '#ffffff')); // carroceria
   // faixa de janelas e janelas: peças 4 cm para fora, sem encostar nas pontas
   add('glass', rbox(2.58, 0.98, 10.4, 0.08, [0, 2.4, 0]));
-  for (let z = -4.2; z <= 4.2; z += 1.4) for (const sx of [-1, 1]) add('paint', rbox(0.07, 1.0, 0.09, 0.02, [sx * 1.3, 2.4, z]));
+  for (let z = -4.2; z <= 4.2; z += 1.4) {
+    for (const sx of [-1, 1]) {
+      if (sx < 0 && z > 2.7) continue; // lado da porta: sem divisórias por cima do vidro da porta
+      add('paint', rbox(0.07, 1.0, 0.09, 0.02, [sx * 1.3, 2.4, z]));
+    }
+  }
   // para-brisa, letreiro de destino e traseira
   add('glass', rbox(2.28, 1.12, 0.1, 0.1, [0, 2.4, L / 2 + 0.02]));
   add('head', rbox(1.5, 0.34, 0.06, 0.04, [0, 3.0, L / 2 + 0.05]));

@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { WORLD } from '../shared/config.js';
 import { createSky, SUN_DIR } from './sky.js';
+import { snapShadowFocus } from './shadow.js';
 import { createCrowd } from './crowd.js';
 import { addTrees } from './trees.js';
 import { addVendors } from './props.js';
@@ -217,16 +219,21 @@ export function createWorld(scene, renderer) {
   // ---------- postes, semáforos, pontos de ônibus, banca ----------
   const lampSpots = [];
   for (const s of [-1, 1]) for (let z = -HALF_LEN + 12; z < HALF_LEN; z += 24) lampSpots.push([s * (ROAD + 0.6), z]);
+  const rb = (w, h, d, r) => new RoundedBoxGeometry(w, h, d, 2, r);
   const poleGeo = mergeColored([
-    { geo: new THREE.CylinderGeometry(0.07, 0.1, 8, 8).translate(0, 4, 0), color: '#4a4e55' },
-    { geo: B(0.08, 0.08, 2.4).translate(0, 8, 1.1), color: '#4a4e55' },
+    { geo: new THREE.CylinderGeometry(0.2, 0.24, 0.18, 14), color: '#3a3d43', pos: [0, 0.09, 0] }, // base
+    { geo: new THREE.CylinderGeometry(0.055, 0.1, 8, 14), color: '#5a5f67', pos: [0, 4.0, 0] }, // fuste cônico
+    { geo: new THREE.CylinderGeometry(0.075, 0.075, 0.1, 12), color: '#3a3d43', pos: [0, 0.6, 0] }, // anel
+    { geo: B(0.07, 0.07, 2.35), color: '#5a5f67', pos: [0, 8.02, 1.12], rot: [-0.05, 0, 0] }, // braço
+    { geo: B(0.05, 0.05, 1.5), color: '#5a5f67', pos: [0, 7.52, 0.62], rot: [0.55, 0, 0] }, // escora
+    { geo: rb(0.82, 0.16, 0.4, 0.07), color: '#3a3d43', pos: [0, 8.12, 2.2] }, // luminária
   ]);
   const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.5 }), lampSpots.length);
-  const lamps = new THREE.InstancedMesh(B(0.7, 0.14, 0.32), new THREE.MeshBasicMaterial({ color: '#fff4cf' }), lampSpots.length);
+  const lamps = new THREE.InstancedMesh(B(0.62, 0.04, 0.28), new THREE.MeshBasicMaterial({ color: '#fff4cf' }), lampSpots.length);
   lampSpots.forEach(([x, z], i) => {
     const flip = x > 0 ? -1 : 1;
     poles.setMatrixAt(i, m4.makeScale(1, 1, flip).setPosition(x, 0.16, z));
-    lamps.setMatrixAt(i, m4.makeTranslation(x, 8.1 + 0.16, z + flip * 2.2));
+    lamps.setMatrixAt(i, m4.makeTranslation(x, 8.18, z + flip * 2.2)); // lente: logo abaixo da luminária
   });
   setShadow(poles);
   scene.add(poles, lamps);
@@ -308,11 +315,13 @@ export function createWorld(scene, renderer) {
   // cones laranja: fechamento de domingo ao longo do canteiro e alguns soltos nas faixas
   for (let z = -60; z < 60; z += 7) if (!nearCrossing(z, 12)) coneSpots.push([(z / 7) % 2 ? 2.3 : -2.3, z]);
   for (let i = 0; i < 18; i++) coneSpots.push([pick([-5.4, -3.9, 3.9, 5.4]), rr(-110, 110)]);
+  // cone de trânsito: base de borracha, corpo cônico liso e duas faixas refletivas 8 mm para fora do corpo
   const coneGeo = mergeColored([
-    { geo: B(0.42, 0.04, 0.42), color: '#e2531c', pos: [0, 0.02, 0] },
-    { geo: new THREE.CylinderGeometry(0.035, 0.07, 0.18, 12), color: '#f05a1e', pos: [0, 0.62, 0] },
-    { geo: new THREE.CylinderGeometry(0.07, 0.11, 0.16, 12), color: '#f2f2ee', pos: [0, 0.45, 0] },
-    { geo: new THREE.CylinderGeometry(0.11, 0.16, 0.34, 12), color: '#f05a1e', pos: [0, 0.2, 0] },
+    { geo: rb(0.42, 0.04, 0.42, 0.015), color: '#26282b', pos: [0, 0.02, 0] },
+    { geo: new THREE.CylinderGeometry(0.035, 0.125, 0.62, 18), color: '#f2661c', pos: [0, 0.35, 0] },
+    { geo: new THREE.CylinderGeometry(0.0807, 0.0953, 0.1, 18), color: '#f4f4f0', pos: [0, 0.35, 0] },
+    { geo: new THREE.CylinderGeometry(0.0604, 0.072, 0.08, 18), color: '#f4f4f0', pos: [0, 0.5, 0] },
+    { geo: new THREE.CylinderGeometry(0.04, 0.04, 0.03, 12), color: '#f2661c', pos: [0, 0.665, 0] },
   ]);
   const cones = new THREE.InstancedMesh(coneGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 }), coneSpots.length);
   coneSpots.forEach(([x, z], i) => cones.setMatrixAt(i, m4.makeTranslation(x, 0, z)));
@@ -682,8 +691,12 @@ export function createWorld(scene, renderer) {
   for (const sd of [-1, 1]) for (let z = -HALF_LEN + 20; z < HALF_LEN; z += 31) binSpots.push([sd * (ROAD + 4.8), z]);
   const bins = new THREE.InstancedMesh(
     mergeColored([
-      { geo: new THREE.CylinderGeometry(0.28, 0.25, 0.95, 10), color: '#3f6b3f', pos: [0, 0.48, 0] },
-      { geo: new THREE.CylinderGeometry(0.3, 0.3, 0.08, 10), color: '#2b2f33', pos: [0, 0.98, 0] },
+      { geo: new THREE.CylinderGeometry(0.27, 0.24, 0.88, 18), color: '#35634a', pos: [0, 0.44, 0] }, // corpo levemente cônico
+      { geo: new THREE.CylinderGeometry(0.285, 0.285, 0.06, 18), color: '#2b2f33', pos: [0, 0.78, 0] }, // cinta
+      { geo: new THREE.CylinderGeometry(0.29, 0.29, 0.05, 18), color: '#222529', pos: [0, 0.905, 0] }, // tampa
+      { geo: new THREE.SphereGeometry(0.265, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.4, 1), color: '#222529', pos: [0, 0.93, 0] }, // cúpula
+      { geo: B(0.26, 0.1, 0.03), color: '#0e1012', pos: [0, 0.74, 0.28] }, // abertura
+      { geo: new THREE.CylinderGeometry(0.2, 0.2, 0.02, 14), color: '#1e2124', pos: [0, 0.01, 0] }, // base
     ]),
     new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.2 }), binSpots.length,
   );
@@ -762,8 +775,8 @@ export function createWorld(scene, renderer) {
     ticker.update(time);
     vendors.update(time);
     scenery.update(time);
-    // a câmera de sombra acompanha o jogador, ancorada em texels para não tremer
-    focus.set(Math.round(fx / snap) * snap, 0, Math.round(fz / snap) * snap);
+    // a câmera de sombra acompanha o jogador, ancorada na grade de texels da luz (src/shadow.js) para a sombra não tremer
+    snapShadowFocus(focus, fx, fz, SUN_DIR, snap);
     sun.target.position.copy(focus);
     sun.position.copy(focus).addScaledVector(SUN_DIR, 120);
   }
