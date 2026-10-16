@@ -4,13 +4,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import {
-  WORLD, SIDES, SHIRTS, SKINS, HAIRS, HAIR_STYLES, BODIES, AGES, MODELS, HEIGHTS, BEARDS, TOPS, PANTS, FLAGS, ANIMS, MAX_SPEED, LIMITS, MELEE, VEHICLE, COMBAT, REACTIONS, PREMIUM_ANIMS, BILLBOARD,
+  PREMIUM, SHOP_BY_ID, WORLD, SIDES, SHIRTS, SKINS, HAIRS, HAIR_STYLES, BODIES, AGES, MODELS, HEIGHTS, BEARDS, TOPS, PANTS, FLAGS, ANIMS, MAX_SPEED, LIMITS, MELEE, VEHICLE, COMBAT, REACTIONS, PREMIUM_ANIMS, BILLBOARD,
 } from '../shared/config.js';
 import { handleApi } from './api.js';
 import { userFromRequest, nickTaken } from './auth.js';
 import {
-  equippedMap, designsOf, hasPremiumEmotes, inventoryOf, spend,
+  equippedMap, designsOf, hasPremiumEmotes, inventoryOf, isVip, spend,
 } from './shop.js';
+import { rankingFor } from './ranking.js';
 import { filterText } from './moderation.js';
 import { createRace } from './race.js';
 import { PVP } from '../shared/config.js';
@@ -99,7 +100,9 @@ async function handle(req, res) {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     return res.end(JSON.stringify({ ok: true, players: players.size, uptime: Math.round(process.uptime()) }));
   }
-  if (await handleApi(req, res, { onEquip: refreshLook, onDelete: kickUser, onBan: kickBanned })) return;
+  if (await handleApi(req, res, {
+    onEquip: refreshLook, onDelete: kickUser, onBan: kickBanned, onPaid,
+  })) return;
   if (!fs.existsSync(DIST)) {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
     return res.end('Sem build. Em desenvolvimento use "npm run dev" (cliente em http://localhost:5173).');
@@ -212,13 +215,28 @@ function kickBanned(key) {
   }
 }
 
+// Líder da semana no ranking entre os grupos: muda quando uma compra paga vira o jogo.
+let lastLeader = rankingFor('week').leader;
+/** Compra paga: avisa a avenida inteira com o grupo e, se mudou, quem assumiu a liderança da semana. */
+function onPaid(order) {
+  const item = SHOP_BY_ID[order.item_id];
+  const nick = db.prepare('SELECT nick FROM users WHERE id = ?').get(order.user_id)?.nick;
+  if (!item || !nick || order.side == null) return;
+  const { leader } = rankingFor('week');
+  const newLeader = leader !== null && leader !== lastLeader;
+  lastLeader = leader;
+  broadcast({
+    t: 'purchase', nick, side: order.side, item: item.name, icon: item.icon, leader, newLeader,
+  }, undefined, true);
+}
+
 /** Itens equipados mudaram na loja: atualiza o avatar de quem está online e avisa quem o vê. */
 function refreshLook(userId) {
   for (const p of players.values()) {
     if (p.userId !== userId) continue;
     p.look = { ...p.look, equip: equippedMap(userId), custom: designsOf(userId) };
     p.premium = hasPremiumEmotes(userId);
-    send(p.ws, { t: 'inv', inv: inventoryOf(userId), premium: p.premium });
+    send(p.ws, { t: 'inv', inv: inventoryOf(userId), premium: p.premium, vip: isVip(userId) });
     const msg = JSON.stringify({ t: 'look', id: p.id, look: p.look });
     for (const ws of wss.clients) {
       if (ws.readyState === ws.OPEN && ws.joined && (ws.player === p || ws.known.has(p.id))) ws.send(msg);
@@ -421,7 +439,7 @@ function attack(me, kind) {
 const notice = (p, text) => send(p.ws, { t: 'notice', text });
 /** Identifica a pessoa (conta ou IP) para contar denunciantes diferentes. */
 const playerKey = (p) => (p.userId ? `u${p.userId}` : `ip:${p.ip}`);
-const stock = (p) => send(p.ws, { t: 'inv', inv: inventoryOf(p.userId), premium: p.premium });
+const stock = (p) => send(p.ws, { t: 'inv', inv: inventoryOf(p.userId), premium: p.premium, vip: p.userId ? isVip(p.userId) : false });
 
 /** Fogos de artifício sobre o jogador, visíveis a quem está por perto. Consome 1 unidade. */
 function useFireworks(me) {
@@ -507,7 +525,10 @@ wss.on('connection', (ws, req) => {
     }
 
     if (m.t === 'join') {
-      if (ws.joined || players.size >= MAX_PLAYERS) return;
+      if (ws.joined) return;
+      // Avenida cheia: Apoiadores VIP têm vagas extras reservadas.
+      const cap = MAX_PLAYERS + (ws.user && isVip(ws.user.id) ? PREMIUM.reserved : 0);
+      if (players.size >= cap) return send(ws, { t: 'denied', reason: 'A avenida está cheia agora. Tente de novo em instantes. Apoiadores VIP ⭐ têm vaga garantida.' });
       const id = nextId++;
       const account = ws.user; // definido no upgrade pelo cookie de sessão
       let nick = account ? account.nick : filterText(cleanText(m.nick, LIMITS.nick));
@@ -654,6 +675,7 @@ wss.on('connection', (ws, req) => {
       const e = Math.trunc(Number(m.e));
       const now = Date.now();
       if (!(e >= 0 && e < REACTIONS.length) || now - me.lastReact < 800) return;
+      if (PREMIUM.reactions.includes(e) && !(me.userId && isVip(me.userId))) return notice(me, 'Essa reação é exclusiva para Apoiadores VIP ⭐. Veja na loja 🛍️.');
       me.lastReact = now;
       sendNear(me, { t: 'react', id: me.id, e });
     } else if (m.t === 'who') {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  WORLD, SIDES, ANIMS, WALK_SPEED, RUN_SPEED, RACE, MELEE, VEHICLE, REACTIONS, STAMINA, EMOTES, JUMP, ZONES, COMBAT,
+  WORLD, SIDES, ANIMS, WALK_SPEED, RUN_SPEED, RACE, MELEE, VEHICLE, REACTIONS, PREMIUM, STAMINA, EMOTES, JUMP, ZONES, COMBAT,
 } from '../shared/config.js';
 import { createWorld, carMesh } from './world.js';
 import { Avatar } from './avatar.js';
@@ -241,9 +241,15 @@ canvas.addEventListener('pointercancel', endDrag);
 
 const knockedOut = () => performance.now() < vit.koUntil;
 let lastReact = 0;
+function lockedReact() {
+  toast('Essa reação é exclusiva para Apoiadores VIP ⭐. Veja o VIP na loja 🛍️.');
+  accountApi?.openShop('vip');
+}
+
 function react(i) {
   const now = performance.now();
   if (mode !== 'play' || watching || knockedOut() || now - lastReact < 800) return;
+  if (PREMIUM.reactions.includes(i) && !acct.vip) return lockedReact();
   lastReact = now;
   net.send({ t: 'react', e: i });
 }
@@ -466,7 +472,8 @@ const net = new Net({
       case 'inv':
         acct.inventory = m.inv;
         acct.premium = m.premium;
-        hud.setInventory(m.inv, m.premium);
+        acct.vip = !!m.vip;
+        hud.setInventory(m.inv, m.premium, !!m.vip);
         break;
       case 'notice':
         toast(m.text);
@@ -474,6 +481,14 @@ const net = new Net({
       case 'fx':
         effects.fireworks(m.x, m.z, SIDES[m.side]?.color ?? '#ffffff');
         break;
+      case 'purchase': {
+        if (muted.has(String(m.nick).toLowerCase())) break;
+        const side = SIDES[m.side];
+        if (!side) break;
+        toast(`${m.icon} ${m.nick} apoiou o grupo ${side.name} com ${m.item}.${m.newLeader && SIDES[m.leader] ? ` 🏆 ${SIDES[m.leader].name} assume a liderança da semana!` : ''}`);
+        sound.pop();
+        break;
+      }
       case 'billboard':
         if (muted.has(String(m.nick).toLowerCase())) break;
         world.ticker.show(m.nick, m.text);
@@ -695,8 +710,12 @@ function updateProjectiles(dt) {
 
 const radar = initRadar();
 
+let accountApi = null; // preenchido por initAccount (loja, ranking)
 const hud = initHud({
   onChat: (text) => net.send({ t: 'chat', text }),
+  onLockedReact: lockedReact,
+  onRanking: () => accountApi?.openRanking(),
+  onPhoto: () => takePhoto(),
   onEmote: toggleEmote,
   onAttack: attack,
   onReact: react,
@@ -796,10 +815,11 @@ function leavePlay(reason) {
 // jogador pelo cookie de sessão no momento em que o WebSocket abre.
 const nickInput = $('#nick');
 let lastUserNick = null;
-initAccount({
+accountApi = initAccount({
+  getSide: () => profile.side,
   onChange(account, reason) {
     acct = account;
-    hud.setInventory(account.inventory || {}, !!account.premium);
+    hud.setInventory(account.inventory || {}, !!account.premium, !!account.vip);
     me.label?.setStyle(account.equipped);
     const nick = account.user?.nick ?? null;
     nickInput.disabled = !!nick;
@@ -810,6 +830,45 @@ initAccount({
     lastUserNick = nick;
   },
 });
+
+// ---------- Modo foto (VIP) ----------
+
+function takePhoto() {
+  if (!acct.vip) {
+    toast('O modo foto é exclusivo para Apoiadores VIP ⭐. Veja o VIP na loja 🛍️.');
+    accountApi?.openShop('vip');
+    return;
+  }
+  renderer.render(scene, camera); // desenha e copia no mesmo instante (o buffer ainda não foi apresentado)
+  const src = renderer.domElement;
+  const out = document.createElement('canvas');
+  out.width = src.width;
+  out.height = src.height;
+  const g = out.getContext('2d');
+  g.drawImage(src, 0, 0);
+  const pad = Math.round(out.width * 0.02);
+  g.font = `700 ${Math.max(12, Math.round(out.width * 0.02))}px system-ui, sans-serif`;
+  g.textAlign = 'right';
+  g.fillStyle = 'rgba(255,255,255,0.88)';
+  g.shadowColor = 'rgba(0,0,0,0.65)';
+  g.shadowBlur = 6;
+  g.fillText(`AVENIDA ONLINE · ${location.host}`, out.width - pad, out.height - pad);
+  // síncrono, dentro do clique do botão: navegadores só liberam o download enquanto o gesto do usuário vale
+  const dataUrl = out.toDataURL('image/png');
+  const bin = atob(dataUrl.slice(dataUrl.indexOf(',') + 1));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  const a = document.createElement('a');
+  const d = new Date();
+  const pad2 = (n) => String(n).padStart(2, '0');
+  a.download = `avenida-online-${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}.png`;
+  a.href = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+  a.hidden = true;
+  document.body.append(a); // alguns navegadores só baixam se o link estiver na página
+  a.click();
+  setTimeout(() => { a.remove(); URL.revokeObjectURL(a.href); }, 4000);
+  toast('Foto salva 📸', 'ok');
+}
 
 // ---------- Loop ----------
 

@@ -284,3 +284,9 @@ Segunda rodada: o anti-teleporte permitia ~25 m/s a quem mandasse muitas mensage
 - **Mixamo/Adobe**: personagens e a animação de aplauso (termos do Mixamo; não redistribuir os arquivos originais).
 - **three.js**: Soldier/Michelle de exemplo (MIT).
 - Modelos de pessoas reais: ver o aviso jurídico no topo.
+
+## Ranking dos grupos e funções VIP
+
+- **Ranking de apoio entre os grupos** (`server/ranking.js`, `GET /api/ranking?period=week|all`, janela 🏆 no jogo): cada compra paga é creditada ao grupo (lado) que o jogador tinha escolhido no menu na hora do checkout (`orders.side`); o ranking soma por grupo, mostra medalhas, barras, número de apoiadores e os 5 maiores apoiadores de cada grupo (quem excluiu a conta some da lista, mas o valor continua no grupo). A aba **Esta semana** vai de segunda 00:00 a segunda 00:00 em Brasília e zera sozinha; **Geral** soma tudo. Toda compra paga avisa a avenida inteira (`purchase`: quem, grupo, item) e, quando o jogo vira, anuncia o novo líder da semana.
+- **Funções premium (VIP ativo)**, definidas em `PREMIUM` e nos itens com `vip: true` de `shared/config.js`, todas conferidas no servidor: reações exclusivas (🔥 ❤️ 🎉), gestos premium, **vaga garantida** com a avenida cheia (`PREMIUM.reserved` vagas extras), **modo foto** 📸 (PNG com marca d'água, só no cliente), nome dourado com selo ⭐, 3 fogos por mês e itens exclusivos (asas, aura dourada, capa, selo 💎 e kit festa), que só podem ser comprados com o VIP ativo e, depois de comprados, ficam na conta mesmo se o VIP vencer. Nada disso dá vantagem no PvP.
+- **Auditoria do catálogo** (`test/catalog.test.js`): todo item à venda tem preço, ícone e slot válidos, é entregue ao ser pago (VIP, consumível, pacote, apoio e cosmético), todo cosmético pode ser equipado e o desconto que a descrição de cada pacote promete confere com o real.

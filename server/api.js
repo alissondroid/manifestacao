@@ -6,10 +6,11 @@ import {
 } from './auth.js';
 import { GOOGLE_CLIENT_ID, verifyGoogleToken } from './google.js';
 import {
-  ownedIds, equippedMap, owns, createOrder, pendingOrder, inventoryOf, vipUntil, hasPremiumEmotes, canBuy, getOrder, orderByRef, setOrderRef, setOrderStatus, fulfill, equip, designsOf, saveDesign,
+  ownedIds, equippedMap, owns, createOrder, pendingOrder, inventoryOf, vipUntil, hasPremiumEmotes, canBuy, isVip, validSide, setOrderSide, getOrder, orderByRef, setOrderRef, setOrderStatus, fulfill, equip, designsOf, saveDesign,
 } from './shop.js';
 import { filterText } from './moderation.js';
 import { clientIp } from './ip.js';
+import { rankingFor } from './ranking.js';
 import {
   addBan, removeBan, listBans, resolveKey,
 } from './bans.js';
@@ -80,9 +81,10 @@ const accountPayload = (user) => (user
     inventory: inventoryOf(user.id),
     vipUntil: vipUntil(user.id),
     premium: hasPremiumEmotes(user.id),
+    vip: isVip(user.id),
   }
   : {
-    user: null, owned: [], equipped: {}, custom: {}, inventory: {}, vipUntil: 0, premium: false,
+    user: null, owned: [], equipped: {}, custom: {}, inventory: {}, vipUntil: 0, premium: false, vip: false,
   });
 
 const publicShop = () => ({ items: SHOP.filter((i) => !i.hidden), provider: PROVIDER });
@@ -92,6 +94,14 @@ const publicShop = () => ({ items: SHOP.filter((i) => !i.hidden), provider: PROV
  * hooks.onEquip(userId) avisa o jogo para atualizar o visual de quem está online.
  */
 export async function handleApi(req, res, hooks = {}) {
+  /** Entrega o pedido pago (idempotente). Só a primeira entrega avisa o jogo e o ranking. */
+  const deliver = (orderId) => {
+    const before = getOrder(orderId)?.status;
+    const ok = fulfill(orderId);
+    const order = getOrder(orderId);
+    if (ok && before !== 'paid' && order) { hooks.onEquip?.(order.user_id); hooks.onPaid?.(order); }
+    return ok;
+  };
   const url = new URL(req.url, 'http://localhost');
   const { pathname } = url;
   if (!pathname.startsWith('/api/') && !pathname.startsWith('/pagar/')) return false;
@@ -114,7 +124,7 @@ export async function handleApi(req, res, hooks = {}) {
         const sameSession = order && (order.provider_ref === s.id || !order.provider_ref);
         if (sameSession && order.provider === 'stripe' && s.amount_total === order.amount_cents && s.currency === 'brl') {
           if (!order.provider_ref) setOrderRef(order.id, s.id, null);
-          if (fulfill(order.id)) hooks.onEquip?.(order.user_id);
+          deliver(order.id);
         }
       }
       return json(res, 200, { received: true }), true;
@@ -136,16 +146,15 @@ export async function handleApi(req, res, hooks = {}) {
       if (order && order.status !== 'paid') {
         try {
           const st = await fetchStatus(order.provider_ref);
-          if (st.paid && fulfill(order.id)) hooks.onEquip?.(order.user_id);
+          if (st.paid) deliver(order.id);
           else if (st.expired) setOrderStatus(order.id, 'expired');
         } catch (err) {
           if (err.denied) {
             // A chave não pode consultar o pagamento. O webhook (autenticado pelo segredo da URL) vale
             // se disser PAID para esta cobrança e no valor exato do pedido.
             const obj = payload.data?.transparent ?? payload.data?.pixQrCode ?? payload.data ?? {};
-            if (String(obj.status).toUpperCase() === 'PAID' && Number(obj.amount) === order.amount_cents && fulfill(order.id)) {
+            if (String(obj.status).toUpperCase() === 'PAID' && Number(obj.amount) === order.amount_cents && deliver(order.id)) {
               console.log(`[pagamentos] pedido ${order.id} liberado pelo webhook (a chave da AbacatePay não pode consultar: dê a permissão de leitura no painel)`);
-              hooks.onEquip?.(order.user_id);
             }
           } else {
             console.error('[pagamentos] webhook: falha ao consultar a AbacatePay:', err.message);
@@ -190,6 +199,13 @@ export async function handleApi(req, res, hooks = {}) {
     }
 
     // ---------- Conta ----------
+
+    // Ranking de apoio entre os grupos: público, para todo mundo ver quem lidera.
+    if (method === 'GET' && pathname === '/api/ranking') {
+      if (!rateLimit(`rank:${clientIp(req)}`, 60, 60_000)) return json(res, 429, { error: 'Muitas consultas. Aguarde um pouco.' }), true;
+      const period = url.searchParams.get('period') === 'all' ? 'all' : 'week';
+      return json(res, 200, rankingFor(period, Date.now(), user?.id ?? null)), true;
+    }
 
     if (method === 'GET' && pathname === '/api/me') {
       return json(res, 200, { ...accountPayload(user), shop: publicShop(), googleClientId: GOOGLE_CLIENT_ID || null }), true;
@@ -321,12 +337,15 @@ export async function handleApi(req, res, hooks = {}) {
       const item = SHOP_BY_ID[body.item];
       if (!item || item.hidden || item.price <= 0) return json(res, 404, { error: 'Item não encontrado.' }), true;
       if (!PAYMENTS_ENABLED) return json(res, 503, { error: 'Pagamentos indisponíveis no momento.' }), true;
+      if (item.vip && !isVip(user.id)) return json(res, 403, { error: 'Esse item é exclusivo para Apoiadores VIP ⭐. Assine o VIP na loja para liberar.' }), true;
       if (!canBuy(user.id, item)) return json(res, 409, { error: 'Você já tem esse item.' }), true;
       if (!rateLimit(`checkout:${user.id}`, 10, 10 * 60_000)) return json(res, 429, { error: 'Muitas tentativas. Aguarde um pouco.' }), true;
 
+      const side = validSide(body.side); // grupo a que a compra é creditada no ranking
       const open = pendingOrder(user.id, item.id, PROVIDER);
+      if (open && side !== null) setOrderSide(open.id, side);
       if (open) return json(res, 200, { url: open.pay_url, order: open.id, pix: pixPublic(open.pay_data) }), true;
-      const order = createOrder(user.id, item, PROVIDER);
+      const order = createOrder(user.id, item, PROVIDER, side);
       try {
         const { url: checkoutUrl, ref, data } = await createCheckout({ order, item, baseUrl: baseUrl(req) });
         setOrderRef(order.id, ref, checkoutUrl, data);
@@ -346,7 +365,7 @@ export async function handleApi(req, res, hooks = {}) {
       if (order.status === 'pending' && order.provider !== 'simulated' && order.provider_ref) {
         try {
           const st = await fetchStatus(order.provider_ref);
-          if (st.paid && fulfill(order.id)) hooks.onEquip?.(user.id);
+          if (st.paid) deliver(order.id);
           else if (st.expired) setOrderStatus(order.id, 'expired');
         } catch (err) {
           console.error('[pagamentos] falha ao consultar pedido:', err.message, err.denied ? '(a chave não tem permissão de leitura: ajuste no painel da AbacatePay; o webhook ainda libera)' : '');
@@ -402,7 +421,7 @@ export async function handleApi(req, res, hooks = {}) {
       if (!order || order.user_id !== user.id || order.provider !== 'simulated') {
         return json(res, 404, { error: 'Pedido não encontrado.' }), true;
       }
-      if (body.result === 'paid') { if (fulfill(order.id)) hooks.onEquip?.(user.id); }
+      if (body.result === 'paid') deliver(order.id);
       else setOrderStatus(order.id, 'cancelled');
       return json(res, 200, { status: getOrder(order.id).status }), true;
     }

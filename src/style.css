@@ -888,3 +888,35 @@ body[data-mode='lobby'] #topbar { padding-inline: max(14px, calc((100vw - 1360px
 .pixstatus[data-kind='bad'] { color: #fca5a5; }
 .pix .link { justify-self: center; font-size: 12.5px; }
 @media (max-width: 640px) { .pixcode { font-size: 16px; } }
+
+/* ---------- Ranking dos grupos ---------- */
+.rank { gap: 12px; }
+.note.center { text-align: center; }
+.rkrows { display: grid; gap: 8px; }
+.rkrow {
+  display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; grid-template-areas: 'pos name total' 'pos bar total'; align-items: center; column-gap: 10px; row-gap: 5px;
+  text-align: left; padding: 10px 12px; border-radius: 12px; font: inherit; color: var(--text); cursor: pointer;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); border-left: 4px solid var(--c, var(--line));
+}
+.rkrow:hover { background: rgba(255, 255, 255, 0.08); }
+.rkrow.sel { border-color: var(--c); box-shadow: 0 0 0 1px var(--c) inset; }
+.rkrow.mine .rkname { font-weight: 800; }
+.rkpos { grid-area: pos; font-size: 20px; text-align: center; }
+.rkname { grid-area: name; font-weight: 600; }
+.rkname em { font-style: normal; font-weight: 500; color: var(--muted); font-size: 12.5px; }
+.rkbar { grid-area: bar; display: block; height: 8px; border-radius: 99px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.rkbar i { display: block; height: 100%; border-radius: inherit; background: var(--c); transition: width 0.5s ease-out; }
+.rktotal { grid-area: total; text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+.rktotal small { display: block; font-weight: 500; font-size: 11px; color: var(--muted); }
+.rkh { margin: 4px 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.rktop { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; counter-reset: rk; }
+.rktop li { counter-increment: rk; display: flex; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); }
+.rktop li::before { content: counter(rk) 'º'; color: var(--muted); width: 26px; }
+.rktop li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rknote { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; }
+
+/* ---------- Funções premium (VIP) ---------- */
+#reacts button.locked { position: relative; opacity: 0.55; }
+#reacts button.locked::after { content: '🔒'; position: absolute; right: -2px; bottom: -2px; font-size: 11px; }
+#photobtn.locked { opacity: 0.7; }
+.lockvip { border-style: dashed; color: var(--accent); }

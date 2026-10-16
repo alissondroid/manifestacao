@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { db, transaction } from './db.js';
 import {
-  SHOP_BY_ID, DESIGN, VIP_BADGE, REPEATABLE,
+  SHOP_BY_ID, DESIGN, VIP_BADGE, REPEATABLE, SIDES,
 } from '../shared/config.js';
 
 export function ownedIds(userId) {
@@ -40,6 +40,7 @@ export const hasPremiumEmotes = (userId) => isVip(userId) || owns(userId, 'gesto
 /** Pode comprar de novo? Só os repetíveis; pacote de itens só enquanto faltar algum. */
 export function canBuy(userId, item) {
   if (item.hidden || item.price <= 0) return false;
+  if (item.vip && !isVip(userId)) return false; // exclusivo de Apoiador VIP
   if (REPEATABLE.has(item.kind)) return true;
   if (item.kind === 'bundle') return item.contains.some((id) => !owns(userId, id));
   return !owns(userId, item.id);
@@ -47,12 +48,16 @@ export function canBuy(userId, item) {
 
 export const owns = (userId, itemId) => !!db.prepare('SELECT 1 FROM owned WHERE user_id = ? AND item_id = ?').get(userId, itemId);
 
-export function createOrder(userId, item, provider) {
+export function createOrder(userId, item, provider, side = null) {
   const id = crypto.randomUUID();
-  db.prepare(`INSERT INTO orders (id, user_id, item_id, amount_cents, provider, status, created_at)
-              VALUES (?, ?, ?, ?, ?, 'pending', ?)`).run(id, userId, item.id, item.price, provider, Date.now());
+  db.prepare(`INSERT INTO orders (id, user_id, item_id, amount_cents, provider, status, created_at, side)
+              VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`).run(id, userId, item.id, item.price, provider, Date.now(), side);
   return { id };
 }
+
+/** Grupo (lado) válido vindo do cliente, ou null. */
+export const validSide = (v) => (Number.isInteger(v) && v >= 0 && v < SIDES.length ? v : null);
+export const setOrderSide = (id, side) => db.prepare("UPDATE orders SET side = ? WHERE id = ? AND status = 'pending'").run(side, id);
 
 export const getOrder = (id) => db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
 export const setOrderRef = (id, ref, url = null, data = null) => db.prepare('UPDATE orders SET provider_ref = ?, pay_url = ?, pay_data = ? WHERE id = ?').run(ref, url, data ? JSON.stringify(data) : null, id);

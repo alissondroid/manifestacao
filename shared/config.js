@@ -78,16 +78,16 @@ export const SHOP = [
   // --- VIP e pacotes ---
   {
     id: 'vip-30', cat: 'vip', kind: 'vip', days: 30, name: 'Apoiador VIP (30 dias)', price: 990, icon: '⭐',
-    desc: 'Nome dourado, selo ⭐ ao lado do nome, gestos premium e um brinde de 3 fogos por mês.', give: { fogos: 3 },
+    desc: 'Nome dourado e selo ⭐, gestos e reações exclusivas, modo foto 📸, vaga garantida com a avenida cheia, itens exclusivos (asas, aura dourada, capa, selo 💎, kit festa) e 3 fogos por mês.', give: { fogos: 3 },
   },
   {
     id: 'gestos-pack', cat: 'pacotes', kind: 'unlock', name: 'Pacote de gestos', price: 400, icon: '🕺', desc: 'Dança 2, chamar, concordar e negar. Para sempre.',
   },
   {
-    id: 'kit-manifestante', cat: 'pacotes', kind: 'bundle', name: 'Kit manifestante', price: 900, icon: '🎁', contains: ['camisa-brasil', 'bone', 'bandeira-gigante', 'oculos'], desc: 'Camisa amarela, boné, bandeira gigante e óculos escuros: 30% mais barato.',
+    id: 'kit-manifestante', cat: 'pacotes', kind: 'bundle', name: 'Kit manifestante', price: 900, icon: '🎁', contains: ['camisa-brasil', 'bone', 'bandeira-gigante', 'oculos'], desc: 'Camisa amarela, boné, bandeira gigante e óculos escuros: 31% mais barato.',
   },
   {
-    id: 'kit-festa', cat: 'pacotes', kind: 'bundle', name: 'Kit festa', price: 1100, icon: '🎉', contains: ['coroa', 'aura-dourada', 'capa', 'badge-diamante'], desc: 'Coroa, aura dourada, capa e selo 💎: 35% mais barato.',
+    id: 'kit-festa', cat: 'pacotes', kind: 'bundle', vip: true, name: 'Kit festa', price: 1100, icon: '🎉', contains: ['coroa', 'aura-dourada', 'capa', 'badge-diamante'], desc: 'Coroa, aura dourada, capa e selo 💎: 48% mais barato. Exclusivo VIP.',
   },
   // --- visual ---
   { id: 'camisa-brasil', slot: 'shirt', name: 'Camisa amarela', price: 400, color: '#f2c20f', icon: '👕' },
@@ -104,16 +104,16 @@ export const SHOP = [
   { id: 'oculos-aviador', slot: 'face', name: 'Óculos aviador', price: 200, icon: '😎' },
   { id: 'mascara-festa', slot: 'face', name: 'Máscara de festa', price: 300, icon: '🎭' },
   { id: 'mochila', slot: 'back', name: 'Mochila', price: 300, icon: '🎒' },
-  { id: 'capa', slot: 'back', name: 'Capa do lado', price: 500, icon: '🦸' },
-  { id: 'asas', slot: 'back', name: 'Asas', price: 600, icon: '🪽' },
+  { id: 'capa', vip: true, slot: 'back', name: 'Capa do lado', price: 500, icon: '🦸' },
+  { id: 'asas', vip: true, slot: 'back', name: 'Asas', price: 600, icon: '🪽' },
   { id: 'bandeira-gigante', slot: 'flag', name: 'Bandeira gigante', price: 400, icon: '🚩' },
   { id: 'cartaz-custom', slot: 'sign', name: 'Seu cartaz', price: 200, icon: '🪧', custom: 'sign' },
   { id: 'bandeira-custom', slot: 'flag', name: 'Sua bandeira', price: 400, icon: '🏳️', custom: 'flag' },
   { id: 'aura-lado', slot: 'fx', name: 'Aura do lado', price: 400, icon: '🔵' },
-  { id: 'aura-dourada', slot: 'fx', name: 'Aura dourada', price: 600, icon: '✨' },
+  { id: 'aura-dourada', vip: true, slot: 'fx', name: 'Aura dourada', price: 600, icon: '✨' },
   { id: 'badge-raiz', slot: 'badge', name: 'Selo Raiz', price: 200, icon: '🔥' },
   { id: 'badge-picanha', slot: 'badge', name: 'Selo Picanha', price: 200, icon: '🥩' },
-  { id: 'badge-diamante', slot: 'badge', name: 'Selo Diamante', price: 500, icon: '💎' },
+  { id: 'badge-diamante', vip: true, slot: 'badge', name: 'Selo Diamante', price: 500, icon: '💎' },
   { id: 'badge-coracao', slot: 'badge', name: 'Selo Apoiador', price: 0, icon: '💛', hidden: true, desc: 'Ganho com qualquer apoio ao projeto.' },
   { id: 'badge-estrela', slot: 'badge', name: 'Selo VIP', price: 0, icon: '⭐', hidden: true },
   { id: 'carro-dourado', slot: 'car', name: 'Carro dourado', price: 500, icon: '🚕' },
@@ -198,6 +198,10 @@ export const ZONE = { radius: 18, tickMs: 1000, capture: 7, neutralNeeded: 35, s
 export const REACTIONS = ['👍', '😂', '🔥', '❤️', '😡', '🇧🇷', '✊', '🎉'];
 // Fôlego: correr gasta, andar recupera; esgotado, só volta a correr depois de `resume`.
 export const STAMINA = { max: 100, drain: 26, regen: 16, resume: 25 };
+// Funções premium (valem enquanto o VIP estiver ativo). Nada aqui dá vantagem no PvP.
+//  - reactions: índices de REACTIONS que só o VIP usa · reserved: vagas extras na avenida cheia, só para VIP.
+//  - Itens com `vip: true` na loja só podem ser comprados com o VIP ativo (depois de comprados ficam na conta).
+export const PREMIUM = { reactions: [2, 3, 7], reserved: 25 };
 export const SHOP_BY_ID = Object.fromEntries(SHOP.map((i) => [i.id, i]));
 
 export const ACCOUNT = {
