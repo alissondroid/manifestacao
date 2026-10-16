@@ -12,6 +12,9 @@ import {
   asphaltNormal, mosaicNormal, LedTicker, archBannerTexture,
 } from './textures.js';
 import { SIDES, RACE } from '../shared/config.js';
+import {
+  carMesh, busMesh, soundTruckMesh, CAR_TYPES,
+} from './vehicles.js';
 
 // Avenida Paulista (versão estilizada): pista com faixas de ônibus, calçada de mosaico,
 // prédios com térreo comercial, o MASP, o Parque Trianon, carros de som e uma multidão.
@@ -63,72 +66,8 @@ function mergeColored(parts) {
 }
 
 const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
-const wheelGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.26, 14).rotateZ(Math.PI / 2);
-const vehicleMat = new THREE.MeshStandardMaterial({
-  vertexColors: true, roughness: 0.4, metalness: 0.35,
-});
 
-export function carMesh(color, skin = '') {
-  if (skin === 'carro-dourado') color = '#d4af37';
-  const parts = [
-    { geo: B(1.8, 0.62, 4.3), color, pos: [0, 0.62, 0] },
-    { geo: B(1.62, 0.55, 2.2), color: '#1d2730', pos: [0, 1.18, -0.1] },
-    { geo: B(1.5, 0.08, 2.0), color, pos: [0, 1.48, -0.1] },
-    { geo: B(0.4, 0.18, 0.06), color: '#fff6d6', pos: [-0.6, 0.72, 2.16] },
-    { geo: B(0.4, 0.18, 0.06), color: '#fff6d6', pos: [0.6, 0.72, 2.16] },
-    { geo: B(0.35, 0.16, 0.06), color: '#c81e1e', pos: [-0.62, 0.74, -2.16] },
-    { geo: B(0.35, 0.16, 0.06), color: '#c81e1e', pos: [0.62, 0.74, -2.16] },
-    { geo: B(1.76, 0.12, 0.08), color: '#1d2730', pos: [0, 0.95, 2.14] }, // grade
-  ];
-  for (const x of [-0.9, 0.9]) for (const z of [-1.4, 1.4]) parts.push({ geo: wheelGeo, color: '#111', pos: [x, 0.34, z] });
-  if (skin === 'carro-dourado') {
-    parts.push({ geo: B(1.9, 0.06, 0.2), color: '#fff2a8', pos: [0, 0.98, 2.2] }, { geo: B(1.7, 0.05, 0.12), color: '#fff2a8', pos: [0, 1.53, 0.9] });
-  } else if (skin === 'carro-som') { // caixas de som no teto e bandeirola
-    for (const x of [-0.5, 0.5]) parts.push({ geo: B(0.7, 1.0, 0.7), color: '#0e0e10', pos: [x, 2.0, -0.3] }, { geo: new THREE.CylinderGeometry(0.22, 0.22, 0.08, 12).rotateX(Math.PI / 2), color: '#3a3a3a', pos: [x, 2.1, 0.07] });
-    parts.push({ geo: B(0.04, 1.2, 0.04), color: '#d4d4d0', pos: [0, 2.3, -1.6] }, { geo: B(0.7, 0.4, 0.02), color, pos: [0.35, 2.7, -1.6] });
-  }
-  return setShadow(new THREE.Mesh(mergeColored(parts), vehicleMat));
-}
-
-function busMesh(stripe) {
-  const parts = [
-    { geo: B(2.5, 2.9, 11.5), color: '#f1f1ee', pos: [0, 1.85, 0] },
-    { geo: B(2.54, 0.95, 10.8), color: '#1d2730', pos: [0, 2.35, 0] },
-    { geo: B(2.52, 0.32, 11.5), color: stripe, pos: [0, 1.0, 0] },
-    { geo: B(2.3, 0.1, 11.3), color: '#9a9a96', pos: [0, 3.35, 0] },
-    { geo: B(0.5, 0.25, 0.06), color: '#fff6d6', pos: [-0.85, 0.95, 5.78] },
-    { geo: B(0.5, 0.25, 0.06), color: '#fff6d6', pos: [0.85, 0.95, 5.78] },
-    { geo: B(2.2, 0.7, 0.06), color: '#0b0f14', pos: [0, 2.3, 5.78] }, // para-brisa
-    { geo: B(1.6, 0.4, 0.06), color: '#f3b61f', pos: [0, 3.05, 5.78] }, // letreiro
-  ];
-  for (const x of [-1.2, 1.2]) for (const z of [-3.8, 3.4]) parts.push({ geo: wheelGeo, color: '#111', pos: [x, 0.5, z] });
-  return setShadow(new THREE.Mesh(mergeColored(parts), vehicleMat));
-}
-
-/** Carro de som (caminhão com caixas de som e faixa do candidato). */
-function soundTruck(side, color) {
-  const g = new THREE.Group();
-  const parts = [
-    { geo: B(2.5, 1.0, 9.5), color: '#2b2d31', pos: [0, 1.0, -0.4] },
-    { geo: B(2.5, 1.9, 2.2), color: '#e8e8e4', pos: [0, 1.95, 3.7] },
-    { geo: B(2.4, 0.7, 0.1), color: '#1d2730', pos: [0, 2.4, 4.85] },
-    { geo: B(2.5, 0.4, 6.8), color, pos: [0, 1.7, -1.7] },
-  ];
-  for (const x of [-1.2, 1.2]) for (const z of [-3.6, 2.4, 3.8]) parts.push({ geo: wheelGeo, color: '#111', pos: [x, 0.5, z] });
-  for (const z of [-4.4, 1.0]) { // pilhas de caixas
-    parts.push({ geo: B(1.0, 1.6, 0.9), color: '#0e0e10', pos: [-0.9, 2.7, z] });
-    parts.push({ geo: B(1.0, 1.6, 0.9), color: '#0e0e10', pos: [0.9, 2.7, z] });
-  }
-  g.add(setShadow(new THREE.Mesh(mergeColored(parts), vehicleMat)));
-  const banner = new THREE.MeshStandardMaterial({ map: bannerTexture(side), side: THREE.DoubleSide, roughness: 0.8 });
-  for (const sx of [-1, 1]) {
-    const b = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 1.6), banner);
-    b.position.set(sx * 1.27, 1.7, -1.7);
-    b.rotation.y = sx * Math.PI / 2;
-    g.add(b);
-  }
-  return g;
-}
+export { carMesh };
 
 // ---------- Mundo ----------
 
@@ -709,10 +648,11 @@ export function createWorld(scene, renderer) {
     const lane = pick([-1, 1]) * (CYCLE + 0.35 + laneW * (0.5 + Math.floor(rng() * 3)));
     const z = rr(-HALF_LEN + 10, HALF_LEN - 10);
     if (avoid.some((a) => Math.abs(a.z - z) < a.hz + 4 && Math.abs(a.x - lane) < 3.5)) continue;
-    addVehicle(carMesh(pick(carColors)), lane, z, lane > 0 ? 0 : Math.PI, 1.1, 2.4);
+    addVehicle(carMesh(pick(carColors), '', CAR_TYPES[i % CAR_TYPES.length]), lane, z, lane > 0 ? 0 : Math.PI, 1.1, 2.4);
   }
-  addVehicle(soundTruck(0, '#8f1019'), 5.2, -30, 0, 3.1, 8);
-  addVehicle(soundTruck(1, '#0e6a30'), -5.2, 44, Math.PI, 3.1, 8);
+  const truckBanner = (side) => new THREE.MeshStandardMaterial({ map: bannerTexture(side), side: THREE.DoubleSide, roughness: 0.8 });
+  addVehicle(soundTruckMesh('#8f1019', truckBanner(0)), 5.2, -30, 0, 3.1, 8);
+  addVehicle(soundTruckMesh('#0e6a30', truckBanner(1)), -5.2, 44, Math.PI, 3.1, 8);
 
   // ---------- mobiliário urbano ----------
   const steel = new THREE.MeshStandardMaterial({ color: '#8b9096', metalness: 0.7, roughness: 0.35 });

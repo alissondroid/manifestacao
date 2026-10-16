@@ -164,6 +164,7 @@ let lobbyDragUntil = 0;
 const setMode = (m) => { mode = m; document.body.dataset.mode = m; };
 resize();
 let myId = null;
+let debugDist = 0; // só depuração: distância da câmera livre (modo assistir)
 let historyShown = false;
 let acct = { user: null, equipped: {}, custom: {} }; // conta atual (preenchida por initAccount)
 const lookOf = (look, side) => ({
@@ -990,7 +991,7 @@ function updateCamera(dt, time) {
     camera.lookAt(0, 0.95, 0);
     return;
   }
-  const dist = watching ? 20 : camDist;
+  const dist = watching ? (debugDist || 20) : camDist;
   const cp = Math.cos(camPitch);
   const wanted = tmpV.set(
     me.x - Math.sin(camYaw) * dist * cp,
@@ -1084,7 +1085,7 @@ window.__AVENIDA__ = {
   get mode() { return mode; },
   get pos() { return { x: me.x, z: me.z }; },
   /** Só para depuração: posiciona a câmera livre (modo assistir). */
-  setView(x, z, yaw = camYaw, pitch = camPitch) { me.x = x; me.z = z; camYaw = yaw; camPitch = pitch; },
+  setView(x, z, yaw = camYaw, pitch = camPitch, dist = 0) { me.x = x; me.z = z; camYaw = yaw; camPitch = pitch; debugDist = dist; },
   setLobbyYaw(y) { lobbyYaw = y; lobbyDragUntil = performance.now() + 60000; },
   info: renderer.info,
   movingCars,
