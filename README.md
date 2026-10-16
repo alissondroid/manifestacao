@@ -126,9 +126,13 @@ Os termos do Mixamo e do Ready Player Me permitem usar esses recursos em projeto
 - **Corrida** (botão 🏁 no HUD): quem entra espera até 15 s por outros corredores, é levado à linha de largada (pórtico em z = −100), conta 3-2-1 e corre até a chegada (z = +100). O servidor marca o tempo pela posição que já valida; resultado da prova e os 10 melhores tempos ficam em `race_times` (SQLite, `GET /api/race/top`). Mensagens `race {action}` do cliente e `race {state, n, startsIn, results, top}` do servidor.
 - **PvP, a tomatada** (botão 🍅, tecla F para arremessar): só entre quem ligou o PvP. O servidor resolve o acerto pela posição e direção de quem arremessa (alcance 18 m, raio 0,9 m, 1 arremesso a cada 1,2 s) e manda `throw` para quem está perto (o cliente anima o tomate) e `hitby` para o atingido. Placar por lado e os 5 maiores acertadores em `pvp {scores, top}`.
 
+## Editar personagem em jogo
+
+O botão 🎨 Personagem (HUD) abre o mesmo menu do lobby como editor, sem sair da avenida: o personagem fica parado, sem a etapa do lado nem o apelido. "Salvar alterações" envia `setlook`; o servidor revalida tudo com `cleanLook` (limite de 1 mensagem a cada 500 ms) e retransmite `look` a quem o vê. "Cancelar" restaura o visual anterior. Não abre dirigindo, nocauteado ou em corrida.
+
 ## Cartaz e bandeira personalizados
 
-Itens "Seu cartaz" (R$ 2) e "Sua bandeira" (R$ 4). Depois de comprar, o botão ✏️ Editar na loja abre o editor: texto (40 ou 16 caracteres), cor de fundo e do texto (paleta fixa) e um símbolo. O desenho é validado e salvo no servidor (`POST /api/shop/design`, tabela `designs`), passa pelo filtro de palavras e viaja para os outros jogadores dentro de `look.custom`. O cartaz personalizado substitui o cartaz grátis quando "Cartaz" está na mão; a bandeira personalizada substitui a do lado quando "Bandeira do candidato" está na mão.
+Itens "Seu cartaz" (R$ 2) e "Sua bandeira" (R$ 4). Depois de comprar, o botão ✏️ Editar na loja abre o editor: texto (40 ou 16 caracteres), cor de fundo e do texto (paleta fixa) e um símbolo. O desenho é validado e salvo no servidor (`POST /api/shop/design`, tabela `designs`), passa pelo filtro de palavras e viaja para os outros jogadores dentro de `look.custom`. O cartaz grátis só aceita frases prontas (`SIGN_PRESETS` em `shared/config.js`, validadas no servidor): texto livre exige o item pago. O cartaz personalizado substitui o cartaz grátis quando "Cartaz" está na mão; a bandeira personalizada substitui a do lado quando "Bandeira do candidato" está na mão.
 
 ## Lobby
 
@@ -137,7 +141,7 @@ Layout no espírito do manifestacao.com: barra no topo com logo e online por lad
 1. **Lado**: Petista (13), Bolsonarista (22), Anarquistas ou Sem partido, com o contador de online de cada um.
 2. **Personagem**: seis personagens prontos numa fila (Homem, Mulher, Tiozão do Zap, Renan Santos, Lula e Bolsonaro) com retratos do modelo 3D e o botão 🎲 Sortear. Idosos e demais variações ficam em Visual.
 3. **Visual**: corpo, idade, rosto e altura; pele, barba, camisa e calça só aparecem no rosto que aceita tingir (o texto explica quando não).
-4. **Na mão**: nada, bandeira do Brasil, bandeira do lado, cartaz com texto, picanha no espeto ou abóbora. No PvP, quem segura picanha ou abóbora arremessa o próprio item em vez do tomate.
+4. **Na mão**: nada, bandeira do Brasil, bandeira do lado, cartaz (frase pronta ou texto próprio via Pix), picanha no espeto ou abóbora. No PvP, quem segura picanha ou abóbora arremessa o próprio item em vez do tomate.
 
 O rodapé é fixo e fica sempre visível: resumo da escolha, apelido com contador (em branco entra como Visitante; com conta, mostra o apelido dela), **Entrar na manifestação** e **Só quero assistir**. As etapas funcionam por teclado (setas esquerda e direita) e em celular o menu vira uma folha na parte de baixo, com o personagem visível acima.
 

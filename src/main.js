@@ -116,13 +116,13 @@ function resize() {
 function applyViewOffset() {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  if (mode === 'lobby' && w > 640) {
+  if ((mode === 'lobby' || editing) && w > 640) {
     // o personagem fica no centro do card de prévia (coluna da esquerda); o menu fica à direita
     const r = document.querySelector('#preview').getBoundingClientRect();
     const ok = r.width > 0;
     camera.setViewOffset(w, h, ok ? w / 2 - (r.left + r.width / 2) : w * 0.2, ok ? h / 2 - (r.top + r.height / 2) : 0, w, h);
   }
-  else if (mode === 'lobby') camera.setViewOffset(w, h, 0, h * 0.2, w, h); // celular: cartão fica embaixo
+  else if (mode === 'lobby' || editing) camera.setViewOffset(w, h, 0, h * 0.2, w, h); // celular: cartão fica embaixo
   else camera.clearViewOffset();
   camera.updateProjectionMatrix();
 }
@@ -132,6 +132,8 @@ window.addEventListener('resize', resize);
 
 let mode = 'lobby'; // 'lobby' | 'play'
 let watching = false; // espectador: câmera livre, sem avatar
+let editing = false; // editando o visual dentro do jogo (câmera de prévia, controles parados)
+let editBackup = null;
 let lobbyAnim = 'idle'; // animação escolhida no preview do lobby
 // modos extras
 const race = { snap: { state: 'idle', n: 0 }, joined: false, mine: null, goAt: 0, countAt: 0 };
@@ -197,6 +199,7 @@ let camDist = 6.5;
 const keys = {};
 window.addEventListener('keydown', (e) => {
   if (hud.isTyping() || e.target instanceof HTMLInputElement) return;
+  if (editing) return;
   keys[e.code] = true;
   if (mode === 'play' && !e.repeat) {
     if (e.code === 'Digit1') toggleEmote(2);
@@ -224,7 +227,7 @@ canvas.addEventListener('pointerdown', (e) => {
 });
 canvas.addEventListener('pointermove', (e) => {
   if (!drag || drag.id !== e.pointerId) return;
-  if (mode === 'lobby') { // gira o personagem do preview
+  if (mode === 'lobby' || editing) { // gira o personagem do preview
     lobbyYaw += (e.clientX - drag.x) * 0.01;
     lobbyDragUntil = performance.now() + 5000;
     drag.x = e.clientX;
@@ -716,6 +719,7 @@ const hud = initHud({
   onLockedReact: lockedReact,
   onRanking: () => accountApi?.openRanking(),
   onPhoto: () => takePhoto(),
+  onEdit: () => startEdit(),
   onEmote: toggleEmote,
   onAttack: attack,
   onReact: react,
@@ -742,11 +746,13 @@ const lobby = initLobby({
   profile,
   presets: PRESETS,
   onAnim: (a) => { lobbyAnim = a; },
+  onShop: () => accountApi.openShop(),
   onChange() {
     saveProfile();
     me.avatar.setLook(lookOf(profile.look, profile.side));
   },
   onEnter() {
+    if (editing) return finishEdit(true);
     if (!net.connected) {
       showError('Sem conexão com o servidor. Tentando novamente…');
       return;
@@ -763,6 +769,7 @@ const lobby = initLobby({
     net.join({ nick: profile.nick, side: profile.side, look: profile.look });
   },
   onWatch() {
+    if (editing) return finishEdit(false);
     if (!net.connected) {
       showError('Sem conexão com o servidor. Tentando novamente…');
       return;
@@ -785,8 +792,43 @@ addEventListener('pagehide', () => net.leave());
 addEventListener('pageshow', (e) => { if (e.persisted) net.reconnect(); });
 renderPortraits(renderer, profile.side);
 
+/** Mudar o visual sem sair da avenida: o personagem fica parado e o menu abre como editor. */
+function startEdit() {
+  if (mode !== 'play' || watching || editing) return;
+  if (drive.on || knockedOut() || race.mine) { toast('Desça do carro/da corrida e fique de pé para editar.'); return; }
+  editBackup = JSON.stringify(profile.look);
+  for (const k of Object.keys(keys)) keys[k] = false;
+  editing = true;
+  $('#hud').hidden = true;
+  lobbyYaw = me.ry;
+  lobbyDragUntil = 0;
+  lobby.setEditing(true);
+  lobby.show();
+  applyViewOffset();
+}
+
+function finishEdit(save) {
+  if (!editing) return;
+  if (save) {
+    saveProfile();
+    net.send({ t: 'setlook', look: profile.look });
+    toast('Visual atualizado!');
+  } else {
+    Object.assign(profile.look, JSON.parse(editBackup));
+    me.avatar.setLook(lookOf(profile.look, profile.side));
+  }
+  editBackup = null;
+  editing = false;
+  lobby.setEditing(false);
+  lobby.hide();
+  $('#hud').hidden = false;
+  me.avatar.group.rotation.y = me.ry;
+  applyViewOffset();
+}
+
 /** Volta do jogo para o lobby (ex.: servidor recusou a entrada). */
 function leavePlay(reason) {
+  if (editing) { editing = false; lobby.setEditing(false); }
   if (drive.on) toggleDrive();
   setMode('lobby');
   race.joined = false;
@@ -1065,13 +1107,15 @@ function updateCamera(dt, time) {
     camera.lookAt(...debugCam.target);
     return;
   }
-  if (mode === 'lobby') {
+  if (mode === 'lobby' || editing) {
     // o personagem gira devagar (ou pelo arrasto) com a câmera fixa à frente
     if (performance.now() > lobbyDragUntil) lobbyYaw += dt * 0.25;
     me.avatar.group.rotation.y = lobbyYaw;
     const r = camera.aspect < 0.8 ? 6.2 : 4.1; // celular em pé: afasta para caber o avatar
-    camera.position.set(0.6, 1.45, r);
-    camera.lookAt(0, 0.95, 0);
+    const ox = editing ? me.x : 0;
+    const oz = editing ? me.z : 0;
+    camera.position.set(ox + 0.6, 1.45, oz + r);
+    camera.lookAt(ox, 0.95, oz);
     return;
   }
   const dist = watching ? (debugDist || 20) : camDist;
@@ -1115,7 +1159,12 @@ function frame() {
   elapsed += dt;
   const time = elapsed;
 
-  if (mode === 'play') {
+  if (mode === 'play' && editing) {
+    me.avatar.group.position.set(me.x, 0, me.z);
+    me.avatar.group.rotation.y = lobbyYaw;
+    if (performance.now() > lobbyDragUntil) lobbyYaw += dt * 0.25;
+    me.avatar.update(dt, lobbyAnim === 'run' ? 'walk' : lobbyAnim, 0);
+  } else if (mode === 'play') {
     updateSlide(now);
     updateLocal(dt);
     sendState(now);

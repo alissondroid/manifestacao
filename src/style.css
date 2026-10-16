@@ -974,3 +974,12 @@ body[data-mode='lobby'] #topbar { padding-inline: max(16px, calc((100vw - 1360px
 @media (max-width: 380px) { .online .sc { padding: 0 5px; } .brand .logo { display: none; } }
 @media (max-width: 340px) { #leave .tx { display: none; } #leave { width: 36px; padding: 0; } }
 @media (prefers-reduced-motion: reduce) { .online .live i { animation: none; } }
+
+/* ---------- Editar personagem dentro do jogo ---------- */
+#lobby[data-editing] .herotext,
+#lobby[data-editing] .steps [data-tab='lado'],
+#lobby[data-editing] .nickbox,
+#lobby[data-editing] .legal-row,
+#lobby[data-editing] #tab-lado { display: none !important; }
+#lobby[data-editing] .steps { grid-template-columns: repeat(3, 1fr); }
+#sign-custom { margin-top: 8px; text-align: left; }
