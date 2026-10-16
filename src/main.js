@@ -10,6 +10,7 @@ import { Ambience } from './audio.js';
 import { initAccount } from './account.js';
 import { PRESETS, renderPortraits } from './portraits.js';
 import { loadModels, nextPaint } from './models.js';
+import { createQualityMonitor, QUALITY } from './quality.js';
 import {
   initLobby, initHud, initModes, initUserMenu, setMyId, createLabel, setOnline, setStatus, showError, loadingScreen,
 } from './ui.js';
@@ -56,12 +57,15 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPrefere
 // Qualidade adaptativa: se o FPS ficar baixo, reduz resolução e sombras (nível guardado para a próxima visita).
 // ?q=0..3 força um nível (0 = máximo).
 const QUALITY_KEY = 'avenida-online:qualidade';
-const QUALITY_MAX = 3;
-const quality = { level: 0, acc: 0, frames: 0, low: 0 };
 const dpr = window.devicePixelRatio || 1;
 const PIXEL_RATIO = [Math.min(dpr, 2), Math.min(dpr, 1.25), 1, 0.75];
+const savedQuality = (() => {
+  const q = new URLSearchParams(location.search).get('q');
+  if (q !== null && /^[0-3]$/.test(q)) return Number(q);
+  try { return Math.min(QUALITY.maxLevel, Math.max(0, Number(localStorage.getItem(QUALITY_KEY)) || 0)); } catch { return 0; }
+})();
+const quality = createQualityMonitor({ level: savedQuality, onDrop: (level) => applyQuality(level, true) });
 function applyQuality(level, notify = false) {
-  quality.level = level;
   renderer.setPixelRatio(PIXEL_RATIO[level]);
   const shadows = level < 2;
   if (renderer.shadowMap.enabled !== shadows) {
@@ -72,29 +76,11 @@ function applyQuality(level, notify = false) {
   try { localStorage.setItem(QUALITY_KEY, String(level)); } catch { /* ignore */ }
   if (notify) toast('Ajustamos os gráficos para o jogo rodar mais fluido.');
 }
-/** Chamado a cada quadro com o tempo real (s) desde o anterior. */
-function watchFps(rawDt) {
-  if (rawDt > 0.25) return; // aba em segundo plano ou travada por carga: não conta
-  quality.acc += rawDt;
-  quality.frames += 1;
-  if (quality.acc < 3) return;
-  const fps = quality.frames / quality.acc;
-  quality.acc = 0;
-  quality.frames = 0;
-  quality.low = fps < 28 ? quality.low + 1 : 0;
-  if (quality.low >= 2 && quality.level < QUALITY_MAX) { quality.low = 0; applyQuality(quality.level + 1, true); }
-}
-const savedQuality = (() => {
-  const q = new URLSearchParams(location.search).get('q');
-  if (q !== null && /^[0-3]$/.test(q)) return Number(q);
-  try { return Math.min(QUALITY_MAX, Math.max(0, Number(localStorage.getItem(QUALITY_KEY)) || 0)); } catch { return 0; }
-})();
 renderer.setPixelRatio(PIXEL_RATIO[savedQuality]);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 renderer.shadowMap.enabled = savedQuality < 2;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-quality.level = savedQuality;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 900);
 
@@ -351,7 +337,16 @@ const net = new Net({
     setStatus('conectado');
     showError('');
   },
-  close() {
+  close(code, fatal) {
+    if (fatal) { // o servidor encerrou de propósito (outra aba, conta excluída, banimento): não fica reconectando
+      setStatus('desconectado');
+      showError(fatal);
+      if (mode === 'play') {
+        hud.addChat('Sistema', fatal, '#fca5a5');
+        toast(fatal, 'error');
+      }
+      return;
+    }
     setStatus('reconectando…');
     if (mode === 'play') hud.addChat('Sistema', 'Conexão perdida. Reconectando…', '#fca5a5');
   },
@@ -1031,7 +1026,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 function frame() {
   const now = performance.now();
   const dt = Math.min((now - lastFrame) / 1000, 0.1);
-  watchFps((now - lastFrame) / 1000);
+  quality.frame((now - lastFrame) / 1000);
   lastFrame = now;
   elapsed += dt;
   const time = elapsed;

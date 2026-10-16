@@ -62,6 +62,8 @@ Servidor → cliente: `online {counts}`, `welcome {id, x, z}`, `sync {add, del, 
 
 `sync` é o interesse por área: cada cliente só recebe `add` (jogador entrou no raio, com visual completo), `del` (saiu do raio ou da avenida) e `s` (posições que mudaram, `[id, x, z, ry, anim]`). A saída do raio tem histerese de 10 m para não piscar. Espectadores recebem todos.
 
+Fechamentos que o servidor faz de propósito usam códigos próprios, e o cliente (`src/net.js`) **não reconecta** nesses casos, só mostra o motivo: `4000` entrou em outro lugar (outra aba ou aparelho com a mesma conta), `4001` conta excluída, `4003` banido. Qualquer outro fechamento (queda de rede, reinício do servidor com `1001`) reconecta sozinho com espera exponencial (até 8 s) e jitter, para os jogadores não voltarem todos juntos. `reconnect()` (por exemplo, depois de entrar na conta) volta a conectar mesmo depois de um fechamento intencional.
+
 O servidor limita a velocidade com um orçamento de deslocamento (`spendMoveBudget` em `server/rules.js`: acumula `limite × tempo real × 1,25`, com teto, e gasta a distância andada; mandar muitas mensagens curtas não aumenta a velocidade), recorta a posição ao mapa, sanitiza textos e aplica cooldown de chat. Tempos de corrida abaixo do mínimo físico não entram no ranking.
 
 ## Hospedagem (VPS Ubuntu)
