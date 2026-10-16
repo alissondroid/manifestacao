@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import {
-  PREMIUM, SHOP_BY_ID, WORLD, SIDES, SHIRTS, SKINS, HAIRS, HAIR_STYLES, BODIES, AGES, MODELS, HEIGHTS, BEARDS, TOPS, PANTS, FLAGS, ANIMS, MAX_SPEED, LIMITS, MELEE, VEHICLE, COMBAT, REACTIONS, PREMIUM_ANIMS, BILLBOARD,
+  PREMIUM, SHOP_BY_ID, WORLD, SIDES, SHIRTS, SKINS, HAIRS, HAIR_STYLES, BODIES, AGES, MODELS, HEIGHTS, BEARDS, TOPS, PANTS, FLAGS, ANIMS, MAX_SPEED, LIMITS, SIGN_PRESETS, MELEE, VEHICLE, COMBAT, REACTIONS, PREMIUM_ANIMS, BILLBOARD,
 } from '../shared/config.js';
 import { handleApi } from './api.js';
 import { userFromRequest, nickTaken } from './auth.js';
@@ -194,7 +194,7 @@ function cleanLook(rawLook, equip = {}, custom = {}) {
     top: int(look.top, TOPS.length - 1),
     pants: int(look.pants, PANTS.length - 1),
     flag: int(look.flag, FLAGS.length - 1),
-    sign: filterText(cleanText(look.sign, LIMITS.sign)),
+    sign: SIGN_PRESETS.includes(look.sign) ? look.sign : '',
     equip,
     custom,
   };
@@ -577,6 +577,7 @@ wss.on('connection', (ws, req) => {
         koUntil: 0,
         shieldUntil: 0,
         lastReact: 0,
+        lastLook: 0,
         lastWho: 0,
         mutedUntil: 0,
         lastHint: 0,
@@ -675,6 +676,15 @@ wss.on('connection', (ws, req) => {
       send(ws, { t: 'pvp', on: me.pvp });
     } else if (m.t === 'use') {
       if (m.item === 'fogos') useFireworks(me);
+    } else if (m.t === 'setlook') {
+      const now = Date.now();
+      if (now - me.lastLook < 500) return;
+      me.lastLook = now;
+      me.look = cleanLook(m.look, me.look.equip, me.look.custom);
+      const msg = JSON.stringify({ t: 'look', id: me.id, look: me.look });
+      for (const c of wss.clients) {
+        if (c.readyState === c.OPEN && c.joined && (c.player === me || c.known.has(me.id))) c.send(msg);
+      }
     } else if (m.t === 'react') {
       const e = Math.trunc(Number(m.e));
       const now = Date.now();

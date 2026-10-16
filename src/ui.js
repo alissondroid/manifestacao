@@ -1,21 +1,47 @@
 import {
-  SIDES, SHIRTS, SKINS, BODIES, AGES, MODELS, HEIGHTS, BEARDS, PANTS, RACE, SHOP_BY_ID, EMOTES, PREMIUM,
+  SIDES, SHIRTS, SKINS, BODIES, AGES, MODELS, HEIGHTS, BEARDS, PANTS, RACE, SHOP_BY_ID, EMOTES, PREMIUM, SIGN_PRESETS,
 } from '../shared/config.js';
 import { CHARACTERS, modelId } from './models.js';
 
 const $ = (sel) => document.querySelector(sel);
 
+/** Contador ao vivo no topo: total de jogadores e quantos há em cada grupo (cápsula única, com nome só em telas largas). */
 export function setOnline(counts) {
   const box = $('#online');
   if (!box.children.length) {
+    const live = document.createElement('span');
+    live.className = 'live';
+    const pulse = document.createElement('i');
+    pulse.setAttribute('aria-hidden', 'true');
+    const total = document.createElement('b');
+    const label = document.createElement('span');
+    label.className = 'tx';
+    label.textContent = ' online';
+    live.append(pulse, total, label);
+    box.append(live);
     SIDES.forEach((s) => {
-      const pill = document.createElement('span');
-      pill.className = 'pill';
-      pill.innerHTML = `<i class="dot" style="background:${s.color}"></i><b>0</b><span class="name"> ${s.short}</span>`;
-      box.append(pill);
+      const chip = document.createElement('span');
+      chip.className = 'sc';
+      const dot = document.createElement('i');
+      dot.className = 'dot';
+      dot.style.background = s.color;
+      const n = document.createElement('b');
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = s.short;
+      chip.append(dot, n, name);
+      box.append(chip);
     });
   }
-  box.querySelectorAll('b').forEach((b, i) => { b.textContent = counts[i] ?? 0; });
+  const sum = SIDES.reduce((acc, _s, i) => acc + (counts[i] ?? 0), 0);
+  box.querySelector('.live b').textContent = sum;
+  box.querySelector('.live').title = `${sum} jogador${sum === 1 ? '' : 'es'} na avenida agora`;
+  box.querySelectorAll('.sc').forEach((chip, i) => {
+    const n = counts[i] ?? 0;
+    chip.querySelector('b').textContent = n;
+    chip.title = `${SIDES[i].name}: ${n} online`;
+    chip.setAttribute('aria-label', `${SIDES[i].name}: ${n} online`);
+  });
   for (const [i, el] of document.querySelectorAll('.side small').entries()) {
     el.textContent = `${counts[i] ?? 0} online`;
   }
@@ -82,7 +108,7 @@ const FLAG_OPTIONS = [
   { icon: '✋', title: 'Nada', text: 'Mãos livres para acenar e dançar' },
   { icon: '🇧🇷', title: 'Bandeira do Brasil', text: 'Verde e amarela, para todo mundo' },
   { icon: '🚩', title: 'Bandeira do lado', text: '' }, // texto muda com o lado escolhido
-  { icon: '🪧', title: 'Cartaz', text: 'Escreva o que quiser, até 24 caracteres' },
+  { icon: '🪧', title: 'Cartaz', text: 'Escolha uma frase ou escreva a sua (Pix)' },
   { icon: '🥩', title: 'Picanha no espeto', text: 'Direto da churrasqueira da calçada' },
   { icon: '🎃', title: 'Abóbora', text: 'Moranga fresquinha da feira' },
 ];
@@ -91,8 +117,12 @@ const STEP_NAMES = ['Lado', 'Personagem', 'Visual', 'Na mão'];
 const pickOf = (list) => list[Math.floor(Math.random() * list.length)];
 
 /** Monta o menu "Monte seu personagem". `profile` é alterado no lugar. */
-export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim }) {
+export function initLobby({
+  profile, presets, onChange, onEnter, onWatch, onAnim, onShop,
+}) {
   const look = profile.look;
+  let editing = false; // editando o personagem já dentro do jogo (sem a etapa do lado)
+  const firstStep = () => (editing ? 1 : 0);
   const el = (tag, cls, html) => {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
@@ -114,8 +144,9 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
   const go = (id, focus = false) => {
     const at = STEPS.indexOf(id);
     visited.add(id);
-    prevBtn.hidden = at === 0;
+    prevBtn.hidden = at <= firstStep();
     if (at > 0) prevBtn.textContent = `← ${STEP_NAMES[at - 1]}`;
+    nextBtn.hidden = editing && at === STEPS.length - 1;
     nextBtn.textContent = at < STEPS.length - 1 ? `${STEP_NAMES[at + 1]} →` : 'Apelido →';
     tabs.forEach((t, ti) => {
       const on = t.dataset.tab === id;
@@ -133,7 +164,7 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
   };
   $('.panels').addEventListener('scroll', syncMore, { passive: true });
   window.addEventListener('resize', syncMore);
-  prevBtn.onclick = () => go(STEPS[Math.max(0, STEPS.findIndex((k) => !panels[k].hidden) - 1)]);
+  prevBtn.onclick = () => go(STEPS[Math.max(firstStep(), STEPS.findIndex((k) => !panels[k].hidden) - 1)]);
   nextBtn.onclick = () => {
     const at = STEPS.findIndex((k) => !panels[k].hidden);
     if (at === STEPS.length - 1) { $('#nick').focus(); $('#nick').select(); } else go(STEPS[at + 1]);
@@ -253,20 +284,26 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
 
   // ---------- 4. na mão ----------
   const flagsBox = $('#flags');
-  const sign = $('#sign');
   FLAG_OPTIONS.forEach((o, i) => {
     const b = el('button', 'option', `<span class="ic">${o.icon}</span><span><b>${o.title}</b><small>${o.text}</small></span><span class="check" aria-hidden="true">✓</span>`);
     b.type = 'button';
     b.onclick = () => {
       look.flag = i;
+      if (i === 3 && !SIGN_PRESETS.includes(look.sign)) look.sign = SIGN_PRESETS[0];
       refresh();
       onChange();
-      if (i === 3) sign.focus();
     };
     flagsBox.append(b);
   });
-  sign.value = look.sign;
-  sign.addEventListener('input', () => { look.sign = sign.value; onChange(); });
+  const signBox = $('#sign-presets');
+  SIGN_PRESETS.forEach((t) => {
+    const b = el('button', 'segbtn');
+    b.type = 'button';
+    b.textContent = t;
+    b.onclick = () => { look.sign = t; refresh(); onChange(); };
+    signBox.append(b);
+  });
+  $('#sign-custom').onclick = () => onShop?.();
 
   // ---------- apelido (sempre visível, no rodapé) ----------
   const nick = $('#nick');
@@ -275,7 +312,7 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
     $('#nickcount').textContent = `${nick.value.length}/${nick.maxLength}`;
     $('#nickhint').hidden = !nick.disabled;
     const who = nick.value.trim();
-    $('#enter').textContent = who ? `Entrar como ${who}` : 'Entrar na manifestação';
+    if (!editing) $('#enter').textContent = who ? `Entrar como ${who}` : 'Entrar na manifestação';
   };
   nick.addEventListener('input', () => { profile.nick = nick.value; syncNick(); onChange(); });
   nick.addEventListener('keydown', (e) => { if (e.key === 'Enter') onEnter(); });
@@ -309,6 +346,7 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
       if (i === 2) n.querySelector('small').textContent = FLAG_OPTIONS[2].text;
     });
     $('#sign-field').hidden = look.flag !== 3;
+    signBox.querySelectorAll('.segbtn').forEach((n, i) => n.classList.toggle('on', SIGN_PRESETS[i] === look.sign));
     document.querySelectorAll('.preset').forEach((n, i) => n.classList.toggle('on', presets[i].id === profile.preset));
 
     const preset = presets.find((p) => p.id === profile.preset);
@@ -323,6 +361,18 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
   return {
     show() { $('#lobby').hidden = false; },
     hide() { $('#lobby').hidden = true; },
+    /** Abre/fecha o menu como editor em jogo: sem lado, sem apelido, "Salvar" e "Cancelar". */
+    setEditing(on) {
+      editing = on;
+      const lobbyEl = $('#lobby');
+      if (on) lobbyEl.dataset.editing = ''; else delete lobbyEl.dataset.editing;
+      $('#enter').textContent = on ? 'Salvar alterações' : 'Entrar na manifestação';
+      $('#watch').textContent = on ? 'Cancelar' : 'Só quero assistir';
+      $('.card-head h2').textContent = on ? 'Editar personagem' : 'Monte seu personagem';
+      refresh();
+      go(on ? 'personagem' : 'lado');
+      if (!on) syncNick();
+    },
     syncNick,
     go,
   };
@@ -330,7 +380,7 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
 
 /** HUD: chat, emotes e joystick virtual. */
 export function initHud({
-  onChat, onEmote, onAttack, onReact, onLockedReact, onWho, onFireworks, onBillboard, onRanking, onPhoto, onLeave, onSound, soundOn,
+  onChat, onEmote, onAttack, onReact, onLockedReact, onWho, onFireworks, onBillboard, onRanking, onPhoto, onEdit, onLeave, onSound, soundOn,
 }) {
   const hud = $('#hud');
   const log = $('#chatlog');
@@ -382,6 +432,7 @@ export function initHud({
   $('#telaobtn').onclick = onBillboard;
   $('#rankbtn').onclick = onRanking;
   $('#photobtn').onclick = onPhoto;
+  $('#editbtn').onclick = onEdit;
 
   // reações flutuantes (7 a 0 no teclado)
   const reacts = $('#reacts');
@@ -415,7 +466,11 @@ export function initHud({
 
   const sound = $('#sound');
   let on = soundOn;
-  const paintSound = () => { sound.textContent = on ? '🔊' : '🔇'; };
+  const paintSound = () => {
+    sound.textContent = on ? '🔊' : '🔇';
+    sound.setAttribute('aria-pressed', String(on));
+    sound.title = on ? 'Desligar o som' : 'Ligar o som';
+  };
   paintSound();
   sound.onclick = () => { on = !on; paintSound(); onSound(on); };
 

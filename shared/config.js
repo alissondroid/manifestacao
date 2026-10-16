@@ -56,6 +56,18 @@ export const RUN_SPEED = 8;
 export const MAX_SPEED = 9; // limite validado pelo servidor
 export const SPEED_SLACK = 1.25; // tolerância sobre o limite (lag e arredondamento)
 
+/** Frases grátis do cartaz. Texto próprio só com o item "Seu cartaz" (Pix) na Loja. */
+export const SIGN_PRESETS = [
+  'Fora a inflação',
+  'Mais saúde, menos imposto',
+  'Respeito ao povo',
+  'Avenida de todos',
+  'Paz e democracia',
+  'Deus, pátria e família',
+  'Educação em primeiro lugar',
+  'Chega de corrupção',
+];
+
 export const LIMITS = {
   nick: 16,
   chat: 140,

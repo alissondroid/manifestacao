@@ -94,12 +94,12 @@
         <span class="logo" aria-hidden="true"><i></i><i></i><i></i></span>
         <div><b>AVENIDA<span>ONLINE</span></b><small>São Paulo · edição piloto</small></div>
       </div>
-      <div id="online" class="online"></div>
+      <div id="online" class="online" role="group" aria-label="Jogadores online por grupo"></div>
       <div class="topright">
         <div id="acctbar" class="acctbar lobby-only"></div>
-        <button id="shopbtn" class="pill sound play-only" title="Loja">🛍️ Loja</button>
-        <button id="sound" class="pill sound play-only" title="Som" aria-label="Ligar ou desligar o som">🔊</button>
-        <button id="leave" class="ghost play-only">Sair</button>
+        <button id="shopbtn" class="tbtn play-only" type="button" title="Loja" aria-label="Loja"><span class="ic" aria-hidden="true">🛍️</span><span class="tx">Loja</span></button>
+        <button id="sound" class="tbtn icon play-only" type="button" title="Som" aria-label="Ligar ou desligar o som" aria-pressed="true">🔊</button>
+        <button id="leave" class="tbtn play-only" type="button" title="Voltar ao menu" aria-label="Sair do jogo e voltar ao menu"><span class="ic" aria-hidden="true">⎋</span><span class="tx">Sair</span></button>
       </div>
     </header>
 
@@ -176,11 +176,12 @@
           <section id="tab-mao" class="panel-tab" role="tabpanel" aria-labelledby="t-mao" hidden>
             <p class="hint-line">O que você leva na mão?</p>
             <div id="flags" class="options"></div>
-            <label class="field" id="sign-field" hidden>
-              <span>Texto do cartaz</span>
-              <input id="sign" maxlength="24" autocomplete="off" placeholder="Ex.: Fora a inflação" />
-            </label>
-            <p class="note-line">Cartaz, bandeira e camisa personalizados ficam na Loja, depois de entrar na sua conta.</p>
+            <div class="field" id="sign-field" hidden>
+              <span>Frase do cartaz</span>
+              <div id="sign-presets" class="seg wrap"></div>
+              <button id="sign-custom" class="link" type="button">✏️ Escrever o meu próprio texto · Pix na Loja</button>
+            </div>
+            <p class="note-line">Texto próprio no cartaz, bandeira e camisa personalizados ficam na Loja (Pix), depois de entrar na sua conta.</p>
           </section>
         </div>
 
@@ -225,6 +226,7 @@
         <button id="throwbtn" class="pill mode throw" type="button" hidden>Arremessar (F)</button>
         <button id="drivebtn" class="pill mode" type="button">🚗 Carro (C)</button>
         <button id="rankbtn" class="pill mode" type="button" title="Ranking de apoio entre os grupos">🏆 Ranking</button>
+        <button id="editbtn" class="pill mode" type="button" title="Mudar o visual sem sair da avenida">🎨 Personagem</button>
         <button id="photobtn" class="pill mode" type="button" title="Modo foto (VIP)">📸 Foto ⭐</button>
 <button id="fogosbtn" class="pill mode" type="button" hidden>🎆 Fogos</button>
         <button id="telaobtn" class="pill mode" type="button" hidden>📺 Telão</button>

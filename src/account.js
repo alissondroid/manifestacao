@@ -69,19 +69,81 @@ export function initAccount({ onChange, getSide }) {
 
   // ---------- Barra de conta no lobby ----------
 
+  /** Botão do topo: ícone + rótulo (só o ícone em telas estreitas). */
+  const tbtn = (icon, label, onclick, extra = '') => h(
+    'button',
+    {
+      class: `tbtn${extra ? ` ${extra}` : ''}`, type: 'button', title: label, 'aria-label': label, onclick,
+    },
+    h('span', { class: 'ic', 'aria-hidden': 'true' }, icon),
+    h('span', { class: 'tx' }, label),
+  );
+
+  let closeUserMenu = () => {};
+
+  /** Menu da conta: nome, Loja, Ranking e, separadas, as ações de sair e excluir. */
+  function userMenu() {
+    const nick = account.user.nick;
+    const vipDate = account.vipUntil > Date.now() ? new Date(account.vipUntil).toLocaleDateString('pt-BR') : null;
+    const trigger = h(
+      'button',
+      {
+        class: 'userchip', type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false', title: `Sua conta · ${nick}`,
+      },
+      h('span', { class: 'avatar', 'aria-hidden': 'true' }, [...nick][0].toUpperCase()),
+      h('span', { class: 'nick' }, nick),
+      account.vip && h('span', { class: 'vipstar', title: vipDate ? `Apoiador VIP até ${vipDate}` : 'Apoiador VIP' }, '⭐'),
+      h('span', { class: 'caret', 'aria-hidden': 'true' }, '▾'),
+    );
+    const item = (icon, label, fn, cls = '') => h('button', {
+      class: cls, type: 'button', role: 'menuitem', onclick: () => { closeUserMenu(); fn(); },
+    }, h('span', { 'aria-hidden': 'true' }, icon), label);
+    const menu = h(
+      'div',
+      { class: 'umenu', role: 'menu', 'aria-label': 'Conta', hidden: true },
+      h('div', { class: 'uhead' }, h('b', {}, nick), h('small', {}, vipDate ? `⭐ Apoiador VIP até ${vipDate}` : account.user.email)),
+      item('🛍️', 'Loja', () => openShop()),
+      item('🏆', 'Ranking dos grupos', () => openRanking()),
+      h('hr'),
+      item('↩', 'Sair da conta', logout),
+      item('🗑️', 'Excluir conta…', deleteAccount, 'danger'),
+    );
+    const items = () => [...menu.querySelectorAll('[role="menuitem"]')];
+    const onDocClick = (e) => { if (!menu.contains(e.target) && !trigger.contains(e.target)) closeUserMenu(); };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { closeUserMenu(); trigger.focus(); return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const list = items();
+        const i = list.indexOf(document.activeElement);
+        list[(i + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length]?.focus();
+      }
+    };
+    closeUserMenu = () => {
+      menu.hidden = true;
+      trigger.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('pointerdown', onDocClick, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+    trigger.addEventListener('click', () => {
+      if (!menu.hidden) { closeUserMenu(); return; }
+      menu.hidden = false;
+      trigger.setAttribute('aria-expanded', 'true');
+      document.addEventListener('pointerdown', onDocClick, true);
+      document.addEventListener('keydown', onKey, true);
+      items()[0]?.focus();
+    });
+    return h('div', { class: 'umenu-wrap' }, trigger, menu);
+  }
+
   function renderBar() {
+    closeUserMenu();
     const bar = $('#acctbar');
-    const rank = h('button', { class: 'chip', type: 'button', onclick: () => openRanking() }, '🏆 Ranking');
+    const rank = tbtn('🏆', 'Ranking', () => openRanking());
     if (!account.user) {
-      bar.replaceChildren(h('button', { class: 'chip', type: 'button', onclick: () => openAuth('login') }, '👤 Entrar ou criar conta'), rank);
+      bar.replaceChildren(rank, tbtn('👤', 'Entrar', () => openAuth('login'), 'cta'));
     } else {
-      bar.replaceChildren(
-        h('span', { class: 'who' }, `👤 ${account.user.nick}`),
-        h('button', { class: 'chip', type: 'button', onclick: () => openShop() }, '🛍️ Loja'),
-        rank,
-        h('button', { class: 'link', type: 'button', onclick: logout }, 'Sair da conta'),
-        h('button', { class: 'link', type: 'button', onclick: deleteAccount }, 'Excluir conta'),
-      );
+      bar.replaceChildren(tbtn('🛍️', 'Loja', () => openShop()), rank, userMenu());
     }
   }
 
