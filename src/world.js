@@ -4,6 +4,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { WORLD } from '../shared/config.js';
 import { createSky, SUN_DIR } from './sky.js';
 import { snapShadowFocus } from './shadow.js';
+import { mergeColored } from './geo.js';
 import { createCrowd } from './crowd.js';
 import { addTrees } from './trees.js';
 import { addVendors } from './props.js';
@@ -45,26 +46,6 @@ function setShadow(mesh, cast = true, receive = true) {
   mesh.castShadow = cast;
   mesh.receiveShadow = receive;
   return mesh;
-}
-
-// ---------- Veículos (geometria única com cores nos vértices) ----------
-
-function mergeColored(parts) {
-  const geos = parts.map(({ geo, color, pos = [0, 0, 0], rot = [0, 0, 0] }) => {
-    const g = geo.clone();
-    g.applyMatrix4(new THREE.Matrix4().compose(
-      new THREE.Vector3(...pos),
-      new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)),
-      new THREE.Vector3(1, 1, 1),
-    ));
-    const c = new THREE.Color(color);
-    const n = g.attributes.position.count;
-    const arr = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
-    g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
-    return g;
-  });
-  return mergeGeometries(geos, false);
 }
 
 const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
