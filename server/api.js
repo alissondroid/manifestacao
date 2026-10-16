@@ -1,15 +1,17 @@
 import { db } from './db.js';
 import {
-  hashPassword, verifyPassword, burnPasswordTime, createSession, destroySession,
+  hashPassword, verifyPassword, needsRehash, burnPasswordTime, createSession, destroySession,
   userFromRequest, tokenFromRequest, sessionCookie, clearCookie, rateLimit, deleteAccount,
   validEmail, validNick, validPassword, suggestNick,
 } from './auth.js';
 import { GOOGLE_CLIENT_ID, verifyGoogleToken } from './google.js';
 import {
-  ownedIds, equippedMap, owns, createOrder, pendingOrder, inventoryOf, vipUntil, hasPremiumEmotes, canBuy, getOrder, orderByRef, setOrderRef, setOrderStatus, fulfill, equip, designsOf, saveDesign,
+  ownedIds, equippedMap, owns, createOrder, pendingOrder, inventoryOf, vipUntil, hasPremiumEmotes, canBuy, isVip, validSide, setOrderSide, getOrder, orderByRef, setOrderRef, setOrderStatus, fulfill, equip, designsOf, saveDesign,
 } from './shop.js';
 import { filterText } from './moderation.js';
 import { clientIp } from './ip.js';
+import { rankingFor } from './ranking.js';
+import { isReservedNick } from './rules.js';
 import {
   addBan, removeBan, listBans, resolveKey,
 } from './bans.js';
@@ -21,11 +23,14 @@ import { SHOP, SHOP_BY_ID, SLOTS, DESIGN } from '../shared/config.js';
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
-const isHttps = (req) => req.headers['x-forwarded-proto'] === 'https' || (process.env.PUBLIC_URL || '').startsWith('https');
-// Atrás de proxy (Vite em dev, nginx/Cloudflare em produção) o host público vem em x-forwarded-host.
-const publicHost = (req) => req.headers['x-forwarded-host'] || req.headers.host;
+// Atrás de proxy (Vite em dev, Caddy em produção) o endereço público vem em X-Forwarded-*. Em produção só vale com
+// TRUST_PROXY=1: sem isso qualquer cliente poderia forjar esses cabeçalhos.
+const TRUST_FWD = process.env.TRUST_PROXY === '1' || process.env.NODE_ENV !== 'production';
+const fwd = (req, name) => (TRUST_FWD ? req.headers[name] : undefined);
+const isHttps = (req) => fwd(req, 'x-forwarded-proto') === 'https' || (process.env.PUBLIC_URL || '').startsWith('https');
+const publicHost = (req) => fwd(req, 'x-forwarded-host') || req.headers.host;
 const baseUrl = (req) => process.env.PUBLIC_URL
-  || `${req.headers['x-forwarded-proto'] || 'http'}://${publicHost(req)}`;
+  || `${fwd(req, 'x-forwarded-proto') || 'http'}://${publicHost(req)}`;
 
 function json(res, status, body, headers = {}) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers });
@@ -36,11 +41,17 @@ function readBody(req, limit = 16 * 1024) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
-    req.on('data', (c) => {
+    const onData = (c) => {
       size += c.length;
-      if (size > limit) { reject(Object.assign(new Error('Corpo grande demais'), { status: 413 })); req.destroy(); return; }
+      if (size > limit) {
+        chunks.length = 0;
+        req.off('data', onData); // para de guardar; quem responde 413 fecha a conexão
+        reject(Object.assign(new Error('Corpo grande demais'), { status: 413 }));
+        return;
+      }
       chunks.push(c);
-    });
+    };
+    req.on('data', onData);
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
@@ -80,9 +91,10 @@ const accountPayload = (user) => (user
     inventory: inventoryOf(user.id),
     vipUntil: vipUntil(user.id),
     premium: hasPremiumEmotes(user.id),
+    vip: isVip(user.id),
   }
   : {
-    user: null, owned: [], equipped: {}, custom: {}, inventory: {}, vipUntil: 0, premium: false,
+    user: null, owned: [], equipped: {}, custom: {}, inventory: {}, vipUntil: 0, premium: false, vip: false,
   });
 
 const publicShop = () => ({ items: SHOP.filter((i) => !i.hidden), provider: PROVIDER });
@@ -92,6 +104,14 @@ const publicShop = () => ({ items: SHOP.filter((i) => !i.hidden), provider: PROV
  * hooks.onEquip(userId) avisa o jogo para atualizar o visual de quem está online.
  */
 export async function handleApi(req, res, hooks = {}) {
+  /** Entrega o pedido pago (idempotente). Só a primeira entrega avisa o jogo e o ranking. */
+  const deliver = (orderId) => {
+    const before = getOrder(orderId)?.status;
+    const ok = fulfill(orderId);
+    const order = getOrder(orderId);
+    if (ok && before !== 'paid' && order) { hooks.onEquip?.(order.user_id); hooks.onPaid?.(order); }
+    return ok;
+  };
   const url = new URL(req.url, 'http://localhost');
   const { pathname } = url;
   if (!pathname.startsWith('/api/') && !pathname.startsWith('/pagar/')) return false;
@@ -114,7 +134,7 @@ export async function handleApi(req, res, hooks = {}) {
         const sameSession = order && (order.provider_ref === s.id || !order.provider_ref);
         if (sameSession && order.provider === 'stripe' && s.amount_total === order.amount_cents && s.currency === 'brl') {
           if (!order.provider_ref) setOrderRef(order.id, s.id, null);
-          if (fulfill(order.id)) hooks.onEquip?.(order.user_id);
+          deliver(order.id);
         }
       }
       return json(res, 200, { received: true }), true;
@@ -136,16 +156,15 @@ export async function handleApi(req, res, hooks = {}) {
       if (order && order.status !== 'paid') {
         try {
           const st = await fetchStatus(order.provider_ref);
-          if (st.paid && fulfill(order.id)) hooks.onEquip?.(order.user_id);
+          if (st.paid) deliver(order.id);
           else if (st.expired) setOrderStatus(order.id, 'expired');
         } catch (err) {
           if (err.denied) {
             // A chave não pode consultar o pagamento. O webhook (autenticado pelo segredo da URL) vale
             // se disser PAID para esta cobrança e no valor exato do pedido.
             const obj = payload.data?.transparent ?? payload.data?.pixQrCode ?? payload.data ?? {};
-            if (String(obj.status).toUpperCase() === 'PAID' && Number(obj.amount) === order.amount_cents && fulfill(order.id)) {
+            if (String(obj.status).toUpperCase() === 'PAID' && Number(obj.amount) === order.amount_cents && deliver(order.id)) {
               console.log(`[pagamentos] pedido ${order.id} liberado pelo webhook (a chave da AbacatePay não pode consultar: dê a permissão de leitura no painel)`);
-              hooks.onEquip?.(order.user_id);
             }
           } else {
             console.error('[pagamentos] webhook: falha ao consultar a AbacatePay:', err.message);
@@ -191,6 +210,13 @@ export async function handleApi(req, res, hooks = {}) {
 
     // ---------- Conta ----------
 
+    // Ranking de apoio entre os grupos: público, para todo mundo ver quem lidera.
+    if (method === 'GET' && pathname === '/api/ranking') {
+      if (!rateLimit(`rank:${clientIp(req)}`, 60, 60_000)) return json(res, 429, { error: 'Muitas consultas. Aguarde um pouco.' }), true;
+      const period = url.searchParams.get('period') === 'all' ? 'all' : 'week';
+      return json(res, 200, rankingFor(period, Date.now(), user?.id ?? null)), true;
+    }
+
     if (method === 'GET' && pathname === '/api/me') {
       return json(res, 200, { ...accountPayload(user), shop: publicShop(), googleClientId: GOOGLE_CLIENT_ID || null }), true;
     }
@@ -203,6 +229,7 @@ export async function handleApi(req, res, hooks = {}) {
       const password = body.password;
       if (body.terms !== true) return json(res, 400, { error: 'Aceite os Termos de uso e a Política de privacidade para criar a conta.' }), true;
       if (!validEmail(email)) return json(res, 400, { error: 'E-mail inválido.' }), true;
+      if (isReservedNick(nick)) return json(res, 400, { error: 'Esse apelido é reservado. Escolha outro.' }), true;
       if (!validNick(nick)) return json(res, 400, { error: 'Apelido: 3 a 16 caracteres (letras, números, espaço, _ . -).' }), true;
       if (!validPassword(password)) return json(res, 400, { error: 'A senha precisa ter pelo menos 8 caracteres.' }), true;
       if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) return json(res, 409, { error: 'Esse e-mail já tem conta.' }), true;
@@ -231,6 +258,9 @@ export async function handleApi(req, res, hooks = {}) {
         : null;
       const ok = row ? await verifyPassword(body.password, row.pass_hash) : (await burnPasswordTime(String(body.password ?? '')), false);
       if (!ok) return json(res, 401, { error: 'E-mail ou senha incorretos.' }), true;
+      if (needsRehash(row.pass_hash)) { // senha no formato antigo: regrava com os parâmetros atuais (a senha acabou de ser confirmada)
+        db.prepare('UPDATE users SET pass_hash = ? WHERE id = ?').run(await hashPassword(body.password), row.id);
+      }
       const token = createSession(row.id);
       return json(res, 200, accountPayload(row), { 'set-cookie': sessionCookie(token, { secure }) }), true;
     }
@@ -271,6 +301,7 @@ export async function handleApi(req, res, hooks = {}) {
       const nick = String(body.nick ?? '').trim();
       if (!nick) return json(res, 200, { needsProfile: true, email: g.email, suggestedNick: suggestNick(g.name, g.email) }), true;
       if (body.terms !== true) return json(res, 400, { error: 'Aceite os Termos de uso e a Política de privacidade para criar a conta.' }), true;
+      if (isReservedNick(nick)) return json(res, 400, { error: 'Esse apelido é reservado. Escolha outro.' }), true;
       if (!validNick(nick)) return json(res, 400, { error: 'Apelido: 3 a 16 caracteres (letras, números, espaço, _ . -).' }), true;
       if (db.prepare('SELECT 1 FROM users WHERE nick = ?').get(nick)) return json(res, 409, { error: 'Esse apelido já está em uso.' }), true;
       let id;
@@ -321,12 +352,15 @@ export async function handleApi(req, res, hooks = {}) {
       const item = SHOP_BY_ID[body.item];
       if (!item || item.hidden || item.price <= 0) return json(res, 404, { error: 'Item não encontrado.' }), true;
       if (!PAYMENTS_ENABLED) return json(res, 503, { error: 'Pagamentos indisponíveis no momento.' }), true;
+      if (item.vip && !isVip(user.id)) return json(res, 403, { error: 'Esse item é exclusivo para Apoiadores VIP ⭐. Assine o VIP na loja para liberar.' }), true;
       if (!canBuy(user.id, item)) return json(res, 409, { error: 'Você já tem esse item.' }), true;
       if (!rateLimit(`checkout:${user.id}`, 10, 10 * 60_000)) return json(res, 429, { error: 'Muitas tentativas. Aguarde um pouco.' }), true;
 
+      const side = validSide(body.side); // grupo a que a compra é creditada no ranking
       const open = pendingOrder(user.id, item.id, PROVIDER);
+      if (open && side !== null) setOrderSide(open.id, side);
       if (open) return json(res, 200, { url: open.pay_url, order: open.id, pix: pixPublic(open.pay_data) }), true;
-      const order = createOrder(user.id, item, PROVIDER);
+      const order = createOrder(user.id, item, PROVIDER, side);
       try {
         const { url: checkoutUrl, ref, data } = await createCheckout({ order, item, baseUrl: baseUrl(req) });
         setOrderRef(order.id, ref, checkoutUrl, data);
@@ -346,7 +380,7 @@ export async function handleApi(req, res, hooks = {}) {
       if (order.status === 'pending' && order.provider !== 'simulated' && order.provider_ref) {
         try {
           const st = await fetchStatus(order.provider_ref);
-          if (st.paid && fulfill(order.id)) hooks.onEquip?.(user.id);
+          if (st.paid) deliver(order.id);
           else if (st.expired) setOrderStatus(order.id, 'expired');
         } catch (err) {
           console.error('[pagamentos] falha ao consultar pedido:', err.message, err.denied ? '(a chave não tem permissão de leitura: ajuste no painel da AbacatePay; o webhook ainda libera)' : '');
@@ -402,7 +436,7 @@ export async function handleApi(req, res, hooks = {}) {
       if (!order || order.user_id !== user.id || order.provider !== 'simulated') {
         return json(res, 404, { error: 'Pedido não encontrado.' }), true;
       }
-      if (body.result === 'paid') { if (fulfill(order.id)) hooks.onEquip?.(user.id); }
+      if (body.result === 'paid') deliver(order.id);
       else setOrderStatus(order.id, 'cancelled');
       return json(res, 200, { status: getOrder(order.id).status }), true;
     }
@@ -422,6 +456,7 @@ export async function handleApi(req, res, hooks = {}) {
   } catch (err) {
     const status = err.status || 500;
     if (status === 500) console.error('[api]', err);
+    if (status === 413) { res.setHeader('connection', 'close'); res.once('finish', () => req.destroy()); } // corpo grande: responde e derruba a conexão
     return json(res, status, { error: status === 500 ? 'Erro interno.' : err.message }), true;
   }
 }

@@ -1,35 +1,64 @@
 import crypto from 'node:crypto';
 import { db } from './db.js';
 import { ACCOUNT } from '../shared/config.js';
+import { isReservedNick } from './rules.js';
 
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 export const COOKIE = 'sid';
 
 // ---------- Senhas (scrypt) ----------
 
-const scrypt = (password, salt) => new Promise((resolve, reject) => {
-  crypto.scrypt(password, salt, 64, { N: 16384, r: 8, p: 1 }, (err, key) => (err ? reject(err) : resolve(key)));
+// Parâmetros atuais (OWASP: N=2^15, r=8, p=3, 32 MiB). O hash guarda os próprios parâmetros ("s1$N$r$p$sal$chave"),
+// então dá para endurecer de novo no futuro; hashes antigos ("sal:chave", N=2^14) continuam valendo e são regravados no login.
+const SCRYPT = { N: 1 << 15, r: 8, p: 3 };
+const LEGACY = { N: 1 << 14, r: 8, p: 1 };
+const MAXMEM = 128 * 1024 * 1024;
+
+const scrypt = (password, salt, { N, r, p }) => new Promise((resolve, reject) => {
+  crypto.scrypt(password, salt, 64, { N, r, p, maxmem: MAXMEM }, (err, key) => (err ? reject(err) : resolve(key)));
 });
+
+const HEX = (n) => new RegExp(`^[0-9a-f]{${n}}$`);
+
+/** Lê o hash guardado; recusa formatos fora do esperado e parâmetros que poderiam estourar a memória. */
+function parseHash(stored) {
+  const text = String(stored);
+  if (text.startsWith('s1$')) {
+    const [, n, r, p, salt, key] = text.split('$');
+    const N = Number(n);
+    const params = { N, r: Number(r), p: Number(p) };
+    const okParams = Number.isInteger(Math.log2(N)) && N >= 1 << 14 && N <= 1 << 16 && params.r === 8 && params.p >= 1 && params.p <= 4;
+    if (!okParams || !HEX(32).test(salt ?? '') || !HEX(128).test(key ?? '')) return null;
+    return { params, salt: Buffer.from(salt, 'hex'), key: Buffer.from(key, 'hex') };
+  }
+  const [salt, key] = text.split(':');
+  if (!HEX(32).test(salt ?? '') || !HEX(128).test(key ?? '')) return null;
+  return { params: LEGACY, salt: Buffer.from(salt, 'hex'), key: Buffer.from(key, 'hex') };
+}
 
 export async function hashPassword(password) {
   const salt = crypto.randomBytes(16);
-  const key = await scrypt(password, salt);
-  return `${salt.toString('hex')}:${key.toString('hex')}`;
+  const key = await scrypt(password, salt, SCRYPT);
+  return `s1$${SCRYPT.N}$${SCRYPT.r}$${SCRYPT.p}$${salt.toString('hex')}$${key.toString('hex')}`;
 }
 
-export async function verifyPassword(password, stored) {
-  const [saltHex, keyHex] = String(stored).split(':');
-  if (!saltHex || !keyHex) return false;
-  const expected = Buffer.from(keyHex, 'hex');
-  const key = await scrypt(password, Buffer.from(saltHex, 'hex'));
-  return key.length === expected.length && crypto.timingSafeEqual(key, expected);
-}
+export const needsRehash = (stored) => {
+  const parsed = parseHash(stored);
+  return !parsed || parsed.params.N !== SCRYPT.N || parsed.params.r !== SCRYPT.r || parsed.params.p !== SCRYPT.p;
+};
 
-// Hash falso para igualar o tempo de resposta quando o e-mail não existe.
+// Hash falso para igualar o tempo de resposta quando o e-mail não existe (ou a conta não tem senha, como as do Google).
 let dummyHash;
 export async function burnPasswordTime(password) {
   dummyHash ??= await hashPassword('dummy-password');
   await verifyPassword(password, dummyHash);
+}
+
+export async function verifyPassword(password, stored) {
+  const parsed = parseHash(stored);
+  if (!parsed) { await burnPasswordTime(password); return false; }
+  const key = await scrypt(password, parsed.salt, parsed.params);
+  return key.length === parsed.key.length && crypto.timingSafeEqual(key, parsed.key);
 }
 
 // ---------- Sessões ----------
@@ -123,7 +152,7 @@ setInterval(() => {
 export const validEmail = (e) => typeof e === 'string' && e.length <= 120 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
 export const validNick = (n) => typeof n === 'string'
   && n.length >= ACCOUNT.nickMin && n.length <= ACCOUNT.nickMax
-  && /^[\p{L}\p{N}_.\- ]+$/u.test(n) && n === n.trim();
+  && /^[\p{L}\p{N}_.\- ]+$/u.test(n) && n === n.trim() && !isReservedNick(n);
 export const validPassword = (p) => typeof p === 'string' && p.length >= ACCOUNT.passwordMin && p.length <= 200;
 
 export const nickTaken = (nick) => !!db.prepare('SELECT 1 FROM users WHERE nick = ?').get(nick);

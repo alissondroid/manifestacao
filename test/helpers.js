@@ -32,8 +32,8 @@ export async function startServer(env = {}) {
 }
 
 /** Cliente WebSocket de teste que guarda as mensagens recebidas. */
-export async function connect(port) {
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+export async function connect(port, { cookie } = {}) {
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, cookie ? { headers: { cookie } } : undefined);
   const msgs = [];
   const waiters = [];
   ws.on('message', (raw) => {

@@ -52,10 +52,12 @@ fi
 cd "$APP_DIR"
 
 echo "==> Dependências e build"
-npm ci
+npm ci --ignore-scripts # sem rodar scripts das dependências (este script é root)
 npm run build
 mkdir -p data
-chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
+# código é do root (o serviço só lê); só a pasta de dados é do serviço
+find "$APP_DIR" -path "$APP_DIR/data" -prune -o -exec chown root:root {} +
+chown -R "$APP_USER":"$APP_USER" "$APP_DIR/data"
 
 echo "==> .env"
 if [ ! -f .env ]; then
@@ -67,31 +69,11 @@ if [ ! -f .env ]; then
     if [ "${ALLOW_SIMULATED:-}" = "1" ]; then echo "ALLOW_SIMULATED=1"; fi
   } >> .env
 fi
-chmod 600 .env
-chown "$APP_USER":"$APP_USER" .env
+chmod 640 .env
+chown root:"$APP_USER" .env
 
-echo "==> Serviço systemd"
-cat > /etc/systemd/system/avenida.service <<UNIT
-[Unit]
-Description=Avenida Online
-After=network.target
-
-[Service]
-User=$APP_USER
-WorkingDirectory=$APP_DIR
-Environment=NODE_ENV=production
-Environment=PORT=8787
-ExecStart=/usr/bin/node --env-file=$APP_DIR/.env server/index.js
-Restart=always
-RestartSec=3
-NoNewPrivileges=true
-ProtectSystem=full
-ReadWritePaths=$APP_DIR/data
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-UNIT
+echo "==> Serviço systemd (com sandbox)"
+sed -e "s#@APP_DIR@#$APP_DIR#g" -e "s#@APP_USER@#$APP_USER#g" "$APP_DIR/deploy/avenida.service" > /etc/systemd/system/avenida.service
 systemctl daemon-reload
 systemctl enable --now avenida
 systemctl restart avenida
@@ -115,6 +97,7 @@ ufw --force enable
 
 echo "==> Backup diário do banco (14 dias)"
 mkdir -p /var/backups/avenida
+chmod 700 /var/backups/avenida # os backups têm e-mails e hashes de senha
 cat > /etc/cron.daily/avenida-backup <<'CRON'
 #!/bin/sh
 f=/var/backups/avenida/avenida-$(date +%F).db

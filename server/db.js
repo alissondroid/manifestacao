@@ -109,6 +109,9 @@ if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'google
   db.exec('ALTER TABLE users ADD COLUMN google_sub TEXT'); // identificador da conta Google (login sem senha)
 }
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL');
+if (!db.prepare('PRAGMA table_info(orders)').all().some((c) => c.name === 'side')) {
+  db.exec('ALTER TABLE orders ADD COLUMN side INTEGER'); // grupo (lado) a que a compra é creditada no ranking
+}
 if (!db.prepare('PRAGMA table_info(orders)').all().some((c) => c.name === 'pay_data')) {
   db.exec('ALTER TABLE orders ADD COLUMN pay_data TEXT'); // dados do Pix (QR e copia e cola) em JSON
 }

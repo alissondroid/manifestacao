@@ -1,5 +1,5 @@
 import {
-  SHOP, DESIGN, SLOTS, SLOT_NAMES, ACCOUNT,
+  SHOP, DESIGN, SLOTS, SLOT_NAMES, ACCOUNT, SIDES,
 } from '../shared/config.js';
 import { drawDesign } from './textures.js';
 import { api } from './api.js';
@@ -34,9 +34,10 @@ export function toast(text, kind = 'info') {
  * Conta e loja. `onChange(account, reason)` é chamado quando a conta ou os itens
  * equipados mudam (reason: 'load' | 'login' | 'logout' | 'items').
  */
-export function initAccount({ onChange }) {
+export function initAccount({ onChange, getSide }) {
+  const mySide = () => { const v = getSide?.(); return Number.isInteger(v) ? v : null; };
   let account = {
-    user: null, owned: [], equipped: {}, custom: {}, inventory: {}, vipUntil: 0, premium: false, googleClientId: null, shop: { items: SHOP.filter((i) => !i.hidden), provider: 'simulated' },
+    user: null, owned: [], equipped: {}, custom: {}, inventory: {}, vipUntil: 0, premium: false, vip: false, googleClientId: null, shop: { items: SHOP.filter((i) => !i.hidden), provider: 'simulated' },
   };
   const modal = $('#modal');
   const body = $('#modal-body');
@@ -51,6 +52,7 @@ export function initAccount({ onChange }) {
       inventory: data.inventory ?? {},
       vipUntil: data.vipUntil ?? 0,
       premium: !!data.premium,
+      vip: !!data.vip,
       shop: data.shop ?? account.shop,
       googleClientId: data.googleClientId !== undefined ? data.googleClientId : account.googleClientId,
     };
@@ -69,12 +71,14 @@ export function initAccount({ onChange }) {
 
   function renderBar() {
     const bar = $('#acctbar');
+    const rank = h('button', { class: 'chip', type: 'button', onclick: () => openRanking() }, '🏆 Ranking');
     if (!account.user) {
-      bar.replaceChildren(h('button', { class: 'chip', type: 'button', onclick: () => openAuth('login') }, '👤 Entrar ou criar conta'));
+      bar.replaceChildren(h('button', { class: 'chip', type: 'button', onclick: () => openAuth('login') }, '👤 Entrar ou criar conta'), rank);
     } else {
       bar.replaceChildren(
         h('span', { class: 'who' }, `👤 ${account.user.nick}`),
         h('button', { class: 'chip', type: 'button', onclick: () => openShop() }, '🛍️ Loja'),
+        rank,
         h('button', { class: 'link', type: 'button', onclick: logout }, 'Sair da conta'),
         h('button', { class: 'link', type: 'button', onclick: deleteAccount }, 'Excluir conta'),
       );
@@ -426,7 +430,7 @@ export function initAccount({ onChange }) {
         const btn = e.currentTarget;
         btn.disabled = true;
         try {
-          const data = await api.checkout(item.id);
+          const data = await api.checkout(item.id, mySide());
           if (data.pix) openPix(item, data.order, data.pix);
           else window.location.href = data.url;
         } catch (err) {
@@ -475,6 +479,13 @@ export function initAccount({ onChange }) {
           },
         }, on ? '✓ Equipado · Remover' : 'Equipar');
       }
+      const hasIt = item.kind === 'bundle' ? item.contains.every((id) => account.owned.includes(id)) : owned;
+      if (item.vip && !account.vip && !hasIt) {
+        sub = 'Exclusivo para Apoiador VIP ⭐';
+        action = h('button', {
+          class: 'chip lockvip', type: 'button', onclick: () => { shopTab = 'vip'; render(); },
+        }, '🔒 Exclusivo VIP');
+      }
       const edit = owned && item.custom ? h('button', { class: 'chip', type: 'button', onclick: () => openDesigner(item.custom, render) }, '✏️ Editar') : null;
       return h(
         'div',
@@ -510,6 +521,7 @@ export function initAccount({ onChange }) {
     openModal(
       h('h2', {}, 'Loja'),
       h('p', { class: provider === 'abacatepay' ? 'note' : 'note test' }, note),
+      mySide() !== null && h('p', { class: 'note rknote' }, `🏆 Suas compras contam para o grupo ${SIDES[mySide()].name} no ranking. `, h('button', { class: 'link', type: 'button', onclick: () => openRanking() }, 'Ver ranking')),
       h('p', { class: 'note' }, 'Tudo é cosmético ou de diversão: nada aqui dá vantagem no PvP. A Camisa simples e a Sua camisa só aparecem no Rosto 1 masculino.'),
       tabs,
       slotHolder,
@@ -518,6 +530,66 @@ export function initAccount({ onChange }) {
   }
 
   $('#shopbtn').onclick = () => openShop();
+
+  // ---------- Ranking de apoio entre os grupos ----------
+
+  const MEDAL = ['🥇', '🥈', '🥉', '🏅'];
+  const fmtBrl = (cents) => brl(cents).replace(',00', '');
+  const timeLeft = (until) => {
+    const ms = Math.max(0, until - Date.now());
+    const d = Math.floor(ms / 86_400_000);
+    const hh = Math.floor((ms % 86_400_000) / 3_600_000);
+    return d > 0 ? `${d}d ${hh}h` : `${hh}h ${Math.floor((ms % 3_600_000) / 60_000)}min`;
+  };
+
+  async function openRanking(period = 'week', focus = null) {
+    let data;
+    try { data = await api.ranking(period); } catch (err) { toast(err.message, 'error'); return; }
+    const side = mySide();
+    const max = Math.max(1, ...data.sides.map((x) => x.total));
+    const empty = data.sides.every((x) => x.total === 0);
+    const view = focus ?? side ?? data.leader ?? data.sides[0].side;
+
+    const tab = (p, label) => h('button', {
+      type: 'button', role: 'tab', 'aria-selected': String(p === period), onclick: () => { if (p !== period) openRanking(p, view); },
+    }, label);
+
+    const rows = data.sides.map((x) => h(
+      'button',
+      {
+        class: `rkrow${x.side === side ? ' mine' : ''}${x.side === view ? ' sel' : ''}`,
+        type: 'button',
+        style: `--c:${x.color}`,
+        'aria-label': `${x.name}: ${fmtBrl(x.total)}`,
+        onclick: () => openRanking(period, x.side),
+      },
+      h('span', { class: 'rkpos' }, x.total > 0 ? MEDAL[Math.min(x.rank - 1, 3)] : '·'),
+      h('span', { class: 'rkname' }, x.name, x.side === side && h('em', {}, ' · seu grupo')),
+      h('span', { class: 'rkbar' }, h('i', { style: `width:${x.total > 0 ? Math.max(4, Math.round((x.total / max) * 100)) : 0}%` })),
+      h('span', { class: 'rktotal' }, fmtBrl(x.total), x.buyers > 0 && h('small', {}, `${x.buyers} apoiador${x.buyers > 1 ? 'es' : ''}`)),
+    ));
+
+    const top = data.top[view] ?? [];
+    const group = SIDES[view];
+    const list = top.length
+      ? h('ol', { class: 'rktop' }, ...top.map((t) => h('li', {}, h('span', {}, t.nick), h('b', {}, fmtBrl(t.total)))))
+      : h('p', { class: 'note' }, `Ninguém do grupo ${group.name} apoiou ${period === 'week' ? 'nesta semana' : 'ainda'}. Seja o primeiro!`);
+
+    openModal(h(
+      'div',
+      { class: 'auth rank' },
+      h('header', { class: 'auth-head' }, h('div', { class: 'auth-logo', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')), h('h2', {}, 'Ranking dos grupos'), h('p', {}, 'Cada compra na loja vira apoio ao grupo que você escolheu no menu. Quem apoia mais lidera a avenida.')),
+      h('div', { class: 'authseg', role: 'tablist' }, tab('week', 'Esta semana'), tab('all', 'Geral')),
+      period === 'week' && h('p', { class: 'note center' }, `A semana termina em ${timeLeft(data.until)}. Segunda-feira o placar zera.`),
+      empty ? h('p', { class: 'note center' }, 'Ainda ninguém comprou. O primeiro apoio coloca o grupo na frente!') : null,
+      h('div', { class: 'rkrows' }, ...rows),
+      h('h3', { class: 'rkh' }, `Maiores apoiadores · ${group.name}`),
+      list,
+      account.user && data.mine > 0 ? h('p', { class: 'note center' }, `Você apoiou ${fmtBrl(data.mine)} ${period === 'week' ? 'nesta semana' : 'no total'}.`) : null,
+      h('button', { class: 'primary', type: 'button', onclick: () => openShop() }, side !== null ? `🛍️ Apoiar o grupo ${SIDES[side].name}` : '🛍️ Ir para a loja'),
+    ));
+  }
+
 
   // ---------- Pix (AbacatePay) ----------
 
@@ -681,5 +753,6 @@ export function initAccount({ onChange }) {
   return {
     get account() { return account; },
     openShop,
+    openRanking,
   };
 }

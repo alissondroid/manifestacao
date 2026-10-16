@@ -1,5 +1,5 @@
 import {
-  SIDES, SHIRTS, SKINS, BODIES, AGES, MODELS, HEIGHTS, BEARDS, PANTS, RACE, SHOP_BY_ID, EMOTES,
+  SIDES, SHIRTS, SKINS, BODIES, AGES, MODELS, HEIGHTS, BEARDS, PANTS, RACE, SHOP_BY_ID, EMOTES, PREMIUM,
 } from '../shared/config.js';
 import { CHARACTERS, modelId } from './models.js';
 
@@ -330,7 +330,7 @@ export function initLobby({ profile, presets, onChange, onEnter, onWatch, onAnim
 
 /** HUD: chat, emotes e joystick virtual. */
 export function initHud({
-  onChat, onEmote, onAttack, onReact, onWho, onFireworks, onBillboard, onLeave, onSound, soundOn,
+  onChat, onEmote, onAttack, onReact, onLockedReact, onWho, onFireworks, onBillboard, onRanking, onPhoto, onLeave, onSound, soundOn,
 }) {
   const hud = $('#hud');
   const log = $('#chatlog');
@@ -380,12 +380,26 @@ export function initHud({
   $('#jumpbtn').onclick = () => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
   $('#fogosbtn').onclick = onFireworks;
   $('#telaobtn').onclick = onBillboard;
+  $('#rankbtn').onclick = onRanking;
+  $('#photobtn').onclick = onPhoto;
 
   // reações flutuantes (7 a 0 no teclado)
   const reacts = $('#reacts');
   $('#reactbtn').onclick = () => { reacts.hidden = !reacts.hidden; menu.hidden = true; };
+  let isVip = false;
+  const paintReactLocks = () => {
+    document.querySelectorAll('[data-react]').forEach((b) => {
+      const locked = PREMIUM.reactions.includes(Number(b.dataset.react)) && !isVip;
+      b.classList.toggle('locked', locked);
+      b.title = locked ? 'Reação exclusiva para Apoiadores VIP ⭐' : '';
+    });
+  };
+  paintReactLocks();
   document.querySelectorAll('[data-react]').forEach((b) => {
-    b.addEventListener('click', () => { onReact(Number(b.dataset.react)); reacts.hidden = true; });
+    b.addEventListener('click', () => {
+      if (b.classList.contains('locked')) onLockedReact(); else onReact(Number(b.dataset.react));
+      reacts.hidden = true;
+    });
   });
 
   // lista de jogadores (Tab)
@@ -444,7 +458,9 @@ export function initHud({
     toggleWho,
     prefillChat(text) { input.value = text; input.focus(); },
     /** Itens da loja no HUD: só aparecem para quem tem unidades. */
-    setInventory(inv, canUsePremium) {
+    setInventory(inv, canUsePremium, vip = false) {
+      if (isVip !== vip) { isVip = vip; paintReactLocks(); }
+      $('#photobtn').classList.toggle('locked', !vip);
       const f = inv.fogos || 0;
       const t = inv.telao || 0;
       $('#fogosbtn').hidden = !f;
