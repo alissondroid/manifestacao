@@ -105,6 +105,10 @@ if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'vip_un
 if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'terms_at')) {
   db.exec('ALTER TABLE users ADD COLUMN terms_at INTEGER'); // quando aceitou os Termos e a Política (LGPD: prova do consentimento)
 }
+if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'google_sub')) {
+  db.exec('ALTER TABLE users ADD COLUMN google_sub TEXT'); // identificador da conta Google (login sem senha)
+}
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL');
 if (!db.prepare('PRAGMA table_info(orders)').all().some((c) => c.name === 'pay_url')) {
   db.exec('ALTER TABLE orders ADD COLUMN pay_url TEXT');
 }

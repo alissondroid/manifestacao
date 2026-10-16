@@ -16,6 +16,7 @@ import { createRace } from './race.js';
 import { PVP } from '../shared/config.js';
 import { createZones } from './zones.js';
 import { clientIp } from './ip.js';
+import { GOOGLE_CLIENT_ID } from './google.js';
 import {
   cleanText, isReservedNick, uniqueNick, spendMoveBudget, diagnoseMiss,
 } from './rules.js';
@@ -55,13 +56,15 @@ const MIME = {
 };
 
 // Cabeçalhos de segurança das páginas e arquivos estáticos. A CSP só vale para HTML.
+const GSI = GOOGLE_CLIENT_ID ? 'https://accounts.google.com/gsi/' : ''; // botão "Entrar com o Google"
 const CSP = [
   "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'", // o cliente usa style="..." em elementos criados por script
+  `script-src 'self'${GSI ? ` ${GSI}client` : ''}`,
+  `style-src 'self' 'unsafe-inline'${GSI ? ` ${GSI}style` : ''}`, // o cliente usa style="..." em elementos criados por script
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self' ws: wss: data: blob:",
+  `connect-src 'self' ws: wss: data: blob:${GSI ? ` ${GSI}` : ''}`,
+  ...(GSI ? [`frame-src ${GSI}`] : []),
   "media-src 'self' data: blob:",
   "worker-src 'self' blob:",
   "object-src 'none'",
