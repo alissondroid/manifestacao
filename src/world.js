@@ -1,17 +1,23 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { WORLD } from '../shared/config.js';
 import { createSky, SUN_DIR } from './sky.js';
+import { snapShadowFocus } from './shadow.js';
+import { mergeColored } from './geo.js';
 import { createCrowd } from './crowd.js';
 import { addTrees } from './trees.js';
 import { addVendors } from './props.js';
 import { addScenery } from './scenery.js';
 import {
-  asphaltTexture, busLaneTexture, mosaicTexture, concreteTexture, grassTexture,
+  asphaltTexture, busLaneTexture, concreteTexture, grassTexture,
   facadeTexture, shopfrontTexture, bikeSymbolTexture, roadTextTexture, streetTotemTexture, bannerTexture, streetSignTexture, posterTexture,
-  asphaltNormal, mosaicNormal, LedTicker, archBannerTexture,
+  asphaltNormal, LedTicker, archBannerTexture, sidewalkTexture, sidewalkNormal, tactileAlertTexture,
 } from './textures.js';
 import { SIDES, RACE } from '../shared/config.js';
+import {
+  carMesh, busMesh, soundTruckMesh, CAR_TYPES,
+} from './vehicles.js';
 
 // Avenida Paulista (versão estilizada): pista com faixas de ônibus, calçada de mosaico,
 // prédios com térreo comercial, o MASP, o Parque Trianon, carros de som e uma multidão.
@@ -42,93 +48,9 @@ function setShadow(mesh, cast = true, receive = true) {
   return mesh;
 }
 
-// ---------- Veículos (geometria única com cores nos vértices) ----------
-
-function mergeColored(parts) {
-  const geos = parts.map(({ geo, color, pos = [0, 0, 0], rot = [0, 0, 0] }) => {
-    const g = geo.clone();
-    g.applyMatrix4(new THREE.Matrix4().compose(
-      new THREE.Vector3(...pos),
-      new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)),
-      new THREE.Vector3(1, 1, 1),
-    ));
-    const c = new THREE.Color(color);
-    const n = g.attributes.position.count;
-    const arr = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
-    g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
-    return g;
-  });
-  return mergeGeometries(geos, false);
-}
-
 const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
-const wheelGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.26, 14).rotateZ(Math.PI / 2);
-const vehicleMat = new THREE.MeshStandardMaterial({
-  vertexColors: true, roughness: 0.4, metalness: 0.35,
-});
 
-export function carMesh(color, skin = '') {
-  if (skin === 'carro-dourado') color = '#d4af37';
-  const parts = [
-    { geo: B(1.8, 0.62, 4.3), color, pos: [0, 0.62, 0] },
-    { geo: B(1.62, 0.55, 2.2), color: '#1d2730', pos: [0, 1.18, -0.1] },
-    { geo: B(1.5, 0.08, 2.0), color, pos: [0, 1.48, -0.1] },
-    { geo: B(0.4, 0.18, 0.06), color: '#fff6d6', pos: [-0.6, 0.72, 2.16] },
-    { geo: B(0.4, 0.18, 0.06), color: '#fff6d6', pos: [0.6, 0.72, 2.16] },
-    { geo: B(0.35, 0.16, 0.06), color: '#c81e1e', pos: [-0.62, 0.74, -2.16] },
-    { geo: B(0.35, 0.16, 0.06), color: '#c81e1e', pos: [0.62, 0.74, -2.16] },
-    { geo: B(1.76, 0.12, 0.08), color: '#1d2730', pos: [0, 0.95, 2.14] }, // grade
-  ];
-  for (const x of [-0.9, 0.9]) for (const z of [-1.4, 1.4]) parts.push({ geo: wheelGeo, color: '#111', pos: [x, 0.34, z] });
-  if (skin === 'carro-dourado') {
-    parts.push({ geo: B(1.9, 0.06, 0.2), color: '#fff2a8', pos: [0, 0.98, 2.2] }, { geo: B(1.7, 0.05, 0.12), color: '#fff2a8', pos: [0, 1.53, 0.9] });
-  } else if (skin === 'carro-som') { // caixas de som no teto e bandeirola
-    for (const x of [-0.5, 0.5]) parts.push({ geo: B(0.7, 1.0, 0.7), color: '#0e0e10', pos: [x, 2.0, -0.3] }, { geo: new THREE.CylinderGeometry(0.22, 0.22, 0.08, 12).rotateX(Math.PI / 2), color: '#3a3a3a', pos: [x, 2.1, 0.07] });
-    parts.push({ geo: B(0.04, 1.2, 0.04), color: '#d4d4d0', pos: [0, 2.3, -1.6] }, { geo: B(0.7, 0.4, 0.02), color, pos: [0.35, 2.7, -1.6] });
-  }
-  return setShadow(new THREE.Mesh(mergeColored(parts), vehicleMat));
-}
-
-function busMesh(stripe) {
-  const parts = [
-    { geo: B(2.5, 2.9, 11.5), color: '#f1f1ee', pos: [0, 1.85, 0] },
-    { geo: B(2.54, 0.95, 10.8), color: '#1d2730', pos: [0, 2.35, 0] },
-    { geo: B(2.52, 0.32, 11.5), color: stripe, pos: [0, 1.0, 0] },
-    { geo: B(2.3, 0.1, 11.3), color: '#9a9a96', pos: [0, 3.35, 0] },
-    { geo: B(0.5, 0.25, 0.06), color: '#fff6d6', pos: [-0.85, 0.95, 5.78] },
-    { geo: B(0.5, 0.25, 0.06), color: '#fff6d6', pos: [0.85, 0.95, 5.78] },
-    { geo: B(2.2, 0.7, 0.06), color: '#0b0f14', pos: [0, 2.3, 5.78] }, // para-brisa
-    { geo: B(1.6, 0.4, 0.06), color: '#f3b61f', pos: [0, 3.05, 5.78] }, // letreiro
-  ];
-  for (const x of [-1.2, 1.2]) for (const z of [-3.8, 3.4]) parts.push({ geo: wheelGeo, color: '#111', pos: [x, 0.5, z] });
-  return setShadow(new THREE.Mesh(mergeColored(parts), vehicleMat));
-}
-
-/** Carro de som (caminhão com caixas de som e faixa do candidato). */
-function soundTruck(side, color) {
-  const g = new THREE.Group();
-  const parts = [
-    { geo: B(2.5, 1.0, 9.5), color: '#2b2d31', pos: [0, 1.0, -0.4] },
-    { geo: B(2.5, 1.9, 2.2), color: '#e8e8e4', pos: [0, 1.95, 3.7] },
-    { geo: B(2.4, 0.7, 0.1), color: '#1d2730', pos: [0, 2.4, 4.85] },
-    { geo: B(2.5, 0.4, 6.8), color, pos: [0, 1.7, -1.7] },
-  ];
-  for (const x of [-1.2, 1.2]) for (const z of [-3.6, 2.4, 3.8]) parts.push({ geo: wheelGeo, color: '#111', pos: [x, 0.5, z] });
-  for (const z of [-4.4, 1.0]) { // pilhas de caixas
-    parts.push({ geo: B(1.0, 1.6, 0.9), color: '#0e0e10', pos: [-0.9, 2.7, z] });
-    parts.push({ geo: B(1.0, 1.6, 0.9), color: '#0e0e10', pos: [0.9, 2.7, z] });
-  }
-  g.add(setShadow(new THREE.Mesh(mergeColored(parts), vehicleMat)));
-  const banner = new THREE.MeshStandardMaterial({ map: bannerTexture(side), side: THREE.DoubleSide, roughness: 0.8 });
-  for (const sx of [-1, 1]) {
-    const b = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 1.6), banner);
-    b.position.set(sx * 1.27, 1.7, -1.7);
-    b.rotation.y = sx * Math.PI / 2;
-    g.add(b);
-  }
-  return g;
-}
+export { carMesh };
 
 // ---------- Mundo ----------
 
@@ -253,41 +175,94 @@ export function createWorld(scene, renderer) {
   gridLines.forEach(([x, z, sx, sz], i) => grid.setMatrixAt(i, m4.makeScale(sx, 1, sz).setPosition(x, 0.012, z)));
   scene.add(grid);
 
-  // calçadas de mosaico com guia, faixa tátil e canteiros
-  const mosaic = std({
-    map: mosaicTexture([(WALK - ROAD) / 4, LEN / 4]), normalMap: mosaicNormal([(WALK - ROAD) / 4, LEN / 4]), normalScale: new THREE.Vector2(0.5, 0.5), roughness: 0.8,
-  });
+  // calçadas no estilo da Paulista: meio-fio e faixa de granito, faixa de serviço, faixa podotátil, tira de pedra
+  // portuguesa e placas de concreto (a textura cobre os 7,5 m do meio-fio aos prédios; no lado esquerdo ela é espelhada)
+  const walkMap = sidewalkTexture();
+  const walkNormal = sidewalkNormal();
+  const walkMat = (mirror) => {
+    const map = mirror ? walkMap.clone() : walkMap;
+    const normalMap = mirror ? walkNormal.clone() : walkNormal;
+    for (const t of [map, normalMap]) {
+      t.repeat.set(mirror ? -1 : 1, LEN / 4);
+      t.offset.set(mirror ? 1 : 0, 0);
+      t.wrapS = THREE.ClampToEdgeWrapping;
+      t.wrapT = THREE.RepeatWrapping;
+      t.needsUpdate = true;
+    }
+    return std({ map, normalMap, normalScale: new THREE.Vector2(0.8, 0.8), roughness: 0.85 });
+  };
   const curbMat = std({ color: '#b9b6ae' });
   for (const s of [-1, 1]) {
     const walk = new THREE.Mesh(
       new THREE.BoxGeometry(WALK - ROAD, 0.16, LEN),
-      [curbMat, curbMat, mosaic, curbMat, curbMat, curbMat],
+      [curbMat, curbMat, walkMat(s < 0), curbMat, curbMat, curbMat],
     );
     walk.position.set(s * (ROAD + (WALK - ROAD) / 2), 0.08, 0);
     setShadow(walk, false, true);
     scene.add(walk);
-    const tactile = flat(0.55, LEN, std({ color: '#d6ae1c', roughness: 0.6 }), s * (ROAD + 0.9), 0.165);
-    tactile.receiveShadow = true;
+  }
+  // sarjeta de concreto junto ao meio-fio e faixa de ônibus pintada (terracota), como nas avenidas de São Paulo
+  const gutterMat = std({ color: '#9b9a95', roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2 });
+  const busLaneMat = std({ map: busLaneTexture([2.3 / 6, LEN / 6], '#a3463a'), roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -1 });
+  for (const s of [-1, 1]) {
+    flat(0.4, LEN, gutterMat, s * (ROAD - 0.2), 0.0065);
+    flat(ROAD - BUS - 0.4, LEN, busLaneMat, s * (BUS + (ROAD - BUS - 0.4) / 2), 0.0058);
+  }
+  // pisos táteis de alerta (vermelhos) nas rampas das esquinas, na saída de cada faixa de pedestres
+  const alertMat = std({ map: tactileAlertTexture(), roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -2 });
+  alertMat.map.repeat.set(1.2 / 0.8, 3.2 / 0.8);
+  for (const c of crossings) for (const dz of [-7.4, 7.4]) for (const s of [-1, 1]) {
+    const pad = flat(1.2, 3.2, alertMat, s * (ROAD + 0.75), 0.1625, c + dz);
+    pad.receiveShadow = true;
   }
 
   // ---------- árvores de rua: tipuanas, sibipirunas e alguns ipês floridos ----------
   const treeSpots = [];
   for (const sd of [-1, 1]) for (let z = -HALF_LEN + 8; z < HALF_LEN; z += 11.5) treeSpots.push([sd * (ROAD + 1.7), z + rr(-1.5, 1.5)]);
   addTrees(scene, rng, treeSpots, { scaleMin: 0.95, scaleMax: 1.25, mix: { tipuana: 0.55, sibipiruna: 0.33, ipe: 0.12 } });
+  // grades de ferro ao redor das árvores (canteiro quadrado) e balizadores ao longo do meio-fio
+  const grateGeo = mergeColored([
+    { geo: B(0.96, 0.02, 0.96), color: '#3b2e22', pos: [0, 0.01, 0] }, // terra
+    { geo: B(1.24, 0.045, 0.08), color: '#2b2d31', pos: [0, 0.0225, 0.58] },
+    { geo: B(1.24, 0.045, 0.08), color: '#2b2d31', pos: [0, 0.0225, -0.58] },
+    { geo: B(0.08, 0.045, 1.08), color: '#2b2d31', pos: [0.58, 0.0225, 0] },
+    { geo: B(0.08, 0.045, 1.08), color: '#2b2d31', pos: [-0.58, 0.0225, 0] },
+    ...[-0.3, 0.3].map((x) => ({ geo: B(0.04, 0.03, 1.0), color: '#3a3d42', pos: [x, 0.03, 0] })),
+    ...[-0.3, 0.3].map((z) => ({ geo: B(1.0, 0.03, 0.04), color: '#3a3d42', pos: [0, 0.03, z] })),
+  ]);
+  const grates = new THREE.InstancedMesh(grateGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.6 }), treeSpots.length);
+  treeSpots.forEach(([x, z], i) => grates.setMatrixAt(i, m4.makeTranslation(x, 0.16, z)));
+  setShadow(grates, false, true);
+  scene.add(grates);
+  const bollardSpots = [];
+  for (const s of [-1, 1]) for (let z = -HALF_LEN + 5; z < HALF_LEN; z += 6.5) if (!nearCrossing(z, 11)) bollardSpots.push([s * (ROAD + 0.45), z]);
+  const bollards = new THREE.InstancedMesh(mergeColored([
+    { geo: new THREE.CylinderGeometry(0.058, 0.068, 0.78, 14), color: '#1d1f23', pos: [0, 0.39, 0] },
+    { geo: new THREE.CylinderGeometry(0.0645, 0.0645, 0.06, 14), color: '#d8dadc', pos: [0, 0.62, 0] }, // faixa refletiva
+    { geo: new THREE.SphereGeometry(0.058, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), color: '#1d1f23', pos: [0, 0.78, 0] },
+  ]), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.4 }), bollardSpots.length);
+  bollardSpots.forEach(([x, z], i) => bollards.setMatrixAt(i, m4.makeTranslation(x, 0.16, z)));
+  setShadow(bollards);
+  scene.add(bollards);
 
   // ---------- postes, semáforos, pontos de ônibus, banca ----------
   const lampSpots = [];
   for (const s of [-1, 1]) for (let z = -HALF_LEN + 12; z < HALF_LEN; z += 24) lampSpots.push([s * (ROAD + 0.6), z]);
+  const rb = (w, h, d, r) => new RoundedBoxGeometry(w, h, d, 2, r);
   const poleGeo = mergeColored([
-    { geo: new THREE.CylinderGeometry(0.07, 0.1, 8, 8).translate(0, 4, 0), color: '#4a4e55' },
-    { geo: B(0.08, 0.08, 2.4).translate(0, 8, 1.1), color: '#4a4e55' },
+    { geo: new THREE.CylinderGeometry(0.2, 0.24, 0.18, 14), color: '#3a3d43', pos: [0, 0.09, 0] }, // base
+    { geo: new THREE.CylinderGeometry(0.055, 0.1, 8, 14), color: '#5a5f67', pos: [0, 4.0, 0] }, // fuste cônico
+    { geo: new THREE.CylinderGeometry(0.075, 0.075, 0.1, 12), color: '#3a3d43', pos: [0, 0.6, 0] }, // anel
+    { geo: B(0.07, 0.07, 2.35), color: '#5a5f67', pos: [0, 8.02, 1.12], rot: [-0.05, 0, 0] }, // braço
+    { geo: B(0.05, 0.05, 1.5), color: '#5a5f67', pos: [0, 7.52, 0.62], rot: [0.55, 0, 0] }, // escora
+    { geo: rb(0.82, 0.16, 0.4, 0.07), color: '#3a3d43', pos: [0, 8.12, 2.2] }, // luminária
   ]);
-  const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.5 }), lampSpots.length);
-  const lamps = new THREE.InstancedMesh(B(0.7, 0.14, 0.32), new THREE.MeshBasicMaterial({ color: '#fff4cf' }), lampSpots.length);
+  const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.2 }), lampSpots.length);
+  const lamps = new THREE.InstancedMesh(B(0.62, 0.04, 0.28), new THREE.MeshBasicMaterial({ color: '#fff4cf' }), lampSpots.length);
   lampSpots.forEach(([x, z], i) => {
     const flip = x > 0 ? -1 : 1;
     poles.setMatrixAt(i, m4.makeScale(1, 1, flip).setPosition(x, 0.16, z));
-    lamps.setMatrixAt(i, m4.makeTranslation(x, 8.1 + 0.16, z + flip * 2.2));
+    lamps.setMatrixAt(i, m4.makeTranslation(x, 8.18, z + flip * 2.2)); // lente: logo abaixo da luminária
   });
   setShadow(poles);
   scene.add(poles, lamps);
@@ -369,11 +344,13 @@ export function createWorld(scene, renderer) {
   // cones laranja: fechamento de domingo ao longo do canteiro e alguns soltos nas faixas
   for (let z = -60; z < 60; z += 7) if (!nearCrossing(z, 12)) coneSpots.push([(z / 7) % 2 ? 2.3 : -2.3, z]);
   for (let i = 0; i < 18; i++) coneSpots.push([pick([-5.4, -3.9, 3.9, 5.4]), rr(-110, 110)]);
+  // cone de trânsito: base de borracha, corpo cônico liso e duas faixas refletivas 8 mm para fora do corpo
   const coneGeo = mergeColored([
-    { geo: B(0.42, 0.04, 0.42), color: '#e2531c', pos: [0, 0.02, 0] },
-    { geo: new THREE.CylinderGeometry(0.035, 0.07, 0.18, 12), color: '#f05a1e', pos: [0, 0.62, 0] },
-    { geo: new THREE.CylinderGeometry(0.07, 0.11, 0.16, 12), color: '#f2f2ee', pos: [0, 0.45, 0] },
-    { geo: new THREE.CylinderGeometry(0.11, 0.16, 0.34, 12), color: '#f05a1e', pos: [0, 0.2, 0] },
+    { geo: rb(0.42, 0.04, 0.42, 0.015), color: '#26282b', pos: [0, 0.02, 0] },
+    { geo: new THREE.CylinderGeometry(0.035, 0.125, 0.62, 18), color: '#f2661c', pos: [0, 0.35, 0] },
+    { geo: new THREE.CylinderGeometry(0.0807, 0.0953, 0.1, 18), color: '#f4f4f0', pos: [0, 0.35, 0] },
+    { geo: new THREE.CylinderGeometry(0.0604, 0.072, 0.08, 18), color: '#f4f4f0', pos: [0, 0.5, 0] },
+    { geo: new THREE.CylinderGeometry(0.04, 0.04, 0.03, 12), color: '#f2661c', pos: [0, 0.665, 0] },
   ]);
   const cones = new THREE.InstancedMesh(coneGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 }), coneSpots.length);
   coneSpots.forEach(([x, z], i) => cones.setMatrixAt(i, m4.makeTranslation(x, 0, z)));
@@ -709,10 +686,11 @@ export function createWorld(scene, renderer) {
     const lane = pick([-1, 1]) * (CYCLE + 0.35 + laneW * (0.5 + Math.floor(rng() * 3)));
     const z = rr(-HALF_LEN + 10, HALF_LEN - 10);
     if (avoid.some((a) => Math.abs(a.z - z) < a.hz + 4 && Math.abs(a.x - lane) < 3.5)) continue;
-    addVehicle(carMesh(pick(carColors)), lane, z, lane > 0 ? 0 : Math.PI, 1.1, 2.4);
+    addVehicle(carMesh(pick(carColors), '', CAR_TYPES[i % CAR_TYPES.length]), lane, z, lane > 0 ? 0 : Math.PI, 1.1, 2.4);
   }
-  addVehicle(soundTruck(0, '#8f1019'), 5.2, -30, 0, 3.1, 8);
-  addVehicle(soundTruck(1, '#0e6a30'), -5.2, 44, Math.PI, 3.1, 8);
+  const truckBanner = (side) => new THREE.MeshStandardMaterial({ map: bannerTexture(side), side: THREE.DoubleSide, roughness: 0.8 });
+  addVehicle(soundTruckMesh('#8f1019', truckBanner(0)), 5.2, -30, 0, 3.1, 8);
+  addVehicle(soundTruckMesh('#0e6a30', truckBanner(1)), -5.2, 44, Math.PI, 3.1, 8);
 
   // ---------- mobiliário urbano ----------
   const steel = new THREE.MeshStandardMaterial({ color: '#8b9096', metalness: 0.7, roughness: 0.35 });
@@ -742,8 +720,12 @@ export function createWorld(scene, renderer) {
   for (const sd of [-1, 1]) for (let z = -HALF_LEN + 20; z < HALF_LEN; z += 31) binSpots.push([sd * (ROAD + 4.8), z]);
   const bins = new THREE.InstancedMesh(
     mergeColored([
-      { geo: new THREE.CylinderGeometry(0.28, 0.25, 0.95, 10), color: '#3f6b3f', pos: [0, 0.48, 0] },
-      { geo: new THREE.CylinderGeometry(0.3, 0.3, 0.08, 10), color: '#2b2f33', pos: [0, 0.98, 0] },
+      { geo: new THREE.CylinderGeometry(0.27, 0.24, 0.88, 18), color: '#35634a', pos: [0, 0.44, 0] }, // corpo levemente cônico
+      { geo: new THREE.CylinderGeometry(0.285, 0.285, 0.06, 18), color: '#2b2f33', pos: [0, 0.78, 0] }, // cinta
+      { geo: new THREE.CylinderGeometry(0.29, 0.29, 0.05, 18), color: '#222529', pos: [0, 0.905, 0] }, // tampa
+      { geo: new THREE.SphereGeometry(0.265, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.4, 1), color: '#222529', pos: [0, 0.93, 0] }, // cúpula
+      { geo: B(0.26, 0.1, 0.03), color: '#0e1012', pos: [0, 0.74, 0.28] }, // abertura
+      { geo: new THREE.CylinderGeometry(0.2, 0.2, 0.02, 14), color: '#1e2124', pos: [0, 0.01, 0] }, // base
     ]),
     new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.2 }), binSpots.length,
   );
@@ -822,8 +804,8 @@ export function createWorld(scene, renderer) {
     ticker.update(time);
     vendors.update(time);
     scenery.update(time);
-    // a câmera de sombra acompanha o jogador, ancorada em texels para não tremer
-    focus.set(Math.round(fx / snap) * snap, 0, Math.round(fz / snap) * snap);
+    // a câmera de sombra acompanha o jogador, ancorada na grade de texels da luz (src/shadow.js) para a sombra não tremer
+    snapShadowFocus(focus, fx, fz, SUN_DIR, snap);
     sun.target.position.copy(focus);
     sun.position.copy(focus).addScaledVector(SUN_DIR, 120);
   }

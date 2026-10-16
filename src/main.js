@@ -164,6 +164,8 @@ let lobbyDragUntil = 0;
 const setMode = (m) => { mode = m; document.body.dataset.mode = m; };
 resize();
 let myId = null;
+let debugDist = 0; // só depuração: distância da câmera livre (modo assistir)
+let debugCam = null; // só depuração: câmera fixa { pos: [x,y,z], target: [x,y,z] }
 let historyShown = false;
 let acct = { user: null, equipped: {}, custom: {} }; // conta atual (preenchida por initAccount)
 const lookOf = (look, side) => ({
@@ -744,6 +746,8 @@ const lobby = initLobby({
 });
 
 net.connect();
+addEventListener('pagehide', () => net.leave());
+addEventListener('pageshow', (e) => { if (e.persisted) net.reconnect(); });
 renderPortraits(renderer, profile.side);
 
 /** Volta do jogo para o lobby (ex.: servidor recusou a entrada). */
@@ -981,6 +985,11 @@ function placeLabel(label, x, z, height) {
 }
 
 function updateCamera(dt, time) {
+  if (debugCam) { // câmera fixa de depuração
+    camera.position.set(...debugCam.pos);
+    camera.lookAt(...debugCam.target);
+    return;
+  }
   if (mode === 'lobby') {
     // o personagem gira devagar (ou pelo arrasto) com a câmera fixa à frente
     if (performance.now() > lobbyDragUntil) lobbyYaw += dt * 0.25;
@@ -990,7 +999,7 @@ function updateCamera(dt, time) {
     camera.lookAt(0, 0.95, 0);
     return;
   }
-  const dist = watching ? 20 : camDist;
+  const dist = watching ? (debugDist || 20) : camDist;
   const cp = Math.cos(camPitch);
   const wanted = tmpV.set(
     me.x - Math.sin(camYaw) * dist * cp,
@@ -1084,7 +1093,9 @@ window.__AVENIDA__ = {
   get mode() { return mode; },
   get pos() { return { x: me.x, z: me.z }; },
   /** Só para depuração: posiciona a câmera livre (modo assistir). */
-  setView(x, z, yaw = camYaw, pitch = camPitch) { me.x = x; me.z = z; camYaw = yaw; camPitch = pitch; },
+  /** Só para depuração/capturas: fixa a câmera (ou, com null, devolve o controle ao jogo). */
+  setCamera(pos, target) { debugCam = pos ? { pos, target } : null; },
+  setView(x, z, yaw = camYaw, pitch = camPitch, dist = 0) { me.x = x; me.z = z; camYaw = yaw; camPitch = pitch; debugDist = dist; },
   setLobbyYaw(y) { lobbyYaw = y; lobbyDragUntil = performance.now() + 60000; },
   info: renderer.info,
   movingCars,

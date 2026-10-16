@@ -17,7 +17,7 @@ import { PVP } from '../shared/config.js';
 import { createZones } from './zones.js';
 import { clientIp } from './ip.js';
 import {
-  cleanText, isReservedNick, uniqueNick, spendMoveBudget,
+  cleanText, isReservedNick, uniqueNick, spendMoveBudget, diagnoseMiss,
 } from './rules.js';
 import { db } from './db.js';
 import { REPORT, recordChat, fileReport } from './reports.js';
@@ -407,6 +407,10 @@ function attack(me, kind) {
   me.lastAttack = now;
   const target = me.pvp ? hitTarget(me, kind) : null;
   sendNear(me, { t: 'attack', id: me.id, kind, hit: target ? target.id : null });
+  if (!target && now - me.lastHint > 3000) { // errou: explica por quê (PvP desligado, longe demais, de costas...), no máximo a cada 3 s
+    const why = diagnoseMiss(me, [...players.values()].filter((p) => p !== me), MELEE[kind], now);
+    if (why) { me.lastHint = now; notice(me, why.text); }
+  }
 }
 
 // ---------- Itens consumíveis (comprados na loja) ----------
@@ -547,6 +551,7 @@ wss.on('connection', (ws, req) => {
         lastReact: 0,
         lastWho: 0,
         mutedUntil: 0,
+        lastHint: 0,
         ip,
         lastUse: 0,
         premium: account ? hasPremiumEmotes(account.id) : false,
@@ -706,7 +711,7 @@ setInterval(() => {
     ws.isAlive = false;
     ws.ping();
   }
-}, 30000);
+}, Math.max(100, Number(process.env.HEARTBEAT_MS) || 10000));
 
 server.listen(PORT, () => {
   console.log(`Servidor em http://localhost:${PORT}  (WebSocket em /ws)`);

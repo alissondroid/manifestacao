@@ -60,3 +60,44 @@ test('spendMoveBudget: muitas mensagens pequenas não burlam o limite', () => {
   const speed = moved / 100;
   assert.ok(speed <= 9 * 1.25 + 0.2, `velocidade efetiva ${speed.toFixed(1)} m/s acima do permitido`);
 });
+
+// ---------- diagnóstico de golpe que não acertou ----------
+const { diagnoseMiss } = await import('../server/rules.js');
+const P = (o) => ({
+  nick: 'X', x: 0, z: 0, ry: 0, pvp: true, koUntil: 0, shieldUntil: 0, ...o,
+});
+const SPEC = { reach: 1.8, arc: 1.0 };
+
+test('diagnoseMiss: ninguém por perto não gera aviso', () => {
+  assert.equal(diagnoseMiss(P({}), [P({ x: 30, z: 30 })], SPEC, 0), null);
+  assert.equal(diagnoseMiss(P({}), [], SPEC, 0), null);
+});
+
+test('diagnoseMiss: atacante sem PvP, com alguém ao alcance, é avisado para ligar o PvP', () => {
+  const r = diagnoseMiss(P({ pvp: false }), [P({ z: 1.2 })], SPEC, 0);
+  assert.equal(r.code, 'self_off');
+  assert.match(r.text, /PvP/);
+});
+
+test('diagnoseMiss: alvo sem PvP é nomeado', () => {
+  const r = diagnoseMiss(P({}), [P({ nick: 'Beto', z: 1.2, pvp: false })], SPEC, 0);
+  assert.equal(r.code, 'target_off');
+  assert.match(r.text, /Beto/);
+});
+
+test('diagnoseMiss: alvo protegido (escudo ou nocaute)', () => {
+  assert.equal(diagnoseMiss(P({}), [P({ nick: 'Beto', z: 1.2, shieldUntil: 5000 })], SPEC, 1000).code, 'protected');
+  assert.equal(diagnoseMiss(P({}), [P({ nick: 'Beto', z: 1.2, koUntil: 5000 })], SPEC, 1000).code, 'protected');
+});
+
+test('diagnoseMiss: longe demais ou de costas', () => {
+  assert.equal(diagnoseMiss(P({}), [P({ z: 3.0 })], SPEC, 0).code, 'too_far'); // alcance 1,8; dentro de 2× o alcance
+  const back = diagnoseMiss(P({ ry: Math.PI }), [P({ nick: 'Beto', z: 1.2 })], SPEC, 0);
+  assert.equal(back.code, 'not_facing');
+  assert.match(back.text, /Beto/);
+});
+
+test('diagnoseMiss: escolhe o jogador mais próximo', () => {
+  const r = diagnoseMiss(P({}), [P({ nick: 'Longe', z: 3.2, pvp: false }), P({ nick: 'Perto', z: 1.0, pvp: false })], SPEC, 0);
+  assert.match(r.text, /Perto/);
+});

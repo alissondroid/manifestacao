@@ -53,9 +53,9 @@ export function asphaltTexture(repeat) {
 }
 
 /** Faixa exclusiva de ônibus: asfalto pintado de vermelho-terra. */
-export function busLaneTexture(repeat) {
+export function busLaneTexture(repeat, base = '#9b3a2e') {
   return canvasTexture(512, 512, (ctx, w, h) => {
-    speckle(ctx, w, h, '#9b3a2e', 70, 12000, 2);
+    speckle(ctx, w, h, base, 70, 12000, 2);
     for (let i = 0; i < 30; i++) {
       ctx.fillStyle = 'rgba(40,20,18,0.07)';
       ctx.beginPath();
@@ -778,6 +778,169 @@ export const mosaicNormal = (repeat) => normalFromHeight(256, (ctx, w, h) => {
     ctx.fillRect(Math.floor(Math.random() * w / 6) * 6 + 1, Math.floor(Math.random() * h / 6) * 6 + 1, 4, 4);
   }
 }, 1.2, repeat);
+
+
+// ---------- Calçada (estilo Avenida Paulista) ----------
+// Uma "fatia" da calçada: 7,5 m de largura (do meio-fio ao alinhamento dos prédios, no eixo x da textura) por 4 m de
+// comprimento (eixo y, repete ao longo da avenida). Da rua para o prédio: meio-fio de granito, faixa de pedras de granito,
+// faixa de serviço (árvores, postes, lixeiras) em placas de concreto cinza, faixa podotátil amarela, uma tira de pedra
+// portuguesa preta e branca e a faixa de pedestres em placas de concreto claro. A mesma função desenha a cor e o relevo.
+
+export const SIDEWALK = { px: 160, widthM: 7.5, lengthM: 4 };
+const SW_W = SIDEWALK.px * SIDEWALK.widthM; // 1200
+const SW_H = SIDEWALK.px * SIDEWALK.lengthM; // 640
+
+function drawSidewalk(ctx, w, h, mode) {
+  const m = (v) => v * SIDEWALK.px;
+  const color = mode === 'color';
+  const rng = (() => { let a = 90210; return () => { a = (a * 1664525 + 1013904223) >>> 0; return a / 4294967296; }; })(); // mesma textura sempre
+  const fill = (c, hgt, x, y, ww, hh) => { ctx.fillStyle = color ? c : `rgb(${hgt},${hgt},${hgt})`; ctx.fillRect(x, y, ww, hh); };
+  const tone = (hex, k) => { // clareia/escurece uma cor
+    const n = parseInt(hex.slice(1), 16);
+    const f = (v) => Math.max(0, Math.min(255, Math.round(v * k)));
+    return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`;
+  };
+  // placas retangulares: cada uma com um tom levemente diferente e juntas fundas
+  const slabs = (x0, x1, cw, ch, base, hgt, joint, jointH) => {
+    const cols = Math.round((x1 - x0) / cw);
+    const colW = (x1 - x0) / cols;
+    const rows = Math.round(SIDEWALK.lengthM / ch);
+    for (let c = 0; c < cols; c += 1) for (let r = 0; r < rows; r += 1) {
+      const px = m(x0 + c * colW);
+      const py = m(r * (SIDEWALK.lengthM / rows));
+      const pw = m(colW);
+      const ph = m(SIDEWALK.lengthM / rows);
+      fill(color ? tone(base, 0.95 + rng() * 0.1) : '', hgt - Math.floor(rng() * 6), px, py, pw, ph);
+      if (color) { // desgaste: leve gradiente na placa
+        const g = ctx.createLinearGradient(px, py, px + pw, py + ph);
+        g.addColorStop(0, 'rgba(255,255,255,0.05)');
+        g.addColorStop(1, 'rgba(0,0,0,0.05)');
+        ctx.fillStyle = g;
+        ctx.fillRect(px, py, pw, ph);
+      }
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = color ? joint : `rgb(${jointH},${jointH},${jointH})`;
+      ctx.strokeRect(px + 1.5, py + 1.5, pw - 3, ph - 3);
+    }
+  };
+
+  fill('#8f8d87', 110, 0, 0, w, h);
+  // meio-fio e faixa de granito (pedras 0,28 x 0,4 m)
+  fill('#d9d7d1', 175, m(0), 0, m(0.14), h);
+  slabs(0.14, 0.7, 0.28, 0.4, '#64676b', 120, '#46494d', 60);
+  // faixa de serviço
+  slabs(0.7, 3.0, 1.15, 1.0, '#a7a7a3', 128, '#6e6e6b', 50);
+  // faixa podotátil amarela, com as nervuras em relevo
+  fill('#dcb41e', 150, m(3.0), 0, m(0.4), h);
+  for (let i = 0; i < 5; i += 1) {
+    const x = m(3.0) + m(0.04) + i * m(0.075);
+    ctx.fillStyle = color ? '#f0cc3c' : 'rgb(235,235,235)';
+    ctx.fillRect(x, 0, m(0.035), h);
+    if (color) { ctx.fillStyle = 'rgba(120,90,0,0.35)'; ctx.fillRect(x + m(0.035), 0, 2, h); }
+  }
+  // tira de pedra portuguesa (cubinhos de ~6 cm, preto e branco, cada um levemente abaulado)
+  const st = m(0.0583);
+  for (let c = 0; c < 6; c += 1) for (let r = 0; r < Math.ceil(h / st); r += 1) {
+    const x = m(3.4) + c * st;
+    const y = r * st;
+    const white = (c + r) % 2 === 0;
+    if (color) {
+      fill(white ? tone('#e9e7e0', 0.96 + rng() * 0.06) : tone('#252527', 0.9 + rng() * 0.3), 0, x, y, st, st);
+      ctx.strokeStyle = 'rgba(120,118,112,0.9)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x + 0.75, y + 0.75, st - 1.5, st - 1.5);
+    } else {
+      fill('', 70, x, y, st, st);
+      fill('', 175, x + 2, y + 2, st - 4, st - 4);
+    }
+  }
+  // faixa de pedestres: placas de concreto claro
+  slabs(3.75, 7.11, 1.12, 1.0, '#cecdc6', 132, '#9e9c95', 48);
+  // junto aos prédios
+  slabs(7.11, 7.5, 0.39, 1.0, '#9a9892', 126, '#75736e', 52);
+
+  if (color) {
+    // manchas de uso, chiclete e sujeira nas juntas
+    for (let i = 0; i < 70; i += 1) {
+      ctx.fillStyle = `rgba(${rng() < 0.5 ? '70,64,58' : '30,30,32'},${0.03 + rng() * 0.05})`;
+      ctx.beginPath();
+      ctx.ellipse(rng() * w, rng() * h, 6 + rng() * 40, 4 + rng() * 22, rng() * 3, 0, 6.3);
+      ctx.fill();
+    }
+    for (let i = 0; i < 40; i += 1) { // chicletes
+      ctx.fillStyle = 'rgba(60,56,52,0.55)';
+      ctx.beginPath();
+      ctx.arc(m(0.8) + rng() * m(6.4), rng() * h, 1.5 + rng() * 1.8, 0, 6.3);
+      ctx.fill();
+    }
+    for (let i = 0; i < 9000; i += 1) {
+      const v = rng() < 0.5 ? 255 : 0;
+      ctx.fillStyle = `rgba(${v},${v},${v},0.045)`;
+      ctx.fillRect(rng() * w, rng() * h, 2, 2);
+    }
+  } else {
+    for (let i = 0; i < 6000; i += 1) {
+      const v = 110 + Math.floor(rng() * 40);
+      ctx.fillStyle = `rgba(${v},${v},${v},0.25)`;
+      ctx.fillRect(rng() * w, rng() * h, 2, 2);
+    }
+  }
+}
+
+/** Textura de cor da calçada. Use repeat [1, comprimento/4]; no lado esquerdo da avenida, espelhe com repeat.x = -1 e offset.x = 1. */
+export function sidewalkTexture() {
+  const t = canvasTexture(SW_W, SW_H, (ctx, w, h) => drawSidewalk(ctx, w, h, 'color'), { tile: true });
+  t.wrapS = THREE.ClampToEdgeWrapping;
+  return t;
+}
+
+/** Mapa de relevo (normal) alinhado com a textura de cor: juntas fundas, nervuras da faixa tátil e pedras abauladas. */
+export function sidewalkNormal() {
+  const c = document.createElement('canvas');
+  c.width = SW_W;
+  c.height = SW_H;
+  const ctx = c.getContext('2d');
+  drawSidewalk(ctx, SW_W, SW_H, 'height');
+  const { data } = ctx.getImageData(0, 0, SW_W, SW_H);
+  const hh = (x, y) => data[(((y + SW_H) % SW_H) * SW_W + Math.min(SW_W - 1, Math.max(0, x))) * 4] / 255;
+  const out = ctx.createImageData(SW_W, SW_H);
+  const strength = 3.2;
+  for (let y = 0; y < SW_H; y += 1) {
+    for (let x = 0; x < SW_W; x += 1) {
+      const dx = (hh(x + 1, y) - hh(x - 1, y)) * strength;
+      const dy = (hh(x, y + 1) - hh(x, y - 1)) * strength;
+      const len = Math.hypot(dx, dy, 1);
+      const i = (y * SW_W + x) * 4;
+      out.data[i] = ((-dx / len) * 0.5 + 0.5) * 255;
+      out.data[i + 1] = ((dy / len) * 0.5 + 0.5) * 255;
+      out.data[i + 2] = (1 / len) * 255;
+      out.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.ClampToEdgeWrapping;
+  t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  return t;
+}
+
+/** Piso tátil de alerta (cubos/domos em grade) das rampas de esquina. */
+export function tactileAlertTexture() {
+  return canvasTexture(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#b4503f';
+    ctx.fillRect(0, 0, w, h);
+    for (let y = 8; y < h; y += 16) for (let x = 8; x < w; x += 16) {
+      const g = ctx.createRadialGradient(x - 1.5, y - 1.5, 0.5, x, y, 5.5);
+      g.addColorStop(0, '#d9715d');
+      g.addColorStop(1, '#8f3a2c');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, 6.3);
+      ctx.fill();
+    }
+  }, { repeat: [1, 1] });
+}
 
 // ---------- Telão com conteúdo animado ----------
 

@@ -60,3 +60,26 @@ test('o intervalo de reconexão tem jitter e respeita o teto', () => {
   }
   assert.ok(waits.size > 1, 'as esperas deveriam variar (jitter)');
 });
+
+test('leave() (página fechando ou indo para o cache): fecha o socket sem reconectar sozinho', async () => {
+  const { net } = fresh();
+  net.leave();
+  assert.equal(sockets[0].readyState, 3);
+  sockets[0].onclose({ code: 1000 });
+  await sleep(1200);
+  assert.equal(sockets.length, 1, 'não deve reconectar sozinho depois de sair da página');
+});
+
+test('reconnect() depois de leave() (página voltou do cache) conecta de novo e reenvia o join', async () => {
+  const { net } = fresh();
+  net.join({ nick: 'Ana', side: 0, look: {} });
+  net.leave();
+  sockets[0].onclose({ code: 1000 });
+  net.reconnect();
+  assert.equal(sockets.length, 2);
+  const sent = [];
+  sockets[1].readyState = 1;
+  sockets[1].send = (d) => sent.push(JSON.parse(d));
+  sockets[1].onopen();
+  assert.ok(sent.some((m) => m.t === 'join' && m.nick === 'Ana'));
+});
