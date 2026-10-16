@@ -21,7 +21,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test -- --test-timeout=60000 --test-reporter=spec
+      - run: node --test --test-timeout=60000 --test-reporter=spec "test/**/*.test.js"
       - run: npm run build
 
   deploy:
