@@ -55,7 +55,10 @@ async function abacateRequest(version, kind, { id, body } = {}) {
   const json = await res.json().catch(() => ({}));
   if (!res.ok || json.error || json.success === false) {
     const msg = typeof json.error === 'string' ? json.error : json.error?.message || 'erro desconhecido';
-    throw Object.assign(new Error(`AbacatePay ${res.status}: ${msg}`), { versionMismatch: /version mismatch/i.test(msg) });
+    throw Object.assign(new Error(`AbacatePay ${res.status}: ${msg}`), {
+      versionMismatch: /version mismatch/i.test(msg),
+      denied: (res.status === 401 || res.status === 403) && /permission/i.test(msg), // chave sem esse escopo (ex.: só cria cobranças)
+    });
   }
   return json.data;
 }

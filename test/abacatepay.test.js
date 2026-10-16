@@ -12,7 +12,7 @@ const VIP = SHOP.find((i) => i.kind === 'vip' && !i.hidden && i.price > 0);
 async function fakeAbacate(version = 1) {
   const charges = new Map();
   const calls = [];
-  const fake = { qrOverride: undefined };
+  const fake = { qrOverride: undefined, denyCheck: false };
   const srv = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
     let raw = '';
@@ -36,13 +36,14 @@ async function fakeAbacate(version = 1) {
       }
       const charge = charges.get(url.searchParams.get('id'));
       if (!charge) return send(404, { data: null, error: 'Não encontrado' });
+      if (fake.denyCheck && url.pathname === `${base}/check`) return send(401, { data: null, success: false, error: 'Insufficient permissions' });
       if (req.method === 'GET' && url.pathname === `${base}/check`) return ok({ status: charge.status, expiresAt: charge.expiresAt });
       if (req.method === 'POST' && url.pathname === `${base}/simulate-payment`) { charge.status = 'PAID'; return ok(charge); }
       return send(404, { data: null, error: 'rota' });
     });
   });
   await new Promise((r) => { srv.listen(0, '127.0.0.1', r); });
-  return { url: `http://127.0.0.1:${srv.address().port}`, charges, calls, set qrOverride(v) { fake.qrOverride = v; }, close: () => new Promise((r) => { srv.close(r); }) };
+  return { url: `http://127.0.0.1:${srv.address().port}`, charges, calls, set qrOverride(v) { fake.qrOverride = v; }, set denyCheck(v) { fake.denyCheck = v; }, close: () => new Promise((r) => { srv.close(r); }) };
 }
 
 async function setup(env = {}, version = 1) {
@@ -213,5 +214,34 @@ test('webhook da v2 (data.transparent.id) também aponta a cobrança', async () 
     });
     assert.equal(res.status, 200);
     assert.ok((await (await t.api('/api/me')).json()).vipUntil > Date.now());
+  } finally { await t.stop(); }
+});
+
+test('chave sem permissão de leitura: o webhook com segredo e valor certos libera o item', async () => {
+  const t = await setup({}, 2);
+  try {
+    const { order } = await t.checkout();
+    t.abacate.denyCheck = true;
+    const hook = (secret, data) => fetch(`${t.srv.url}/api/abacatepay/webhook?webhookSecret=${secret}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ event: 'transparent.completed', data }),
+    });
+    const vipAtivo = async () => (await (await t.api('/api/me')).json()).vipUntil > Date.now();
+
+    // a consulta é negada: confirm segue pendente (sem derrubar nada)
+    assert.equal((await (await t.api(`/api/shop/confirm?order=${order}`)).json()).status, 'pending');
+
+    // payload que não diz PAID, valor errado ou cobrança desconhecida: nada é liberado
+    await hook(HOOK, { transparent: { id: 'pix_char_1', status: 'PENDING', amount: VIP.price } });
+    await hook(HOOK, { transparent: { id: 'pix_char_1', status: 'PAID', amount: VIP.price + 1 } });
+    await hook(HOOK, { transparent: { id: 'pix_char_99', status: 'PAID', amount: VIP.price } });
+    assert.equal(await vipAtivo(), false);
+
+    // segredo errado: nem entra
+    assert.equal((await hook('errado', { transparent: { id: 'pix_char_1', status: 'PAID', amount: VIP.price } })).status, 401);
+    assert.equal(await vipAtivo(), false);
+
+    // tudo certo: libera
+    assert.equal((await hook(HOOK, { transparent: { id: 'pix_char_1', status: 'PAID', amount: VIP.price } })).status, 200);
+    assert.equal(await vipAtivo(), true);
   } finally { await t.stop(); }
 });

@@ -120,8 +120,8 @@ export async function handleApi(req, res, hooks = {}) {
       return json(res, 200, { received: true }), true;
     }
 
-    // Webhook da AbacatePay: o segredo vai na URL (?webhookSecret=). O corpo nunca é confiado:
-    // ele só diz qual cobrança olhar, e quem confirma o pagamento é a consulta à API.
+    // Webhook da AbacatePay: o segredo vai na URL (?webhookSecret=). Em regra o corpo não é confiado: ele só diz
+    // qual cobrança olhar, e quem confirma o pagamento é a consulta à API (exceção: chave sem permissão de leitura, abaixo).
     if (method === 'POST' && pathname === '/api/abacatepay/webhook') {
       if (PROVIDER !== 'abacatepay' || !ABACATE_WEBHOOK_SECRET) return json(res, 503, { error: 'Webhook não configurado' }), true;
       const sha = (v) => crypto.createHash('sha256').update(String(v)).digest();
@@ -132,14 +132,25 @@ export async function handleApi(req, res, hooks = {}) {
       try { payload = JSON.parse((await readBody(req, 64 * 1024)).toString('utf8')) || {}; } catch { /* corpo inválido: ignora */ }
       const ref = payload.data?.transparent?.id ?? payload.data?.pixQrCode?.id ?? payload.data?.id ?? payload.id;
       const order = typeof ref === 'string' ? orderByRef('abacatepay', ref) : null;
+      console.log(`[pagamentos] webhook ${payload.event ?? '?'}: cobrança ${ref ?? '?'} ${order ? `(pedido ${order.id}, ${order.status})` : '(desconhecida)'}`);
       if (order && order.status !== 'paid') {
         try {
           const st = await fetchStatus(order.provider_ref);
           if (st.paid && fulfill(order.id)) hooks.onEquip?.(order.user_id);
           else if (st.expired) setOrderStatus(order.id, 'expired');
         } catch (err) {
-          console.error('[pagamentos] webhook: falha ao consultar a AbacatePay:', err.message);
-          return json(res, 502, { error: 'Tente de novo' }), true; // a AbacatePay reenvia
+          if (err.denied) {
+            // A chave não pode consultar o pagamento. O webhook (autenticado pelo segredo da URL) vale
+            // se disser PAID para esta cobrança e no valor exato do pedido.
+            const obj = payload.data?.transparent ?? payload.data?.pixQrCode ?? payload.data ?? {};
+            if (String(obj.status).toUpperCase() === 'PAID' && Number(obj.amount) === order.amount_cents && fulfill(order.id)) {
+              console.log(`[pagamentos] pedido ${order.id} liberado pelo webhook (a chave da AbacatePay não pode consultar: dê a permissão de leitura no painel)`);
+              hooks.onEquip?.(order.user_id);
+            }
+          } else {
+            console.error('[pagamentos] webhook: falha ao consultar a AbacatePay:', err.message);
+            return json(res, 502, { error: 'Tente de novo' }), true; // a AbacatePay reenvia
+          }
         }
       }
       return json(res, 200, { received: true }), true;
@@ -338,7 +349,7 @@ export async function handleApi(req, res, hooks = {}) {
           if (st.paid && fulfill(order.id)) hooks.onEquip?.(user.id);
           else if (st.expired) setOrderStatus(order.id, 'expired');
         } catch (err) {
-          console.error('[pagamentos] falha ao consultar pedido:', err.message);
+          console.error('[pagamentos] falha ao consultar pedido:', err.message, err.denied ? '(a chave não tem permissão de leitura: ajuste no painel da AbacatePay; o webhook ainda libera)' : '');
         }
       }
       const fresh = getOrder(order.id);
