@@ -1,3 +1,5 @@
+import { fireworkAudio } from './fireworks-math.js';
+
 // Som ambiente sintetizado (sem arquivos): murmúrio da multidão, buzinas distantes
 // e um "pop" para mensagens de chat. Só inicia após um gesto do usuário.
 
@@ -115,12 +117,98 @@ export class Ambience {
     this.tone(110, t + 0.36, 0.5, 'sawtooth', 0.09);
   }
 
-  boom() {
+  noise() {
+    if (!this.noiseBuf) {
+      const ctx = this.ctx;
+      const len = ctx.sampleRate * 2;
+      this.noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = this.noiseBuf.getChannelData(0);
+      for (let i = 0; i < len; i += 1) d[i] = Math.random() * 2 - 1;
+    }
+    return this.noiseBuf;
+  }
+
+  /** Saída com pan estéreo (quando o navegador tem StereoPanner) e volume. */
+  out(vol, pan = 0) {
+    const g = this.ctx.createGain();
+    g.gain.value = vol;
+    let last = g;
+    if (this.ctx.createStereoPanner) {
+      const p = this.ctx.createStereoPanner();
+      p.pan.value = pan;
+      g.connect(p);
+      last = p;
+    }
+    last.connect(this.master);
+    return g;
+  }
+
+  /** Rajada de ruído filtrada com envelope (a base do assobio, do estalo e do corpo do estouro). */
+  burstNoise(t, dur, { type = 'lowpass', from, to = from, vol, attack = 0.004, pan = 0, dest }) {
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise();
+    src.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = type;
+    f.frequency.setValueAtTime(from, t);
+    if (to !== from) f.frequency.exponentialRampToValueAtTime(to, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(dest ?? this.out(1, pan));
+    src.start(t, Math.random());
+    src.stop(t + dur + 0.05);
+  }
+
+  /** Foguete subindo: assobio de ruído que sobe de tom e some. `distance` em metros, `pan` -1..1. */
+  launch(distance = 0, pan = 0) {
     if (!this.ctx || !this.enabled) return;
+    const { gain, cutoff } = fireworkAudio(distance);
     const t = this.ctx.currentTime;
-    this.tone(70, t + 0.9, 0.5, 'sine', 0.2);
-    this.tone(55, t + 1.35, 0.5, 'sine', 0.2);
-    this.tone(80, t + 1.8, 0.4, 'sine', 0.15);
+    const dest = this.out(0.5 * gain, pan);
+    this.burstNoise(t, 1.1, { type: 'bandpass', from: 450, to: Math.min(2800, cutoff), vol: 0.22, attack: 0.25, dest });
+    this.tone(220, t, 0.9, 'sawtooth', 0.012 * gain); // zumbido do motor
+  }
+
+  /**
+   * Estouro: estalo seco, corpo de ruído que abafa, trovão grave com eco e, nos tipos que cintilam, crepitar.
+   * Chega atrasado e mais baixo/abafado quanto mais longe.
+   */
+  explode(distance = 0, pan = 0, type = 'peony') {
+    if (!this.ctx || !this.enabled) return;
+    const { gain, delay, cutoff } = fireworkAudio(distance);
+    const t = this.ctx.currentTime + delay;
+    const ctx = this.ctx;
+    const dest = this.out(1, pan);
+    const level = (v) => v * gain;
+    // estalo agudo (some com a distância)
+    this.burstNoise(t, 0.07, { type: 'highpass', from: 2200, vol: level(0.55) * Math.min(1, cutoff / 6000), attack: 0.002, dest });
+    // corpo: ruído que escurece
+    this.burstNoise(t, 0.95, { type: 'lowpass', from: Math.min(2600, cutoff), to: 160, vol: level(0.5), attack: 0.006, dest });
+    // trovão: seno que cai de tom
+    const osc = ctx.createOscillator();
+    const og = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(120, t);
+    osc.frequency.exponentialRampToValueAtTime(34, t + 0.55);
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(level(0.75), t + 0.01);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.75);
+    osc.connect(og).connect(dest);
+    osc.start(t);
+    osc.stop(t + 0.8);
+    // eco dos prédios da avenida
+    this.burstNoise(t + 0.22, 0.8, { type: 'lowpass', from: 700, to: 120, vol: level(0.2), attack: 0.03, dest });
+    // crepitar: estalinhos soltos (salgueiro e palmeira cintilam mais)
+    const crackles = type === 'willow' ? 34 : type === 'palm' ? 22 : 12;
+    for (let i = 0; i < crackles; i += 1) {
+      const at = t + 0.3 + Math.random() * (type === 'willow' ? 2.2 : 1.3);
+      this.burstNoise(at, 0.018 + Math.random() * 0.02, {
+        type: 'highpass', from: 2500 + Math.random() * 3000, vol: level(0.05 + Math.random() * 0.12) * Math.min(1, cutoff / 5000), attack: 0.001, pan: Math.max(-1, Math.min(1, pan + (Math.random() - 0.5) * 0.6)),
+      });
+    }
   }
 
   capture() {

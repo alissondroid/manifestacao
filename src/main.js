@@ -17,6 +17,7 @@ import {
 import { toast } from './account.js';
 import { initRadar } from './radar.js';
 import { Effects } from './effects.js';
+import { panFromOffset } from './fireworks-math.js';
 
 const $ = (s) => document.querySelector(s);
 
@@ -65,6 +66,7 @@ const savedQuality = (() => {
   try { return Math.min(QUALITY.maxLevel, Math.max(0, Number(localStorage.getItem(QUALITY_KEY)) || 0)); } catch { return 0; }
 })();
 const quality = createQualityMonitor({ level: savedQuality, onDrop: (level) => applyQuality(level, true) });
+const FX_DENSITY = [1, 0.8, 0.55, 0.35]; // partículas dos fogos por nível de qualidade
 function applyQuality(level, notify = false) {
   renderer.setPixelRatio(PIXEL_RATIO[level]);
   const shadows = level < 2;
@@ -72,6 +74,7 @@ function applyQuality(level, notify = false) {
     renderer.shadowMap.enabled = shadows;
     scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); });
   }
+  effects.density = FX_DENSITY[level] ?? 0.35;
   if (typeof resize === 'function') resize();
   try { localStorage.setItem(QUALITY_KEY, String(level)); } catch { /* ignore */ }
   if (notify) toast('Ajustamos os gráficos para o jogo rodar mais fluido.');
@@ -101,6 +104,7 @@ await nextPaint();
 
 const world = createWorld(scene, renderer);
 const effects = new Effects(scene);
+effects.density = FX_DENSITY[savedQuality] ?? 1;
 
 function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -469,7 +473,6 @@ const net = new Net({
         break;
       case 'fx':
         effects.fireworks(m.x, m.z, SIDES[m.side]?.color ?? '#ffffff');
-        sound.boom();
         break;
       case 'billboard':
         if (muted.has(String(m.nick).toLowerCase())) break;
@@ -562,6 +565,18 @@ const net = new Net({
 // ---------- Lobby e HUD ----------
 
 const sound = new Ambience();
+
+// Som dos fogos sincronizado com o efeito: distância e lado vêm da câmera.
+const fxOffset = new THREE.Vector3();
+const fxInverse = new THREE.Quaternion();
+function listenerOf(x, y, z) {
+  fxOffset.set(x, y, z).sub(camera.position);
+  const dist = fxOffset.length();
+  fxOffset.applyQuaternion(fxInverse.copy(camera.quaternion).invert());
+  return { dist, pan: panFromOffset(fxOffset.x, fxOffset.z) };
+}
+effects.onLaunch = (x, z) => { const l = listenerOf(x, 1, z); sound.launch(l.dist, l.pan); };
+effects.onBurst = (x, y, z, type) => { const l = listenerOf(x, y, z); sound.explode(l.dist, l.pan, type); };
 
 // ---------- Corrida e PvP ----------
 
