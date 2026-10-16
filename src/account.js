@@ -409,7 +409,9 @@ export function initAccount({ onChange }) {
     if (!account.user) { openAuth('login'); return; }
     try { apply(await api.me(), 'items'); } catch { /* usa o que já temos */ }
     const provider = account.shop.provider;
-    const note = provider === 'stripe'
+    const note = provider === 'abacatepay'
+      ? 'Pagamento somente por Pix. O item é liberado assim que o pagamento cair, geralmente em segundos.'
+      : provider === 'stripe'
       ? 'Pagamento em modo de teste (Stripe): use os cartões e o Pix de teste. Nenhum dinheiro é cobrado.'
       : 'Modo de teste: o pagamento é simulado e nenhum dinheiro é cobrado.';
     const isVip = account.vipUntil > Date.now();
@@ -503,7 +505,7 @@ export function initAccount({ onChange }) {
 
     openModal(
       h('h2', {}, 'Loja'),
-      h('p', { class: 'note test' }, note),
+      h('p', { class: provider === 'abacatepay' ? 'note' : 'note test' }, note),
       h('p', { class: 'note' }, 'Tudo é cosmético ou de diversão: nada aqui dá vantagem no PvP. A Camisa simples e a Sua camisa só aparecem no Rosto 1 masculino.'),
       tabs,
       slotHolder,
