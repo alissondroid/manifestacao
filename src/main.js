@@ -165,6 +165,7 @@ const setMode = (m) => { mode = m; document.body.dataset.mode = m; };
 resize();
 let myId = null;
 let debugDist = 0; // só depuração: distância da câmera livre (modo assistir)
+let debugCam = null; // só depuração: câmera fixa { pos: [x,y,z], target: [x,y,z] }
 let historyShown = false;
 let acct = { user: null, equipped: {}, custom: {} }; // conta atual (preenchida por initAccount)
 const lookOf = (look, side) => ({
@@ -982,6 +983,11 @@ function placeLabel(label, x, z, height) {
 }
 
 function updateCamera(dt, time) {
+  if (debugCam) { // câmera fixa de depuração
+    camera.position.set(...debugCam.pos);
+    camera.lookAt(...debugCam.target);
+    return;
+  }
   if (mode === 'lobby') {
     // o personagem gira devagar (ou pelo arrasto) com a câmera fixa à frente
     if (performance.now() > lobbyDragUntil) lobbyYaw += dt * 0.25;
@@ -1085,6 +1091,8 @@ window.__AVENIDA__ = {
   get mode() { return mode; },
   get pos() { return { x: me.x, z: me.z }; },
   /** Só para depuração: posiciona a câmera livre (modo assistir). */
+  /** Só para depuração/capturas: fixa a câmera (ou, com null, devolve o controle ao jogo). */
+  setCamera(pos, target) { debugCam = pos ? { pos, target } : null; },
   setView(x, z, yaw = camYaw, pitch = camPitch, dist = 0) { me.x = x; me.z = z; camYaw = yaw; camPitch = pitch; debugDist = dist; },
   setLobbyYaw(y) { lobbyYaw = y; lobbyDragUntil = performance.now() + 60000; },
   info: renderer.info,

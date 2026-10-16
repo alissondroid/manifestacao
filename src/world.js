@@ -10,9 +10,9 @@ import { addTrees } from './trees.js';
 import { addVendors } from './props.js';
 import { addScenery } from './scenery.js';
 import {
-  asphaltTexture, busLaneTexture, mosaicTexture, concreteTexture, grassTexture,
+  asphaltTexture, busLaneTexture, concreteTexture, grassTexture,
   facadeTexture, shopfrontTexture, bikeSymbolTexture, roadTextTexture, streetTotemTexture, bannerTexture, streetSignTexture, posterTexture,
-  asphaltNormal, mosaicNormal, LedTicker, archBannerTexture,
+  asphaltNormal, LedTicker, archBannerTexture, sidewalkTexture, sidewalkNormal, tactileAlertTexture,
 } from './textures.js';
 import { SIDES, RACE } from '../shared/config.js';
 import {
@@ -175,27 +175,75 @@ export function createWorld(scene, renderer) {
   gridLines.forEach(([x, z, sx, sz], i) => grid.setMatrixAt(i, m4.makeScale(sx, 1, sz).setPosition(x, 0.012, z)));
   scene.add(grid);
 
-  // calçadas de mosaico com guia, faixa tátil e canteiros
-  const mosaic = std({
-    map: mosaicTexture([(WALK - ROAD) / 4, LEN / 4]), normalMap: mosaicNormal([(WALK - ROAD) / 4, LEN / 4]), normalScale: new THREE.Vector2(0.5, 0.5), roughness: 0.8,
-  });
+  // calçadas no estilo da Paulista: meio-fio e faixa de granito, faixa de serviço, faixa podotátil, tira de pedra
+  // portuguesa e placas de concreto (a textura cobre os 7,5 m do meio-fio aos prédios; no lado esquerdo ela é espelhada)
+  const walkMap = sidewalkTexture();
+  const walkNormal = sidewalkNormal();
+  const walkMat = (mirror) => {
+    const map = mirror ? walkMap.clone() : walkMap;
+    const normalMap = mirror ? walkNormal.clone() : walkNormal;
+    for (const t of [map, normalMap]) {
+      t.repeat.set(mirror ? -1 : 1, LEN / 4);
+      t.offset.set(mirror ? 1 : 0, 0);
+      t.wrapS = THREE.ClampToEdgeWrapping;
+      t.wrapT = THREE.RepeatWrapping;
+      t.needsUpdate = true;
+    }
+    return std({ map, normalMap, normalScale: new THREE.Vector2(0.8, 0.8), roughness: 0.85 });
+  };
   const curbMat = std({ color: '#b9b6ae' });
   for (const s of [-1, 1]) {
     const walk = new THREE.Mesh(
       new THREE.BoxGeometry(WALK - ROAD, 0.16, LEN),
-      [curbMat, curbMat, mosaic, curbMat, curbMat, curbMat],
+      [curbMat, curbMat, walkMat(s < 0), curbMat, curbMat, curbMat],
     );
     walk.position.set(s * (ROAD + (WALK - ROAD) / 2), 0.08, 0);
     setShadow(walk, false, true);
     scene.add(walk);
-    const tactile = flat(0.55, LEN, std({ color: '#d6ae1c', roughness: 0.6 }), s * (ROAD + 0.9), 0.165);
-    tactile.receiveShadow = true;
+  }
+  // sarjeta de concreto junto ao meio-fio e faixa de ônibus pintada (terracota), como nas avenidas de São Paulo
+  const gutterMat = std({ color: '#9b9a95', roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2 });
+  const busLaneMat = std({ map: busLaneTexture([2.3 / 6, LEN / 6], '#a3463a'), roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -1 });
+  for (const s of [-1, 1]) {
+    flat(0.4, LEN, gutterMat, s * (ROAD - 0.2), 0.0065);
+    flat(ROAD - BUS - 0.4, LEN, busLaneMat, s * (BUS + (ROAD - BUS - 0.4) / 2), 0.0058);
+  }
+  // pisos táteis de alerta (vermelhos) nas rampas das esquinas, na saída de cada faixa de pedestres
+  const alertMat = std({ map: tactileAlertTexture(), roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -2 });
+  alertMat.map.repeat.set(1.2 / 0.8, 3.2 / 0.8);
+  for (const c of crossings) for (const dz of [-7.4, 7.4]) for (const s of [-1, 1]) {
+    const pad = flat(1.2, 3.2, alertMat, s * (ROAD + 0.75), 0.1625, c + dz);
+    pad.receiveShadow = true;
   }
 
   // ---------- árvores de rua: tipuanas, sibipirunas e alguns ipês floridos ----------
   const treeSpots = [];
   for (const sd of [-1, 1]) for (let z = -HALF_LEN + 8; z < HALF_LEN; z += 11.5) treeSpots.push([sd * (ROAD + 1.7), z + rr(-1.5, 1.5)]);
   addTrees(scene, rng, treeSpots, { scaleMin: 0.95, scaleMax: 1.25, mix: { tipuana: 0.55, sibipiruna: 0.33, ipe: 0.12 } });
+  // grades de ferro ao redor das árvores (canteiro quadrado) e balizadores ao longo do meio-fio
+  const grateGeo = mergeColored([
+    { geo: B(0.96, 0.02, 0.96), color: '#3b2e22', pos: [0, 0.01, 0] }, // terra
+    { geo: B(1.24, 0.045, 0.08), color: '#2b2d31', pos: [0, 0.0225, 0.58] },
+    { geo: B(1.24, 0.045, 0.08), color: '#2b2d31', pos: [0, 0.0225, -0.58] },
+    { geo: B(0.08, 0.045, 1.08), color: '#2b2d31', pos: [0.58, 0.0225, 0] },
+    { geo: B(0.08, 0.045, 1.08), color: '#2b2d31', pos: [-0.58, 0.0225, 0] },
+    ...[-0.3, 0.3].map((x) => ({ geo: B(0.04, 0.03, 1.0), color: '#3a3d42', pos: [x, 0.03, 0] })),
+    ...[-0.3, 0.3].map((z) => ({ geo: B(1.0, 0.03, 0.04), color: '#3a3d42', pos: [0, 0.03, z] })),
+  ]);
+  const grates = new THREE.InstancedMesh(grateGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.6 }), treeSpots.length);
+  treeSpots.forEach(([x, z], i) => grates.setMatrixAt(i, m4.makeTranslation(x, 0.16, z)));
+  setShadow(grates, false, true);
+  scene.add(grates);
+  const bollardSpots = [];
+  for (const s of [-1, 1]) for (let z = -HALF_LEN + 5; z < HALF_LEN; z += 6.5) if (!nearCrossing(z, 11)) bollardSpots.push([s * (ROAD + 0.45), z]);
+  const bollards = new THREE.InstancedMesh(mergeColored([
+    { geo: new THREE.CylinderGeometry(0.058, 0.068, 0.78, 14), color: '#1d1f23', pos: [0, 0.39, 0] },
+    { geo: new THREE.CylinderGeometry(0.0645, 0.0645, 0.06, 14), color: '#d8dadc', pos: [0, 0.62, 0] }, // faixa refletiva
+    { geo: new THREE.SphereGeometry(0.058, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), color: '#1d1f23', pos: [0, 0.78, 0] },
+  ]), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.4 }), bollardSpots.length);
+  bollardSpots.forEach(([x, z], i) => bollards.setMatrixAt(i, m4.makeTranslation(x, 0.16, z)));
+  setShadow(bollards);
+  scene.add(bollards);
 
   // ---------- postes, semáforos, pontos de ônibus, banca ----------
   const lampSpots = [];
