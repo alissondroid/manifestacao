@@ -779,6 +779,7 @@ const lobby = initLobby({
   },
 });
 
+setOnline([]); // o contador já aparece zerado, antes da primeira atualização do servidor
 net.connect();
 addEventListener('pagehide', () => net.leave());
 addEventListener('pageshow', (e) => { if (e.persisted) net.reconnect(); });

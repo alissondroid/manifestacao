@@ -5,17 +5,43 @@ import { CHARACTERS, modelId } from './models.js';
 
 const $ = (sel) => document.querySelector(sel);
 
+/** Contador ao vivo no topo: total de jogadores e quantos há em cada grupo (cápsula única, com nome só em telas largas). */
 export function setOnline(counts) {
   const box = $('#online');
   if (!box.children.length) {
+    const live = document.createElement('span');
+    live.className = 'live';
+    const pulse = document.createElement('i');
+    pulse.setAttribute('aria-hidden', 'true');
+    const total = document.createElement('b');
+    const label = document.createElement('span');
+    label.className = 'tx';
+    label.textContent = ' online';
+    live.append(pulse, total, label);
+    box.append(live);
     SIDES.forEach((s) => {
-      const pill = document.createElement('span');
-      pill.className = 'pill';
-      pill.innerHTML = `<i class="dot" style="background:${s.color}"></i><b>0</b><span class="name"> ${s.short}</span>`;
-      box.append(pill);
+      const chip = document.createElement('span');
+      chip.className = 'sc';
+      const dot = document.createElement('i');
+      dot.className = 'dot';
+      dot.style.background = s.color;
+      const n = document.createElement('b');
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = s.short;
+      chip.append(dot, n, name);
+      box.append(chip);
     });
   }
-  box.querySelectorAll('b').forEach((b, i) => { b.textContent = counts[i] ?? 0; });
+  const sum = SIDES.reduce((acc, _s, i) => acc + (counts[i] ?? 0), 0);
+  box.querySelector('.live b').textContent = sum;
+  box.querySelector('.live').title = `${sum} jogador${sum === 1 ? '' : 'es'} na avenida agora`;
+  box.querySelectorAll('.sc').forEach((chip, i) => {
+    const n = counts[i] ?? 0;
+    chip.querySelector('b').textContent = n;
+    chip.title = `${SIDES[i].name}: ${n} online`;
+    chip.setAttribute('aria-label', `${SIDES[i].name}: ${n} online`);
+  });
   for (const [i, el] of document.querySelectorAll('.side small').entries()) {
     el.textContent = `${counts[i] ?? 0} online`;
   }
@@ -415,7 +441,11 @@ export function initHud({
 
   const sound = $('#sound');
   let on = soundOn;
-  const paintSound = () => { sound.textContent = on ? '🔊' : '🔇'; };
+  const paintSound = () => {
+    sound.textContent = on ? '🔊' : '🔇';
+    sound.setAttribute('aria-pressed', String(on));
+    sound.title = on ? 'Desligar o som' : 'Ligar o som';
+  };
   paintSound();
   sound.onclick = () => { on = !on; paintSound(); onSound(on); };
 
