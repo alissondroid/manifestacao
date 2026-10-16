@@ -37,3 +37,23 @@ export function spendMoveBudget(p, now, limit, dist) {
   p.budget -= dist;
   return true;
 }
+
+/**
+ * Por que um golpe não acertou ninguém? Olha o jogador mais próximo dentro de 2× o alcance e devolve o motivo
+ * (`code`) e a frase para o atacante, ou null se não havia ninguém perto (nada a explicar).
+ * `spec`: { reach, arc } do golpe; `me`/`others`: { nick, x, z, ry, pvp, koUntil, shieldUntil }.
+ */
+export function diagnoseMiss(me, others, spec, now) {
+  let near = null;
+  let best = spec.reach * 2;
+  for (const p of others) {
+    const d = Math.hypot(p.x - me.x, p.z - me.z);
+    if (d < best) { best = d; near = p; }
+  }
+  if (!near) return null;
+  if (!me.pvp) return { code: 'self_off', text: 'Ligue o PvP (🍅) para acertar outros jogadores.' };
+  if (!near.pvp) return { code: 'target_off', text: `${near.nick} não ligou o PvP.` };
+  if (near.koUntil > now || near.shieldUntil > now) return { code: 'protected', text: `${near.nick} está protegido por alguns segundos.` };
+  if (best > spec.reach) return { code: 'too_far', text: 'Chegue mais perto para acertar.' };
+  return { code: 'not_facing', text: `Fique de frente para ${near.nick}: ande na direção dele.` };
+}
