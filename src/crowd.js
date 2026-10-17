@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  SIDES, SKINS, MODELS, WORLD, MELEE,
+  SIDES, SKINS, MODELS, WORLD, MELEE, CROWD,
 } from '../shared/config.js';
 import { createCharacter } from './models.js';
 import { aimBone, HEIGHT_SCALE } from './avatar.js';
@@ -31,10 +31,16 @@ const CLUSTERS = [
   { x: 6, z: -96, side: 3, sx: 4, sz: 6 },
   { x: -8, z: -60, side: 0, sx: 4, sz: 6 },
   { x: 8, z: 80, side: 1, sx: 4, sz: 6 },
+  { x: 8.5, z: 28, side: 1, sx: 4, sz: 6 },
+  { x: -8.5, z: 14, side: 0, sx: 4, sz: 6 },
+  { x: -6, z: -22, side: 3, sx: 4, sz: 6 },
+  { x: 7, z: -72, side: 2, sx: 4, sz: 6 },
+  { x: -7, z: 76, side: 3, sx: 4, sz: 6 },
+  { x: 2.4, z: 20, side: 0, sx: 5, sz: 5 }, // meio da avenida, entre os grupos
 ];
 const HIDE_FAR = ['Wolf3D_Teeth', 'EyeLeft', 'EyeRight']; // detalhes que não se veem de longe
 
-export function createCrowd(scene, rng, avoid, count = 110) {
+export function createCrowd(scene, rng, avoid, count = CROWD.counts[0]) {
   const rr = (a, b) => a + rng() * (b - a);
   const pick = (a) => a[Math.floor(rng() * a.length)];
   const weighted = (w) => { let r = rng(); for (let i = 0; i < w.length; i++) { r -= w[i]; if (r <= 0) return i; } return w.length - 1; };
@@ -194,7 +200,7 @@ export function createCrowd(scene, rng, avoid, count = 110) {
     let target = null;
     let best = spec.reach;
     for (const p of people) {
-      if (p.knocked || p.hitUntil) continue;
+      if (p.knocked || p.hitUntil || !p.group.visible) continue;
       const ox = p.group.position.x - x;
       const oz = p.group.position.z - z;
       const d = Math.hypot(ox, oz);
@@ -217,6 +223,11 @@ export function createCrowd(scene, rng, avoid, count = 110) {
     return target;
   }
 
+  /** Mostra só os `n` primeiros figurantes (qualidade adaptativa); os escondidos não animam nem apanham. */
+  function setLimit(n) {
+    people.forEach((p, i) => { p.group.visible = i < n; });
+  }
+
   /** `cars`: [{ x, z, vx, vz }] em movimento; quem for atingido cai. */
   function update(time, fx = 0, fz = 0, cars = []) {
     const dt = Math.min(0.1, time - last);
@@ -224,6 +235,7 @@ export function createCrowd(scene, rng, avoid, count = 110) {
     frame += 1;
     for (let i = 0; i < people.length; i++) {
       const p = people[i];
+      if (!p.group.visible) continue;
       if (p.knocked) {
         const k = p.knocked;
         if (time < k.until) {
@@ -277,5 +289,5 @@ export function createCrowd(scene, rng, avoid, count = 110) {
     }
   }
 
-  return { update, people, hit };
+  return { update, people, hit, setLimit };
 }

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  WORLD, SIDES, SIDE_SLUGS, ANIMS, WALK_SPEED, RUN_SPEED, RACE, MELEE, VEHICLE, REACTIONS, PREMIUM, STAMINA, EMOTES, JUMP, ZONES, COMBAT,
+  WORLD, SIDES, SIDE_SLUGS, CROWD, ANIMS, WALK_SPEED, RUN_SPEED, RACE, MELEE, VEHICLE, REACTIONS, PREMIUM, STAMINA, EMOTES, JUMP, ZONES, COMBAT,
 } from '../shared/config.js';
 import { createWorld, carMesh } from './world.js';
 import { Avatar } from './avatar.js';
@@ -81,6 +81,7 @@ function applyQuality(level, notify = false) {
     scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); });
   }
   effects.density = FX_DENSITY[level] ?? 0.35;
+  world?.crowd.setLimit(CROWD.counts[level] ?? 70);
   if (typeof resize === 'function') resize();
   try { localStorage.setItem(QUALITY_KEY, String(level)); } catch { /* ignore */ }
   if (notify) toast('Ajustamos os gráficos para o jogo rodar mais fluido.');
@@ -108,7 +109,7 @@ try {
 loadingScreen.set(88, 'Montando a avenida');
 await nextPaint();
 
-const world = createWorld(scene, renderer);
+const world = createWorld(scene, renderer, { crowd: CROWD.counts[savedQuality] });
 const effects = new Effects(scene);
 effects.density = FX_DENSITY[savedQuality] ?? 1;
 
@@ -1234,6 +1235,7 @@ requestAnimationFrame(() => loadingScreen.done()); // só some depois do primeir
 window.__AVENIDA__ = {
   get players() { return remotes.size + (mode === 'play' && !watching ? 1 : 0); },
   get watching() { return watching; },
+  get crowd() { return world.crowd.people.filter((p) => p.group.visible).length; },
   get connected() { return net.connected; },
   get mode() { return mode; },
   get pos() { return { x: me.x, z: me.z }; },

@@ -71,6 +71,9 @@ export const SIGN_PRESETS = [
   'Chega de corrupção',
 ];
 
+/** Figurantes da multidão por nível de qualidade (0 = máximo): a avenida enche mais em aparelhos bons. */
+export const CROWD = { counts: [220, 170, 110, 70] };
+
 export const LIMITS = {
   nick: 16,
   chat: 140,
