@@ -54,7 +54,7 @@ export { carMesh };
 
 // ---------- Mundo ----------
 
-export function createWorld(scene, renderer) {
+export function createWorld(scene, renderer, { crowd: crowdCount } = {}) {
   const rng = mulberry32(2026);
   const rr = (a, b) => a + rng() * (b - a);
   const pick = (arr) => arr[Math.floor(rng() * arr.length)];
@@ -794,7 +794,7 @@ export function createWorld(scene, renderer) {
 
   // ---------- multidão ----------
   // o centro (0, 0) fica livre: é onde o avatar aparece no lobby e perto de onde os jogadores entram
-  const crowd = createCrowd(scene, rng, [...avoid, { x: 0, z: 0, hx: 3.4, hz: 3.4 }]);
+  const crowd = createCrowd(scene, rng, [...avoid, { x: 0, z: 0, hx: 3.4, hz: 3.4 }], crowdCount);
 
   // ---------- atualização ----------
   const snap = 96 / 2048;
