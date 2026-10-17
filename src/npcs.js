@@ -88,13 +88,13 @@ export function createMic() {
 export function createCamera() {
   const g = new THREE.Group();
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.22, 0.4), mat('#1b1d22'));
-  body.position.set(0, 0.12, 0.05);
+  body.position.set(0, -0.04, 0.05);
   const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.085, 0.2, 14).rotateX(Math.PI / 2), mat('#0e0f12'));
-  lens.position.set(0, 0.12, 0.35);
+  lens.position.set(0, -0.04, 0.35);
   const glass = new THREE.Mesh(new THREE.CircleGeometry(0.06, 14), mat('#2c4a6e', { metalness: 0.8, roughness: 0.2 }));
-  glass.position.set(0, 0.12, 0.452);
+  glass.position.set(0, -0.04, 0.452);
   const light = new THREE.Mesh(new THREE.SphereGeometry(0.012, 6, 5), mat('#ff2020', { emissive: '#ff0000', emissiveIntensity: 1 }));
-  light.position.set(0.07, 0.24, 0.15);
+  light.position.set(0.07, 0.08, 0.15);
   g.add(body, lens, glass, light);
   return shadowed(g);
 }
