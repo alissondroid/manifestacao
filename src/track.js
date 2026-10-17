@@ -19,3 +19,13 @@ export function trackVisit() {
     if (!localStorage.getItem('avenida-online:veio')) { localStorage.setItem('avenida-online:veio', '1'); track('new'); }
   } catch { track('visit'); }
 }
+
+/** Quem convidou (?de=apelido): guardado neste navegador até a conta ser criada. */
+const DE_KEY = 'avenida-online:de';
+{
+  const de = (q.get('de') || '').slice(0, 16);
+  try { if (de && !localStorage.getItem(DE_KEY)) localStorage.setItem(DE_KEY, de); } catch { /* sem storage */ }
+}
+export function inviter() {
+  try { return localStorage.getItem(DE_KEY) || undefined; } catch { return q.get('de')?.slice(0, 16) || undefined; }
+}

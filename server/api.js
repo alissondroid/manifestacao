@@ -9,6 +9,7 @@ import {
   ownedIds, equippedMap, owns, createOrder, pendingOrder, inventoryOf, vipUntil, hasPremiumEmotes, canBuy, isVip, validSide, setOrderSide, getOrder, orderByRef, setOrderRef, setOrderStatus, fulfill, equip, designsOf, saveDesign,
 } from './shop.js';
 import { filterText } from './moderation.js';
+import { afterSignup, referralCount } from './referrals.js';
 import { clientIp } from './ip.js';
 import { rankingFor } from './ranking.js';
 import { isReservedNick } from './rules.js';
@@ -19,7 +20,9 @@ import crypto from 'node:crypto';
 import {
   PROVIDER, PAYMENTS_ENABLED, WEBHOOK_CONFIGURED, ABACATE_WEBHOOK_SECRET, createCheckout, fetchStatus, simulatePix, verifyWebhook,
 } from './payments.js';
-import { SHOP, SHOP_BY_ID, SLOTS, DESIGN } from '../shared/config.js';
+import {
+  SHOP, SHOP_BY_ID, SLOTS, DESIGN, REFERRAL,
+} from '../shared/config.js';
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
@@ -116,6 +119,7 @@ const accountPayload = (user) => (user
     vipUntil: vipUntil(user.id),
     premium: hasPremiumEmotes(user.id),
     vip: isVip(user.id),
+    referrals: { count: referralCount(user.id), every: REFERRAL.every, reward: REFERRAL.reward, max: REFERRAL.maxRewards },
   }
   : {
     user: null, owned: [], equipped: {}, custom: {}, inventory: {}, vipUntil: 0, premium: false, vip: false,
@@ -222,6 +226,7 @@ export async function handleApi(req, res, hooks = {}) {
         const body = await readJson(req);
         return json(res, 200, { removed: removeBan(Number(body.id)) }), true;
       }
+      if (method === 'POST' && pathname === '/api/admin/show') return hooks.onShow?.(), json(res, 200, { ok: true }), true;
       if (method === 'GET' && pathname === '/api/admin/stats') return json(res, 200, statsSummary(Number(url.searchParams.get('days')) || 30)), true;
       return json(res, 404, { error: 'Não encontrado' }), true;
     }
@@ -276,6 +281,7 @@ export async function handleApi(req, res, hooks = {}) {
       } catch {
         return json(res, 409, { error: 'E-mail ou apelido já em uso.' }), true; // corrida entre duas contas
       }
+      hooks.onReferral?.(afterSignup(id, clientIp(req), body.ref));
       const token = createSession(id);
       return json(res, 201, accountPayload({ id, nick, email }), { 'set-cookie': sessionCookie(token, { secure }) }), true;
     }
@@ -344,6 +350,7 @@ export async function handleApi(req, res, hooks = {}) {
       } catch {
         return json(res, 409, { error: 'E-mail ou apelido já em uso.' }), true;
       }
+      hooks.onReferral?.(afterSignup(id, clientIp(req), body.ref));
       return json(res, 201, accountPayload({ id, nick, email: g.email }), cookie(id)), true;
     }
 

@@ -153,6 +153,9 @@ export const SHOP = [
 ];
 export const REPEATABLE = new Set(['vip', 'consumable', 'donation']);
 export const VIP_BADGE = 'badge-estrela'; // não é vendido: o VIP ativo mostra ⭐
+/** Convite com recompensa: a cada `every` amigos que criam conta pelo seu link, ganha `reward` (até `maxRewards` vezes). */
+export const REFERRAL = { every: 3, reward: { fogos: 3 }, maxRewards: 5 };
+
 export const CONSUMABLES = { fogos: { name: 'Fogos', icon: '🎆' }, telao: { name: 'Telão', icon: '📺' } };
 export const BILLBOARD = { max: 70, cooldownMs: 12000 };
 
