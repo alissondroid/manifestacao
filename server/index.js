@@ -14,7 +14,8 @@ import {
 import { rankingFor } from './ranking.js';
 import { filterText } from './moderation.js';
 import { createRace } from './race.js';
-import { PVP } from '../shared/config.js';
+import { PVP, REFERRAL } from '../shared/config.js';
+import { SHOWS, showAt } from './shows.js';
 import { createZones } from './zones.js';
 import { clientIp } from './ip.js';
 import { GOOGLE_CLIENT_ID } from './google.js';
@@ -116,7 +117,7 @@ async function handle(req, res) {
     return res.end(JSON.stringify({ ok: true, players: players.size, uptime: Math.round(process.uptime()) }));
   }
   if (await handleApi(req, res, {
-    onEquip: refreshLook, onDelete: kickUser, onBan: kickBanned, onPaid,
+    onEquip: refreshLook, onDelete: kickUser, onBan: kickBanned, onPaid, onShow: runShow, onReferral,
   })) return;
   if (!fs.existsSync(DIST)) {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
@@ -266,6 +267,45 @@ function onPaid(order) {
     t: 'purchase', nick, side: order.side, item: item.name, icon: item.icon, leader, newLeader,
   }, undefined, true);
 }
+
+/** Convite que contou: avisa o anfitrião se ele estiver online e atualiza o estoque de fogos. */
+function onReferral(r) {
+  if (!r) return;
+  for (const p of players.values()) {
+    if (p.userId !== r.referrerId) continue;
+    notice(p, r.rewarded
+      ? `🎉 ${r.count} amigos entraram pelo seu convite! Você ganhou ${Object.values(REFERRAL.reward)[0]} fogos 🎆.`
+      : `Mais um amigo entrou pelo seu convite (${r.count % REFERRAL.every}/${REFERRAL.every} para o próximo prêmio).`);
+    stock(p);
+  }
+}
+
+// Shows de fogos em horários fixos para todo mundo na avenida.
+let showRunning = false;
+function runShow() {
+  if (showRunning) return;
+  showRunning = true;
+  broadcast({ t: 'notice', text: '🎆 O show de fogos da Paulista começou! Olhe para o céu.' });
+  let n = 0;
+  const timer = setInterval(() => {
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.sqrt(Math.random()) * SHOWS.radius;
+    broadcast({ t: 'fx', k: 'fogos', x: round2(Math.cos(a) * r), z: round2(Math.sin(a) * r), side: Math.floor(Math.random() * SIDES.length) });
+    n += 1;
+    if (n >= SHOWS.bursts) { clearInterval(timer); showRunning = false; }
+  }, SHOWS.everyMs);
+  timer.unref?.();
+}
+let lastShowMinute = '';
+const showTimer = setInterval(() => {
+  const key = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 16);
+  if (key === lastShowMinute) return;
+  lastShowMinute = key;
+  const act = showAt(Date.now());
+  if (act?.warn) broadcast({ t: 'notice', text: `🎆 Show de fogos na Paulista em ${act.warn} minuto${act.warn > 1 ? 's' : ''}!` });
+  else if (act?.start) runShow();
+}, 15_000);
+showTimer.unref?.();
 
 /** Itens equipados mudaram na loja: atualiza o avatar de quem está online e avisa quem o vê. */
 function refreshLook(userId) {

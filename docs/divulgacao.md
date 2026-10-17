@@ -56,3 +56,38 @@ Dica de edição: o primeiro segundo precisa mostrar movimento (fogos, tomate vo
 - Aviso de "projeto independente, sem vínculo com candidatos ou partidos" visível (já está no menu).
 - Não usar rosto nem voz de políticos reais nos vídeos de divulgação.
 - Moderação em dia: denúncias, silenciar e filtro de palavras funcionando.
+
+---
+
+# Semana 2 · lançamento nos grupos
+
+## Já está no jogo
+- **Convite com recompensa:** logado, 📣 Convidar gera `?lado=...&src=convite&de=SEU_APELIDO`. A cada **3 amigos** que criam conta pelo link (IPs diferentes, e diferente do seu) o anfitrião ganha **3 fogos 🎆**, até 5 prêmios (15 amigos). O anfitrião recebe um aviso na hora, se estiver online.
+- **Shows de fogos fixos:** todo dia às **12:00 e 20:00 (Brasília)**, com aviso no jogo 5 e 1 minuto antes. Mude os horários com `SHOW_TIMES=12:00,20:00` no `.env` (vazio desliga). Para puxar um show agora (por exemplo, durante uma live): `curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" https://avenidaonline.com/api/admin/show`.
+
+## Calendário sugerido
+| Dia | Ação |
+|---|---|
+| Seg | Postar o vídeo dos fogos + "show todo dia às 20h" (TikTok, Reels, Shorts) |
+| Ter | Post no r/brasil e r/WebGames (autopromoção só onde a regra permitir) |
+| Qua | Mensagem aos 20–30 criadores (texto abaixo), com a chave VIP |
+| Qui | Puxar um show de fogos ao vivo (endpoint acima) junto com um vídeo ao vivo/stories |
+| Sex | Publicar o "ranking da semana" (print do 🏆) e chamar cada torcida para virar o jogo |
+| Dom | Repetir o ranking e anunciar o próximo show |
+
+## Textos novos
+
+**Aviso do show (stories / grupo)**
+> 🎆 Hoje às 20h tem show de fogos na Avenida Paulista (no jogo). Entra, escolhe teu lado e olha pro céu: https://avenidaonline.com/?src=show
+
+**Convite para o grupo (cola do botão Convidar)**
+> Vem pra Paulista! Entra no lado Petista no Avenida Online: https://avenidaonline.com/?lado=petista&src=convite&de=SEUAPELIDO
+
+**Página do itch.io (descrição)**
+> Avenida Online é um jogo multiplayer 3D que roda no navegador, ambientado na Avenida Paulista. Escolha seu lado, monte o personagem, converse, jogue tomates (PvP), corra de carro e dispute o ranking semanal entre os grupos. Grátis, sem baixar nada.
+> Como jogar: abra o link, escolha o lado e entre. WASD para andar, Espaço para pular, Tab para ver quem está na avenida.
+> Link para jogar: https://avenidaonline.com/?src=itch  (o jogo precisa do servidor próprio, então a página do itch.io é só uma vitrine com o link; cadastre como "Link externo/Play in browser at the original site").
+
+## Medir (semana 2)
+- `GET /api/admin/stats?days=7`: compare `visit`, `enter` e `share` por origem (`tiktok`, `zap`, `show`, `convite`, o nome de cada criador).
+- Meta da semana: 50% dos que abrem o jogo entram na avenida (`enter / visit`) e pelo menos 1 convite com recompensa concluído.

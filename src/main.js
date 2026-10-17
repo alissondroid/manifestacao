@@ -801,13 +801,15 @@ renderPortraits(renderer, profile.side);
 
 /** Convite: link com o lado de quem convida, pelo compartilhamento do aparelho ou copiado. */
 async function invite() {
-  const url = `${location.origin}/?lado=${SIDE_SLUGS[profile.side]}&src=convite`;
+  const url = `${location.origin}/?lado=${SIDE_SLUGS[profile.side]}&src=convite${acct.user ? `&de=${encodeURIComponent(acct.user.nick)}` : ''}`;
   const text = `Vem pra Paulista! Entra no lado ${SIDES[profile.side].name} no Avenida Online:`;
   track('share');
+  const r = acct.referrals;
+  const hint = r ? `A cada ${r.every} amigos que criarem conta pelo link, você ganha ${Object.values(r.reward)[0]} fogos 🎆 (${r.count % r.every}/${r.every}).` : 'Entre na conta para ganhar fogos quando seus amigos criarem conta pelo link.';
   if (navigator.share) {
-    try { await navigator.share({ title: 'Avenida Online', text, url }); return; } catch (e) { if (e?.name === 'AbortError') return; }
+    try { await navigator.share({ title: 'Avenida Online', text, url }); toast(hint); return; } catch (e) { if (e?.name === 'AbortError') return; }
   }
-  try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Link de convite copiado! Cole no WhatsApp.'); } catch { toast(url); }
+  try { await navigator.clipboard.writeText(`${text} ${url}`); toast(`Link de convite copiado! Cole no WhatsApp. ${hint}`); } catch { toast(url); }
 }
 $('#invitebtn').onclick = invite;
 

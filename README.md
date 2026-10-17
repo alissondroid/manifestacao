@@ -126,6 +126,11 @@ Os termos do Mixamo e do Ready Player Me permitem usar esses recursos em projeto
 - **Corrida** (botão 🏁 no HUD): quem entra espera até 15 s por outros corredores, é levado à linha de largada (pórtico em z = −100), conta 3-2-1 e corre até a chegada (z = +100). O servidor marca o tempo pela posição que já valida; resultado da prova e os 10 melhores tempos ficam em `race_times` (SQLite, `GET /api/race/top`). Mensagens `race {action}` do cliente e `race {state, n, startsIn, results, top}` do servidor.
 - **PvP, a tomatada** (botão 🍅, tecla F para arremessar): só entre quem ligou o PvP. O servidor resolve o acerto pela posição e direção de quem arremessa (alcance 18 m, raio 0,9 m, 1 arremesso a cada 1,2 s) e manda `throw` para quem está perto (o cliente anima o tomate) e `hitby` para o atingido. Placar por lado e os 5 maiores acertadores em `pvp {scores, top}`.
 
+## Convites e shows de fogos
+
+- **Convite com recompensa** (`server/referrals.js`, `REFERRAL` em `shared/config.js`): o botão 📣 gera um link com `?de=apelido`; quem cria a conta (e-mail ou Google) por ele conta para o anfitrião. Cada IP vale uma vez por anfitrião e o IP do cadastro do próprio anfitrião não vale (guardamos só um hash). A cada 3 convidados: 3 fogos, até 5 vezes. O estoque novo chega por `inv` e um aviso por `notice`.
+- **Shows de fogos** (`server/shows.js`): 12:00 e 20:00 de Brasília (`SHOW_TIMES` muda ou, vazio, desliga), com aviso 5 e 1 minuto antes. `POST /api/admin/show` (token de admin) dispara um na hora.
+
 ## Editar personagem em jogo
 
 O botão 🎨 Personagem (HUD) abre o mesmo menu do lobby como editor, sem sair da avenida: o personagem fica parado, sem a etapa do lado nem o apelido. "Salvar alterações" envia `setlook`; o servidor revalida tudo com `cleanLook` (limite de 1 mensagem a cada 500 ms) e retransmite `look` a quem o vê. "Cancelar" restaura o visual anterior. Não abre dirigindo, nocauteado ou em corrida.

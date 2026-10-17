@@ -53,6 +53,7 @@ export function initAccount({ onChange, getSide }) {
       vipUntil: data.vipUntil ?? 0,
       premium: !!data.premium,
       vip: !!data.vip,
+      referrals: data.referrals ?? null,
       shop: data.shop ?? account.shop,
       googleClientId: data.googleClientId !== undefined ? data.googleClientId : account.googleClientId,
     };
