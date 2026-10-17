@@ -13,6 +13,9 @@ export const SIDES = [
   { id: 3, name: 'Sem partido', short: 'Sem partido', num: 'BR', color: '#7c8aa0' },
 ];
 
+/** Nomes curtos dos lados para links de convite (?lado=). */
+export const SIDE_SLUGS = ['petista', 'bolsonarista', 'anarquia', 'sem-partido'];
+
 // ---------- Visual dos personagens (tudo é índice nestas listas) ----------
 
 export const BODIES = ['Masculino', 'Feminino'];
