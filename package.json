@@ -6,7 +6,7 @@
   "description": "Mundo 3D multiplayer no navegador: avenida, avatares, chat e presença em tempo real.",
   "scripts": {
     "dev": "concurrently -k -n server,client -c blue,green \"node --watch --env-file-if-exists=.env server/index.js\" \"vite\"",
-    "build": "vite build",
+    "build": "vite build && node scripts/precompress.mjs",
     "start": "NODE_ENV=production node --env-file-if-exists=.env server/index.js",
     "test": "node --test --test-timeout=60000 \"test/**/*.test.js\""
   },

@@ -54,6 +54,7 @@ const MIME = {
   '.txt': 'text/plain; charset=utf-8',
   '.xml': 'application/xml; charset=utf-8',
   '.webmanifest': 'application/manifest+json',
+  '.glb': 'model/gltf-binary',
 };
 
 // Cabeçalhos de segurança das páginas e arquivos estáticos. A CSP só vale para HTML.
@@ -99,6 +100,16 @@ const server = http.createServer(async (req, res) => {
 server.headersTimeout = 15_000;
 server.requestTimeout = 30_000;
 
+/** O cabeçalho Accept-Encoding aceita essa codificação (e não com q=0)? */
+function accepts(header, name) {
+  return header.split(',').some((part) => {
+    const [token, ...params] = part.trim().toLowerCase().split(';');
+    if (token !== name) return false;
+    const q = params.map((p) => p.trim()).find((p) => p.startsWith('q='));
+    return !q || Number(q.slice(2)) > 0;
+  });
+}
+
 async function handle(req, res) {
   if (req.url === '/healthz') {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
@@ -140,12 +151,34 @@ async function handle(req, res) {
     const cache = file.endsWith('index.html') ? 'no-cache'
       : inAssets ? 'public, max-age=31536000, immutable'
         : 'public, max-age=86400';
-    res.writeHead(200, {
+    // versão pré-comprimida pelo build (scripts/precompress.mjs), se o navegador aceitar
+    const accepted = String(req.headers['accept-encoding'] || '');
+    let enc = null;
+    let sendFile = file;
+    let size = st.size;
+    for (const [name, ext] of [['br', '.br'], ['gzip', '.gz']]) {
+      if (!accepts(accepted, name)) continue;
+      try {
+        const cst = fs.statSync(file + ext);
+        if (cst.isFile()) { enc = name; sendFile = file + ext; size = cst.size; break; }
+      } catch { /* sem versão comprimida */ }
+    }
+    const etag = `"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}${enc ? `-${enc}` : ''}"`;
+    const headers = {
       'content-type': MIME[path.extname(file)] || 'application/octet-stream',
       'cache-control': cache,
+      etag,
+      vary: 'Accept-Encoding',
+      ...(enc ? { 'content-encoding': enc } : {}),
       ...securityHeaders(file.endsWith('.html')),
-    });
-    fs.createReadStream(file).on('error', () => res.end()).pipe(res);
+    };
+    if (req.headers['if-none-match'] === etag) {
+      res.writeHead(304, headers);
+      return res.end();
+    }
+    res.writeHead(200, { ...headers, 'content-length': size });
+    if (req.method === 'HEAD') return res.end();
+    fs.createReadStream(sendFile).on('error', () => res.end()).pipe(res);
   });
 }
 
