@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  SIDES, SKINS, MODELS, WORLD, MELEE, CROWD,
+  SIDES, SKINS, MODELS, WORLD, MELEE, CROWD, NPCS,
 } from '../shared/config.js';
 import { createCharacter } from './models.js';
 import { aimBone, HEIGHT_SCALE } from './avatar.js';
@@ -10,6 +10,9 @@ import {
   ageCharacter, createReadingGlasses, createCane, poseElderly, updateCane,
 } from './aging.js';
 import { attachToBone } from './avatar.js';
+import {
+  NPC_ROLES, createCooler, createWaterSign, createPoliceCap, createBelt, createMic, createCamera,
+} from './npcs.js';
 
 // Multidão de figurantes com os mesmos modelos humanos dos jogadores (um esqueleto animado
 // por pessoa). Cada lado se concentra em um ponto da avenida e usa suas cores de camisa.
@@ -153,6 +156,91 @@ export function createCrowd(scene, rng, avoid, count = CROWD.counts[0]) {
     });
   }
 
+  // ---------- figurantes especiais ----------
+  const faceTo = (ax, az, bx, bz) => Math.atan2(bx - ax, bz - az); // giro para a pessoa em A olhar para B
+  function addNpc(role, x, z, {
+    yaw = rng() * Math.PI * 2, female = false, walker = false, holder = null, cap = false, belt = false, cooler = false,
+  }) {
+    const def = NPC_ROLES[role];
+    const c = createCharacter(female ? pick(MODELS.female) : 'rpm');
+    const group = new THREE.Group();
+    group.add(c.root);
+    group.position.set(x, 0, z);
+    group.rotation.y = yaw;
+    scene.add(group);
+    if (c.tintable) {
+      const skin = new THREE.Color(pick(SKINS));
+      const tint = new THREE.Color(skin.r / BASE_SKIN.r, skin.g / BASE_SKIN.g, skin.b / BASE_SKIN.b);
+      c.mats.skinHead.color.copy(tint);
+      c.mats.skinBody.color.copy(tint);
+      c.outfit.skin.copy(skin);
+      if (c.meshes.Wolf3D_Beard) c.meshes.Wolf3D_Beard.visible = !female && rng() < 0.4;
+      for (const name of HIDE_FAR) if (c.meshes[name]) c.meshes[name].visible = false;
+    }
+    if (c.outfit) {
+      c.outfit.top.set(pick(def.top));
+      c.outfit.bottom.set(pick(def.bottom));
+    }
+    const hs = pick(HEIGHT_SCALE);
+    c.bones.hips.scale.setScalar(hs);
+    group.updateMatrixWorld(true);
+    if (cap) { // quepe: mesma medida do boné do avatar
+      const hd = c.head || { top: 0.23, radius: 0.1, cx: 0, cz: 0.01 };
+      const capR = Math.max(0.105, hd.radius * hs + 0.015);
+      const wrap = new THREE.Group();
+      const hat = createPoliceCap();
+      hat.scale.setScalar(capR / 0.115);
+      wrap.add(hat);
+      attachToBone(wrap, c.bones.head, group, [hd.cx * hs, hd.top * hs + 0.012 - capR, hd.cz * hs]);
+    }
+    if (belt) attachToBone(createBelt(), c.bones.hips, group, [-0.2, 0.0, 0.02]);
+    if (cooler) attachToBone(createCooler(), c.bones.hips, group, [0.3, -0.12, 0.04]);
+    c.root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
+    if (holder) group.add(holder);
+
+    const mixer = new THREE.AnimationMixer(c.root);
+    const action = mixer.clipAction(walker ? c.clips.walk : c.clips.idle);
+    action.timeScale = walker ? 0.8 : rr(0.9, 1.1);
+    action.play();
+    mixer.update(rr(0, 10));
+    people.push({
+      group, mixer, walker, x, z, yaw, speed: rr(0.35, 0.55), range: rr(5, 9), phase: rr(0, 6.28), holder, bones: c.bones, cane: null,
+      clips: c.clips, base: action, hitUntil: 0, hitAction: null, shove: null, special: role,
+    });
+    return group;
+  }
+
+  // onde cada tipo aparece: perto dos grupos, mas fora dos obstáculos
+  const near = (c, spread) => {
+    for (let n = 0; n < 40; n++) {
+      const x = c.x + (rng() - 0.5) * spread;
+      const z = c.z + (rng() - 0.5) * spread;
+      if (!blocked(x, z) && !blocked(x + 1.6, z) && !blocked(x - 1.6, z) && Math.abs(x) < WORLD.halfWidth - 0.6) return { x, z };
+    }
+    return null;
+  };
+  for (let i = 0; i < NPCS.water; i++) {
+    const s = near(CLUSTERS[(i * 2) % CLUSTERS.length], 10);
+    if (s) addNpc('water', s.x, s.z, { walker: true, holder: createWaterSign(), cooler: true });
+  }
+  for (let i = 0; i < NPCS.policePairs; i++) {
+    const s = near(CLUSTERS[(i * 3 + 1) % CLUSTERS.length], 8);
+    if (!s) continue;
+    const yaw = rng() < 0.5 ? 0 : Math.PI;
+    addNpc('police', s.x, s.z, { yaw, cap: true, belt: true });
+    addNpc('police', s.x + 1.3, s.z + (rng() - 0.5) * 0.6, { yaw: yaw + rr(-0.4, 0.4), cap: true, belt: true, female: i % 2 === 1 });
+  }
+  for (let i = 0; i < NPCS.pressTeams; i++) {
+    const s = near(CLUSTERS[(i * 2 + 3) % CLUSTERS.length], 12);
+    if (!s) continue;
+    const a = rng() * Math.PI * 2;
+    const cx = s.x + Math.cos(a) * 1.7;
+    const cz = s.z + Math.sin(a) * 1.7;
+    if (blocked(cx, cz) || Math.abs(cx) > WORLD.halfWidth - 0.4) continue;
+    addNpc('reporter', s.x, s.z, { yaw: faceTo(s.x, s.z, cx, cz), holder: createMic(), female: i % 2 === 0 });
+    addNpc('camera', cx, cz, { yaw: faceTo(cx, cz, s.x, s.z), holder: createCamera() });
+  }
+
   let last = 0;
   let frame = 0;
   /** `fx, fz`: ponto de interesse (jogador/câmera). Quem está longe anima a 1/3 da taxa. */
@@ -225,7 +313,8 @@ export function createCrowd(scene, rng, avoid, count = CROWD.counts[0]) {
 
   /** Mostra só os `n` primeiros figurantes (qualidade adaptativa); os escondidos não animam nem apanham. */
   function setLimit(n) {
-    people.forEach((p, i) => { p.group.visible = i < n; });
+    let k = 0;
+    for (const p of people) p.group.visible = !!p.special || k++ < n; // os especiais ficam sempre
   }
 
   /** `cars`: [{ x, z, vx, vz }] em movimento; quem for atingido cai. */

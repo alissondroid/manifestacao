@@ -1236,6 +1236,9 @@ window.__AVENIDA__ = {
   get players() { return remotes.size + (mode === 'play' && !watching ? 1 : 0); },
   get watching() { return watching; },
   get crowd() { return world.crowd.people.filter((p) => p.group.visible).length; },
+  get npcs() { return world.crowd.people.reduce((n, p) => (p.special ? { ...n, [p.special]: (n[p.special] || 0) + 1 } : n), {}); },
+  /** Só depuração: posição e giro dos figurantes especiais. */
+  npcAt: (role) => world.crowd.people.filter((p) => p.special === role).map((p) => ({ x: p.group.position.x, z: p.group.position.z, ry: p.group.rotation.y })),
   get connected() { return net.connected; },
   get mode() { return mode; },
   get pos() { return { x: me.x, z: me.z }; },

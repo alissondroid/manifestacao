@@ -73,6 +73,8 @@ export const SIGN_PRESETS = [
 
 /** Figurantes da multidão por nível de qualidade (0 = máximo): a avenida enche mais em aparelhos bons. */
 export const CROWD = { counts: [220, 170, 110, 70] };
+/** Figurantes especiais (sempre visíveis): vendedores de água, duplas de policiais e equipes de reportagem (repórter + câmera). */
+export const NPCS = { water: 6, policePairs: 5, pressTeams: 3 };
 
 export const LIMITS = {
   nick: 16,

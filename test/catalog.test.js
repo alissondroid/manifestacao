@@ -99,3 +99,8 @@ test('multidão: mais figurantes nos níveis bons e menos quando a qualidade cai
   assert.ok(counts[0] > 110, 'mais que os 110 de antes');
   for (let i = 1; i < counts.length; i += 1) assert.ok(counts[i] < counts[i - 1]);
 });
+
+test('figurantes especiais: vendedores, policiais e reportagem existem e em número razoável', () => {
+  const { NPCS } = C;
+  for (const k of ['water', 'policePairs', 'pressTeams']) assert.ok(NPCS[k] >= 1 && NPCS[k] <= 12, k);
+});
