@@ -10,6 +10,7 @@ import {
 } from '../../shared/votacao.js';
 import { createVotacaoWorld } from './world.js';
 import { openUrna } from './urna.js';
+import { createFigurante } from './figurante.js';
 import { track, trackVisit } from '../track.js';
 import { createQualityMonitor, QUALITY } from '../quality.js';
 
@@ -79,25 +80,23 @@ let camDist = 5.2;
 let urnaClose = null;
 
 const FACES = 3; // só personagens comuns: sem os rostos de políticos reais do jogo da avenida
-const npcLook = (seed) => {
+const PANTS = ['#35507a', '#20252b', '#b9a37c', '#4b6b9c'];
+const npcLook = (seed, shirtIdx) => {
   const r = (n) => Math.abs(Math.sin(seed * 91.7 + n * 13.1));
-  const body = r(1) < 0.25 ? 1 : 0; // o corpo masculino comum (rpm) é o mais leve de desenhar
-  return lookOf({
-    body, age: r(2) < 0.2 ? 1 : 0, face: body === 1 ? Math.floor(r(3) * 2) : 0, height: Math.floor(r(4) * 3), skin: Math.floor(r(5) * SKINS.length), hairStyle: 0, hair: Math.floor(r(6) * 4), beard: 0, shirt: Math.floor(r(7) * SHIRTS.length), top: 0, pants: Math.floor(r(8) * 4), flag: 0, sign: '',
-  });
+  return {
+    female: r(1) < 0.3, seed: Math.floor(r(2) * 1000), shirt: SHIRTS[shirtIdx ?? Math.floor(r(7) * SHIRTS.length)], pants: PANTS[Math.floor(r(8) * PANTS.length)],
+  };
 };
-function standing(look, x, z, ry) {
-  const a = new Avatar(look);
+function standing(opts, x, z, ry) {
+  const a = createFigurante(opts);
   a.group.position.set(x, 0, z);
   a.group.rotation.y = ry;
   scene.add(a.group);
   return a;
 }
-const still = []; // figurantes parados (mesários, vizinhos, guardas)
+const still = []; // figurantes parados (mesários, vizinhos)
 function addStill(seed, x, z, ry, shirt) {
-  const look = npcLook(seed);
-  if (shirt != null) look.shirt = shirt;
-  still.push(standing(look, x, z, ry));
+  still.push(standing(npcLook(seed, shirt), x, z, ry));
 }
 // mesários (dois por sala) e vizinhos
 PLACES.roomX.forEach((rx, i) => {
