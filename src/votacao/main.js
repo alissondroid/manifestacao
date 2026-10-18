@@ -588,5 +588,6 @@ window.__VOTO__ = {
   /** Só para testes: leva o personagem até lá (o servidor ainda confere o limite de cada etapa). */
   warp(x, z) { me.x = x; me.z = z; me.tx = null; },
   get sala() { return me.sala; },
+  get stats() { const i = renderer.info.render; return { calls: i.calls, tris: i.triangles, geoms: renderer.info.memory.geometries, tex: renderer.info.memory.textures }; },
 };
 addEventListener('pagehide', () => net.leave());
