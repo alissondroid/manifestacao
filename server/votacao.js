@@ -108,7 +108,7 @@ export function createVotacao({ wss, send, cleanLook }) {
       t: 'welcome', id, x: p.x, z: p.z, ry: 0, stage: p.stage, docs: p.docs, secao: null, nick,
     });
     send(ws, lineMsg());
-    sendAll({ t: 'online', n: players.size });
+    sendAll({ t: 'vonline', n: players.size });
   }
 
   function gateCheck(p) {
@@ -239,7 +239,7 @@ export function createVotacao({ wss, send, cleanLook }) {
     leaveLine(p);
     players.delete(p.id);
     ws.voto = null;
-    sendAll({ t: 'online', n: players.size });
+    sendAll({ t: 'vonline', n: players.size });
   }
 
   // sincronização a 10 Hz: a seção é pequena, todo mundo vê todo mundo

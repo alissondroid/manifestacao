@@ -205,7 +205,7 @@ function onMessage(m) {
     case 'line': lineEntries = m.entries; syncNpcs(); break;
     case 'mesario': startBiometria(m.ms); break;
     case 'notice': toast(m.text); break;
-    case 'online': $('#von').textContent = `${m.n} eleitor${m.n === 1 ? '' : 'es'} na escola`; break;
+    case 'vonline': $('#von').textContent = `${m.n} eleitor${m.n === 1 ? '' : 'es'} na escola`; break;
     case 'chat': logChat(m); break;
     case 'denied': $('#verror').textContent = m.reason; $('#verror').hidden = false; $('#vlobby').hidden = false; $('#vhud').hidden = true; started = false; joined = false; net.joinMsg = null; break;
     default:
