@@ -84,3 +84,48 @@ test('a fila anda em linha reta para o guichê', () => {
   assert.ok(queueSpot(5).z < queueSpot(4).z);
   assert.ok(queueSpot(QUEUE.slots - 1).z > PLACES.yard.z0, 'a última vaga ainda fica dentro do pátio');
 });
+
+import { CIDADES, PERSONAS, cargosDe, cidadeDe, personaDe } from '../shared/votacao.js';
+
+test('cidades do Brasil: 6 cidades com rua, escola, paleta e nomes regionais', () => {
+  assert.equal(CIDADES.length, 6);
+  assert.equal(new Set(CIDADES.map((c) => c.id)).size, CIDADES.length);
+  for (const c of CIDADES) {
+    assert.match(c.uf, /^[A-Z]{2}$/);
+    assert.ok(c.nome && c.rua && c.escola && c.bairro && c.apelido, c.id);
+    assert.ok(c.casas.length >= 3 && c.nomes.length >= 8, c.id);
+    assert.ok(['skyline', 'morros', 'casario', 'coqueiros', 'serra', 'praca'].includes(c.fundo), c.id);
+  }
+  assert.equal(cidadeDe('xx').id, CIDADES[0].id, 'cidade inválida cai na primeira');
+  assert.equal(cidadeDe('rj').nome, 'Rio de Janeiro');
+});
+
+test('urna realista: 2 senadores e deputado estadual, com candidatos regionais sem número repetido', () => {
+  for (const c of CIDADES) {
+    const cargos = cargosDe(c);
+    assert.deepEqual(cargos.map((x) => x.digitos), [4, 5, 3, 3, 2, 2], c.id);
+    assert.deepEqual(cargos.map((x) => x.nome), ['Deputado Federal', 'Deputado Estadual', 'Senador (1º voto)', 'Senador (2º voto)', 'Governador', 'Presidente']);
+    for (const cargo of cargos) {
+      const nums = cargo.candidatos.map((k) => k.numero);
+      assert.equal(new Set(nums).size, nums.length, `${c.id} ${cargo.id}`);
+      for (const n of nums) assert.equal(n.length, cargo.digitos);
+    }
+  }
+  const sp = cargosDe(cidadeDe('sp'));
+  const ba = cargosDe(cidadeDe('ssa'));
+  assert.notDeepEqual(sp[0].candidatos.map((k) => k.nome), ba[0].candidatos.map((k) => k.nome), 'nomes variam por estado');
+  assert.deepEqual(sp[5].candidatos, ba[5].candidatos, 'a disputa presidencial é a mesma em todo o país');
+  const u = criarUrna(sp);
+  for (const k of sp) { const n = k.candidatos[0].numero; n.split('').forEach((d) => u.digita(d)); u.confirma(); }
+  assert.equal(u.view().done, true);
+  assert.equal(u.votos.length, 6);
+});
+
+test('personas: idoso, gestante/PcD têm prioridade; jovem e adulto não', () => {
+  assert.deepEqual(PERSONAS.map((p) => p.id), ['adulto', 'idoso', 'gestante', 'jovem']);
+  assert.equal(personaDe('idoso').prioridade, true);
+  assert.equal(personaDe('gestante').prioridade, true);
+  assert.equal(personaDe('jovem').prioridade, false);
+  assert.equal(personaDe('???').id, 'adulto');
+  assert.equal(personaDe('idoso').look.age, 1);
+});

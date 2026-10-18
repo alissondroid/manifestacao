@@ -185,3 +185,95 @@ export function criarUrna(cargos = CARGOS) {
     },
   };
 }
+
+// ---------- Brasil: cidades, eleitores e a urna de cada estado ----------
+
+/** Cidades jogáveis. `casas`: cores das fachadas; `andares`: altura dos prédios; `fundo`: o que se vê ao longe. */
+export const CIDADES = [
+  {
+    id: 'sp', nome: 'São Paulo', uf: 'SP', apelido: 'Garoa, concreto e prédio pra todo lado', rua: 'Rua Quinze de Novembro', bairro: 'Jardim Esperança',
+    escola: 'E.M. Professora Maria Aparecida', casas: ['#cfc8bb', '#b9a99a', '#d9d2c3', '#a8b4bd', '#c9b79a'], andares: [3, 9], telhado: '#8a8f94', fundo: 'skyline', arvore: 'sibipiruna', ceu: '#c9d3da', muro: '#d8d3c8',
+    nomes: ['Marcos Albuquerque', 'Camila Fontes', 'Rogério Tanaka', 'Patrícia Moraes', 'Eduardo Bianchi', 'Luciana Okamoto', 'Fábio Castellani', 'Renata Villar', 'Cláudio Mazzaro', 'Elaine Quintanilha'],
+  },
+  {
+    id: 'rj', nome: 'Rio de Janeiro', uf: 'RJ', apelido: 'Morro, mar e calçada de pedra portuguesa', rua: 'Rua Sete de Setembro', bairro: 'Engenho Novo',
+    escola: 'E.M. Joaquim Nabuco', casas: ['#e8c26a', '#e07a5f', '#81b29a', '#f2cc8f', '#8ecae6'], andares: [2, 5], telhado: '#b5523b', fundo: 'morros', arvore: 'palmeira', ceu: '#bfe0f2', muro: '#f0e2b8',
+    nomes: ['Washington Brandão', 'Jussara Pimentel', 'Leandro Gouvêa', 'Simone Escobar', 'Rodrigo Maia Neto', 'Vanessa Tavares', 'Thiago Leitão', 'Marília Seabra', 'Anderson Cardozo', 'Bianca Nogueira'],
+  },
+  {
+    id: 'ssa', nome: 'Salvador', uf: 'BA', apelido: 'Casarões coloridos, ladeira e cheiro de dendê', rua: 'Ladeira da Conceição', bairro: 'Liberdade',
+    escola: 'Escola Municipal Dona Canô', casas: ['#f4a259', '#5b8e7d', '#f25c54', '#f7b267', '#8cb369', '#4ea8de'], andares: [2, 4], telhado: '#c1440e', fundo: 'casario', arvore: 'coqueiro', ceu: '#b8e1f5', muro: '#f6e2b3',
+    nomes: ['Jaciara Santana', 'Valdemir Bonfim', 'Railda Cerqueira', 'Josenildo Argolo', 'Marinalva Ribeiro', 'Edvaldo Pitanga', 'Cleide Sacramento', 'Ubiratã Moura', 'Isaura Menezes', 'Gilson Barreto'],
+  },
+  {
+    id: 'rec', nome: 'Recife', uf: 'PE', apelido: 'Rios, pontes, sobrados e frevo', rua: 'Rua Barão de Lucena', bairro: 'Casa Amarela',
+    escola: 'E.M. Ariano Suassuna', casas: ['#f2d16b', '#e9967a', '#9ccfd8', '#e6e2d3', '#d98c8c'], andares: [2, 6], telhado: '#a9442b', fundo: 'coqueiros', arvore: 'coqueiro', ceu: '#bde4f4', muro: '#f1e6c4',
+    nomes: ['Severino Alencar', 'Lourdes Pessoa', 'Anacleto Vasconcelos', 'Terezinha Cavalcanti', 'Edivaldo Lins', 'Socorro Arruda', 'Reginaldo Falcão', 'Neuma Siqueira', 'Cícero Wanderley', 'Adelaide Mota'],
+  },
+  {
+    id: 'bh', nome: 'Belo Horizonte', uf: 'MG', apelido: 'Serra, ladeira e pão de queijo', rua: 'Rua dos Inconfidentes', bairro: 'Santa Tereza',
+    escola: 'E.M. Carlos Drummond', casas: ['#d9c7a3', '#b97a57', '#c8d5b9', '#e3d5ca', '#a3b18a'], andares: [2, 7], telhado: '#9c4a2f', fundo: 'serra', arvore: 'mangueira', ceu: '#c4dcec', muro: '#e1d4b8',
+    nomes: ['Geraldo Magalhães', 'Maria das Graças Viana', 'Wanderley Resende', 'Sebastiana Pimenta', 'Altamiro Drumond', 'Conceição Vilela', 'Expedito Lacerda', 'Aparecida Nunes', 'Délcio Andrade', 'Nilza Bittencourt'],
+  },
+  {
+    id: 'int', nome: 'Santa Rita do Sul', uf: 'RS', apelido: 'Praça, igreja matriz e todo mundo se conhece', rua: 'Rua da Matriz', bairro: 'Centro',
+    escola: 'E.M.E.F. Dom Pedro II', casas: ['#efe6d2', '#d8c3a5', '#c9d6c3', '#e8d5b7', '#f0d9b5'], andares: [1, 2], telhado: '#a64b2a', fundo: 'praca', arvore: 'mangueira', ceu: '#cfe5f2', muro: '#eee3c9',
+    nomes: ['Ivo Schneider', 'Dalila Kraemer', 'Nelson Bortolini', 'Ilse Brandalise', 'Arlindo Pasqualini', 'Teresinha Webber', 'Osvaldo Dall’Agnol', 'Lurdes Fontana', 'Valmor Hoffmann', 'Marlene Zanella'],
+  },
+];
+export const cidadeDe = (id) => CIDADES.find((c) => c.id === id) ?? CIDADES[0];
+
+/** Eleitores: cada um tem um direito ou uma regra diferente na vida real. */
+export const PERSONAS = [
+  {
+    id: 'adulto', nome: 'Adulto', prioridade: false, look: { age: 0 },
+    dica: 'De 18 a 70 anos o voto é obrigatório: quem não vota precisa justificar a ausência.',
+  },
+  {
+    id: 'idoso', nome: 'Idoso', prioridade: true, look: { age: 1 },
+    dica: 'A partir dos 70 anos o voto é facultativo e você tem prioridade na fila.',
+  },
+  {
+    id: 'gestante', nome: 'Gestante ou PcD', prioridade: true, look: { age: 0 },
+    dica: 'Gestantes, lactantes e pessoas com deficiência têm prioridade na fila e a seção deve ser acessível.',
+  },
+  {
+    id: 'jovem', nome: 'Primeiro voto (16 ou 17 anos)', prioridade: false, look: { age: 0 },
+    dica: 'Aos 16 e 17 anos o voto é facultativo. Parabéns pelo primeiro voto!',
+  },
+];
+export const personaDe = (id) => PERSONAS.find((p) => p.id === id) ?? PERSONAS[0];
+
+const PREFIXOS = Object.keys(PARTIDOS); // '62', '74', '58', '83'
+
+/** Candidatos fictícios de um cargo: o partido dá os 2 primeiros dígitos; os nomes mudam por estado. */
+function candidatos(digitos, nomes, quantos, seed) {
+  const out = [];
+  const used = new Set();
+  const cauda = digitos - 2;
+  for (let i = 0; i < quantos; i += 1) {
+    const prefixo = PREFIXOS[i % PREFIXOS.length];
+    let n = cauda > 0 ? (seed * 37 + i * 193 + 11) % (10 ** cauda) : 0;
+    let numero;
+    do { numero = prefixo + (cauda > 0 ? String(n).padStart(cauda, '0') : ''); n = (n + 1) % (10 ** Math.max(cauda, 1)); } while (used.has(numero));
+    used.add(numero);
+    out.push({ numero, nome: nomes[(seed + i) % nomes.length] });
+  }
+  return out;
+}
+const PRESIDENCIAVEIS = ['Sofia Albuquerque', 'Antônio Bezerra', 'Isabel Camargo', 'Henrique Vasconcelos'];
+
+/** Os cargos da urna na ordem real, com os candidatos (fictícios) do estado da cidade. */
+export function cargosDe(cidade) {
+  const k = CIDADES.indexOf(cidade) + 1 || 1;
+  const nomes = cidade.nomes;
+  const sen = candidatos(3, nomes, 3, k + 2);
+  return [
+    { id: 'dep-federal', nome: 'Deputado Federal', digitos: 4, candidatos: candidatos(4, nomes, 5, k) },
+    { id: 'dep-estadual', nome: 'Deputado Estadual', digitos: 5, candidatos: candidatos(5, nomes, 5, k + 1) },
+    { id: 'senador-1', nome: 'Senador (1º voto)', digitos: 3, candidatos: sen },
+    { id: 'senador-2', nome: 'Senador (2º voto)', digitos: 3, candidatos: sen },
+    { id: 'governador', nome: 'Governador', digitos: 2, candidatos: candidatos(2, nomes, 4, k + 3) },
+    { id: 'presidente', nome: 'Presidente', digitos: 2, candidatos: candidatos(2, PRESIDENCIAVEIS, 4, 0) },
+  ];
+}

@@ -103,3 +103,11 @@ body.vota #labels { position: fixed; inset: 0; pointer-events: none; z-index: 5;
   .vqueue { top: auto; bottom: 150px; }
   .vgoal { width: calc(100vw - 24px); }
 }
+
+.vcities { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; text-transform: none; letter-spacing: 0; }
+.vcity { text-align: left; padding: 9px 10px; border-radius: 10px; border: 1px solid #ffffff26; background: #ffffff10; color: #fff; cursor: pointer; display: grid; gap: 1px; }
+.vcity b { font-size: 13.5px; } .vcity small { font-size: 11px; opacity: 0.7; line-height: 1.25; }
+.vcity.on { border-color: #ffd23f; background: #ffd23f22; }
+.vdica { text-transform: none; letter-spacing: 0; font-size: 12px; opacity: 0.8; line-height: 1.35; }
+.seg.wrap { flex-wrap: wrap; }
+.vtitle2 { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #ffd23f; margin-bottom: 2px; }

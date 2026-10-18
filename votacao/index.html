@@ -48,7 +48,9 @@
       <div class="vcard">
         <p class="eyebrow">Dia da votação</p>
         <h1>Do portão à urna</h1>
-        <p class="vlead">Saia de casa com o documento, vá à escola, enfrente a fila, apresente-se aos mesários e vote. Tudo com candidatos e partidos <b>fictícios</b>.</p>
+        <p class="vlead">Domingo de eleição no Brasil: saia de casa com o documento, vá à escola, enfrente a fila, apresente-se aos mesários e vote nos 6 cargos. Candidatos e partidos <b>fictícios</b>.</p>
+        <div class="vfield"><span>Onde você vota</span><div id="vcities" class="vcities"></div></div>
+        <div class="vfield"><span>Quem é você</span><div id="vpersonas" class="seg wrap"></div><small id="vdica" class="vdica"></small></div>
         <label class="vfield"><span>Seu nome</span><input id="vnick" maxlength="16" autocomplete="off" placeholder="Eleitor (em branco: Eleitor + número)" /></label>
         <div class="vfield"><span>Corpo</span><div id="vbodies" class="seg"></div></div>
         <div class="vfield"><span>Rosto</span><div id="vfaces" class="seg"></div></div>
@@ -63,6 +65,7 @@
     <!-- Jogo -->
     <section id="vhud" hidden>
       <aside class="vgoal">
+        <small id="vtitle2" class="vtitle2"></small>
         <h2 id="vstep">Em casa</h2>
         <p id="vtext">Pegue o documento na mesa e saia pela porta.</p>
         <ol id="vsteps"></ol>

@@ -113,3 +113,34 @@ test('sala errada é devolvida ao corredor e o voto nunca é enviado ao servidor
   assert.equal(bad.length, 0);
   c.close();
 });
+
+test('fila preferencial: prioridade entra na frente (atrás só dos 3 primeiros)', () => {
+  const l = createLine({ slots: 16, npcStart: 9, minNpc: 5 });
+  assert.equal(l.join(7, { prioridade: true }), 3);
+  assert.equal(l.indexOf(7), 3);
+  assert.equal(l.join(8), l.entries.length - 1, 'quem não tem prioridade vai para o fim');
+  assert.ok(l.indexOf(7) < l.indexOf(8));
+});
+
+test('cada cidade tem a sua própria seção: quem está em outra cidade não aparece', async () => {
+  const a = await connect(srv.port);
+  const b = await connect(srv.port);
+  const c = await connect(srv.port);
+  a.send({ t: 'vjoin', nick: 'Paulista', cidade: 'sp', look: {} });
+  b.send({ t: 'vjoin', nick: 'Carioca', cidade: 'rj', look: {} });
+  c.send({ t: 'vjoin', nick: 'Paulistana', cidade: 'sp', persona: 'idoso', look: {} });
+  const wc = await c.waitFor((m) => m.t === 'welcome');
+  assert.equal(wc.cidade, 'sp');
+  assert.equal(wc.persona, 'idoso');
+  const s = await a.waitFor((m) => m.t === 'sync' && m.add.some((p) => p.nick === 'Paulistana'));
+  assert.ok(s);
+  await sleep(300);
+  assert.equal(a.msgs.some((m) => m.t === 'sync' && m.add.some((p) => p.nick === 'Carioca')), false, 'rj não aparece em sp');
+  assert.equal(b.msgs.some((m) => m.t === 'sync' && m.add.some((p) => p.nick === 'Paulista')), false, 'sp não aparece em rj');
+  const bad = await connect(srv.port);
+  bad.send({ t: 'vjoin', nick: 'Invasor', cidade: '../x', persona: 'hacker', look: {} });
+  const wb = await bad.waitFor((m) => m.t === 'welcome');
+  assert.equal(wb.cidade, 'sp');
+  assert.equal(wb.persona, 'adulto');
+  [a, b, c, bad].forEach((x) => x.close());
+});

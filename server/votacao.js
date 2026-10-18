@@ -1,5 +1,5 @@
 import {
-  STAGES, SECOES, PLACES, QUEUE, boundsFor, clampPos, near, mesaria, cabine, queueSpot, room,
+  STAGES, SECOES, PLACES, QUEUE, CIDADES, boundsFor, clampPos, near, mesaria, cabine, queueSpot, room, cidadeDe, personaDe,
 } from '../shared/votacao.js';
 import { spendMoveBudget, cleanText, uniqueNick } from './rules.js';
 import { filterText } from './moderation.js';
@@ -23,7 +23,13 @@ export function createLine(cfg = QUEUE) {
   return {
     entries,
     full: () => entries.length >= cfg.slots,
-    join(id) { if (entries.length >= cfg.slots) return -1; entries.push(id); return entries.length - 1; },
+    /** Quem tem prioridade (idoso, gestante, PcD) entra atrás dos 3 primeiros; os demais vão para o fim. */
+    join(id, { prioridade = false } = {}) {
+      if (entries.length >= cfg.slots) return -1;
+      const at = prioridade ? Math.min(3, entries.length) : entries.length;
+      entries.splice(at, 0, id);
+      return at;
+    },
     leave(id) { const i = entries.indexOf(id); if (i >= 0) entries.splice(i, 1); return i; },
     indexOf: (id) => entries.indexOf(id),
     /** Quem estava na frente sai; chegam novos NPCs para a fila não esvaziar. */
@@ -39,7 +45,8 @@ export function createLine(cfg = QUEUE) {
   };
 }
 
-export function createVotacao({ wss, send, cleanLook }) {
+/** Uma seção por cidade: cada uma com seus eleitores, sua fila e seus mesários. */
+function createSala({ cidade, send, cleanLook }) {
   const players = new Map();
   const line = createLine();
   const stats = { votaram: 0 };
@@ -97,15 +104,16 @@ export function createVotacao({ wss, send, cleanLook }) {
     let nick = account ? account.nick : filterText(cleanText(m.nick, 16));
     if (!nick) nick = `Eleitor${id}`;
     nick = uniqueNick(nick, all().map((q) => q.nick), 16);
+    const persona = personaDe(m.persona);
     const p = {
-      id, ws, nick, look: cleanLook(m.look, account), x: PLACES.spawn.x, z: PLACES.spawn.z, ry: 0, a: 0, dirty: false,
+      id, ws, nick, persona, look: { ...cleanLook(m.look, account), age: persona.look.age }, x: PLACES.spawn.x, z: PLACES.spawn.z, ry: 0, a: 0, dirty: false,
       stage: 'casa', docs: { doc: false, titulo: false, colinha: false }, secaoIdx: -1,
       budget: SPEED, budgetAt: Date.now(), lastChat: 0, mesarioAt: 0, urnaAt: 0, known: new Set(),
     };
     ws.voto = p;
     players.set(id, p);
     send(ws, {
-      t: 'welcome', id, x: p.x, z: p.z, ry: 0, stage: p.stage, docs: p.docs, secao: null, nick,
+      t: 'welcome', id, x: p.x, z: p.z, ry: 0, stage: p.stage, docs: p.docs, secao: null, nick, cidade: cidade.id, persona: persona.id, dica: persona.dica,
     });
     send(ws, lineMsg());
     sendAll({ t: 'vonline', n: players.size });
@@ -173,8 +181,8 @@ export function createVotacao({ wss, send, cleanLook }) {
         return;
       case 'fila':
         if (p.stage !== 'patio' || !near(p, PLACES.filaEntrada)) return notice(p, 'A fila começa no pátio, em frente ao prédio.');
-        if (line.join(p.id) < 0) return notice(p, 'Fila cheia agora. Espere um pouco e tente de novo.');
-        setStage(p, 'fila', 'Na fila. Aguarde a sua vez: ela anda sozinha.');
+        if (line.join(p.id, { prioridade: p.persona.prioridade }) < 0) return notice(p, 'Fila cheia agora. Espere um pouco e tente de novo.');
+        setStage(p, 'fila', p.persona.prioridade ? 'Fila preferencial: você tem prioridade e passa na frente de boa parte da fila.' : 'Na fila. Aguarde a sua vez: ela anda sozinha.');
         placeInLine();
         sendAll(lineMsg());
         return;
@@ -262,5 +270,22 @@ export function createVotacao({ wss, send, cleanLook }) {
   return {
     onMessage, onClose, stats, stages: STAGES, count: () => players.size,
     stop() { clearInterval(queueTimer); clearInterval(syncTimer); },
+  };
+}
+
+export function createVotacao({ send, cleanLook }) {
+  const salas = new Map(CIDADES.map((c) => [c.id, createSala({ cidade: c, send, cleanLook })]));
+  return {
+    onMessage(ws, m, account) {
+      if (m.t === 'vjoin') {
+        if (ws.sala) return;
+        ws.sala = salas.get(cidadeDe(m.cidade).id);
+      }
+      ws.sala?.onMessage(ws, m, account);
+    },
+    onClose(ws) { ws.sala?.onClose(ws); ws.sala = null; },
+    get stats() { return { votaram: [...salas.values()].reduce((n, s) => n + s.stats.votaram, 0) }; },
+    count: () => [...salas.values()].reduce((n, s) => n + s.count(), 0),
+    stop() { for (const s of salas.values()) s.stop(); },
   };
 }
