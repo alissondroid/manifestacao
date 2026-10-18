@@ -25,8 +25,8 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const SILHUETA = (cor) => `<svg viewBox="0 0 60 72" aria-hidden="true"><rect width="60" height="72" fill="${cor}22"/><circle cx="30" cy="26" r="14" fill="${cor}"/><path d="M4 72c2-20 14-28 26-28s24 8 26 28z" fill="${cor}"/></svg>`;
 
 /** Abre a urna. `onDone()` é chamado quando o último cargo é confirmado. Retorna `close()`. */
-export function openUrna(root, { onDone }) {
-  const urna = criarUrna();
+export function openUrna(root, { onDone, cargos }) {
+  const urna = criarUrna(cargos);
   root.replaceChildren();
   root.hidden = false;
 

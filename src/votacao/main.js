@@ -6,8 +6,9 @@ import { Net } from '../net.js';
 import { loadingScreen, createLabel } from '../ui.js';
 import { SHIRTS, SKINS, MODELS, BODIES } from '../../shared/config.js';
 import {
-  PLACES, SECOES, CARGOS, QUEUE, queueSpot, boundsFor, clampPos, near, mesaria, cabine, roomDoor,
+  PLACES, QUEUE, CIDADES, PERSONAS, queueSpot, boundsFor, clampPos, near, mesaria, cabine, roomDoor, cargosDe, cidadeDe, personaDe,
 } from '../../shared/votacao.js';
+import { Ambience } from '../audio.js';
 import { createVotacaoWorld } from './world.js';
 import { openUrna } from './urna.js';
 import { createFigurante } from './figurante.js';
@@ -34,13 +35,15 @@ resize();
 // ---------- Perfil ----------
 const KEY = 'avenida-online:votacao';
 const profile = (() => {
-  const base = { nick: '', look: { body: 0, age: 0, face: 0, height: 1, skin: 2, hairStyle: 0, hair: 1, beard: 0, shirt: 3, top: 0, pants: 0, flag: 0, sign: '' } };
+  const base = { cidade: 'sp', persona: 'adulto', nick: '', look: { body: 0, age: 0, face: 0, height: 1, skin: 2, hairStyle: 0, hair: 1, beard: 0, shirt: 3, top: 0, pants: 0, flag: 0, sign: '' } };
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s?.look) return { ...base, ...s, look: { ...base.look, ...s.look } }; } catch { /* sem storage */ }
   return base;
 })();
 if (profile.look.face >= 3) profile.look.face = 0;
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(profile)); } catch { /* ignore */ } };
-const lookOf = (l) => ({ ...l, side: 3, equip: {}, custom: {} });
+const lookOf = (l) => ({ ...l, age: personaDe(profile.persona).look.age, side: 3, equip: {}, custom: {} });
+let cidade = cidadeDe(profile.cidade);
+const sound = new Ambience();
 trackVisit();
 
 // ---------- Carregamento ----------
@@ -55,7 +58,7 @@ try {
   throw err;
 }
 loadingScreen.set(92, 'Montando a escola');
-const world = createVotacaoWorld(scene, renderer, { shadows: startQuality < 2 });
+const world = createVotacaoWorld(scene, renderer, { shadows: startQuality < 2, cidade });
 const quality = createQualityMonitor({
   level: startQuality,
   onDrop(level) { renderer.setPixelRatio(PIXEL_RATIO[level]); world.setShadows(level < 2); resize(); toast('Ajustamos os gráficos para rodar mais fluido.'); },
@@ -117,7 +120,7 @@ net.connect();
 
 function addRemote(p) {
   if (remotes.has(p.id)) return;
-  const avatar = new Avatar(lookOf(p.look || {}));
+  const avatar = new Avatar({ ...(p.look || {}), side: 3, equip: {}, custom: {} }); // a idade vem do servidor (eleitor escolhido)
   avatar.group.position.set(p.x, 0, p.z);
   avatar.group.rotation.y = p.ry;
   scene.add(avatar.group);
@@ -164,6 +167,7 @@ function beaconTarget() {
 
 function renderGoal(text) {
   const i = stepIdx(me.stage);
+  $('#vtitle2').textContent = `Domingo de eleição · ${cidade.nome} (${cidade.uf})`;
   $('#vstep').textContent = STEPS[i][1] + (me.secao && i >= 2 && i < 9 ? ` · Seção ${me.secao}` : '');
   $('#vtext').textContent = text || STEPS[i][2];
   $('#vsteps').replaceChildren(...STEPS.map((_, k) => { const li = document.createElement('li'); li.className = k < i ? 'done' : k === i ? 'on' : ''; return li; }));
@@ -197,6 +201,7 @@ function onMessage(m) {
       me.docs = m.docs || {};
       if (m.nick) { me.label?.remove(); me.label = createLabel(m.nick, '#ffd23f', {}); }
       renderGoal();
+      if (m.dica) toast(m.dica);
       break;
     case 'sync':
       for (const p of m.add) addRemote(p);
@@ -258,7 +263,7 @@ const act = (id) => net.send({ t: 'act', id });
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function colinhaHtml() {
-  return `<div class="vcolinha"><h4>Candidatos desta simulação (fictícios)</h4>${CARGOS.map((c) => `<div><b>${esc(c.nome)}</b> · ${c.digitos} dígitos<ul>${c.candidatos.map((k) => `<li><b>${k.numero}</b> ${esc(k.nome)}</li>`).join('')}</ul></div>`).join('')}</div>`;
+  return `<div class="vcolinha"><h4>Candidatos fictícios · ${esc(cidade.nome)} (${cidade.uf})</h4>${cargosDe(cidade).map((c) => `<div><b>${esc(c.nome)}</b> · ${c.digitos} dígitos<ul>${c.candidatos.map((k) => `<li><b>${k.numero}</b> ${esc(k.nome)}</li>`).join('')}</ul></div>`).join('')}</div>`;
 }
 function refreshMesa() { refreshMesa.fn?.(); }
 function openMesa() {
@@ -312,6 +317,7 @@ function startUrna() {
   closeModal();
   me.avatar.group.visible = false;
   urnaClose = openUrna($('#urna'), {
+    cargos: cargosDe(cidade),
     onDone() {
       me.avatar.group.visible = true;
       urnaClose = null;
@@ -336,13 +342,21 @@ function showComprovante() {
   g.fillStyle = '#10261b'; g.textAlign = 'center';
   g.font = '800 40px system-ui, sans-serif'; g.fillText('EU VOTEI! (simulado)', 360, 90);
   g.font = '600 24px system-ui, sans-serif';
-  g.fillText(`Seção ${me.secao ?? ''} · Escola Municipal Esperança`, 360, 150);
+  g.fillText(`Seção ${me.secao ?? ''} · ${cidade.escola}`, 360, 140);
+  g.font = '600 20px system-ui, sans-serif';
+  g.fillText(`${cidade.bairro} · ${cidade.nome} (${cidade.uf})`, 360, 168);
+  g.font = '600 24px system-ui, sans-serif';
   g.fillText(`${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`, 360, 190);
   g.fillText(`Tempo na fila: ${fila} s · Jornada: ${total}`, 360, 240);
   g.font = '500 18px system-ui, sans-serif'; g.fillStyle = '#3d5a49';
   g.fillText('Comprovante de brincadeira: simulador educativo, não oficial.', 360, 320);
   g.fillText('Candidatos e partidos fictícios. Nenhum voto foi guardado.', 360, 350);
   g.fillText('avenidaonline.com/votacao', 360, 400);
+  // adesivo "Eu votei"
+  g.save(); g.translate(630, 90); g.rotate(-0.25);
+  g.fillStyle = '#138a36'; g.beginPath(); g.arc(0, 0, 54, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#ffd23f'; g.beginPath(); g.arc(0, 0, 46, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#10261b'; g.font = '900 20px system-ui, sans-serif'; g.fillText('EU', 0, -6); g.fillText('VOTEI', 0, 18); g.restore();
   const url = c.toDataURL('image/png');
   openModal(`<h3>🎉 Você votou!</h3><p>Na eleição de verdade: leve documento com foto, confira o local no e-Título/site do TSE e não leve o celular para a cabine.</p>
     <img class="vcomp" alt="Comprovante simulado" src="${url}" />
@@ -385,6 +399,9 @@ function paint() {
     const b = document.createElement('button'); b.type = 'button'; b.className = `segbtn${profile.look.face === i ? ' on' : ''}`; b.textContent = `Rosto ${i + 1}`;
     b.onclick = () => { profile.look.face = i; paint(); }; faces.append(b);
   });
+  document.querySelectorAll('#vcities .vcity').forEach((n) => n.classList.toggle('on', n.dataset.id === cidade.id));
+  document.querySelectorAll('#vpersonas .segbtn').forEach((n) => n.classList.toggle('on', n.dataset.id === profile.persona));
+  $('#vdica').textContent = personaDe(profile.persona).dica;
   document.querySelectorAll('#vshirts .sw').forEach((n, i) => n.classList.toggle('on', i === profile.look.shirt));
   document.querySelectorAll('#vskins .sw').forEach((n, i) => n.classList.toggle('on', i === profile.look.skin));
   me.avatar.setLook(lookOf(profile.look));
@@ -395,6 +412,19 @@ BODIES.forEach((name, i) => {
   b.onclick = () => { profile.look.body = i; if (profile.look.face >= Math.min(FACES, MODELS[i === 1 ? 'female' : 'male'].length)) profile.look.face = 0; paint(); };
   $('#vbodies').append(b);
 });
+CIDADES.forEach((c) => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'vcity'; b.dataset.id = c.id;
+  b.innerHTML = `<b>${c.nome} · ${c.uf}</b><small>${c.apelido}</small>`;
+  b.onclick = () => { profile.cidade = c.id; cidade = c; world.setCidade(c); paint(); };
+  $('#vcities').append(b);
+});
+PERSONAS.forEach((pp) => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'segbtn'; b.dataset.id = pp.id; b.textContent = pp.nome;
+  b.onclick = () => { profile.persona = pp.id; paint(); };
+  $('#vpersonas').append(b);
+});
 swatch(SHIRTS, 'shirt', $('#vshirts'));
 swatch(SKINS, 'skin', $('#vskins'));
 paint();
@@ -404,8 +434,9 @@ $('#vstart').onclick = () => {
   profile.nick = $('#vnick').value.trim(); save();
   started = true; times.start = performance.now();
   $('#vlobby').hidden = true; $('#vhud').hidden = false;
-  net.join({ nick: profile.nick, look: profile.look });
-  net.joinMsg = { t: 'vjoin', nick: profile.nick, look: profile.look };
+  const msg = { nick: profile.nick, look: profile.look, cidade: cidade.id, persona: profile.persona };
+  net.join(msg);
+  sound.start();
   track('enter');
 };
 $('#vhud').hidden = true;
