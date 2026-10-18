@@ -91,8 +91,8 @@ function house(parent, x, z, w, d, color, roof) {
   parent.add(g);
 }
 
-export function createVotacaoWorld(scene, renderer) {
-  renderer.shadowMap.enabled = true;
+export function createVotacaoWorld(scene, renderer, { shadows = true } = {}) {
+  renderer.shadowMap.enabled = shadows;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
@@ -102,7 +102,7 @@ export function createVotacaoWorld(scene, renderer) {
   scene.add(new THREE.HemisphereLight('#cfe6ff', '#8a7a5a', 0.9));
   const sun = new THREE.DirectionalLight('#fff1d6', 2.2);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(1024, 1024);
   const sc = sun.shadow.camera;
   sc.left = -26; sc.right = 26; sc.top = 26; sc.bottom = -26; sc.near = 1; sc.far = 120;
   sun.shadow.bias = -0.0004;
@@ -251,6 +251,11 @@ export function createVotacaoWorld(scene, renderer) {
   scene.add(beacon);
 
   return {
+    setShadows(on) {
+      if (renderer.shadowMap.enabled === on) return;
+      renderer.shadowMap.enabled = on;
+      scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); });
+    },
     setBeacon(pos) {
       beacon.visible = !!pos;
       if (pos) beacon.position.set(pos.x, 0, pos.z);

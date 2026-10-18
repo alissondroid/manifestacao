@@ -11,6 +11,7 @@ import {
 import { createVotacaoWorld } from './world.js';
 import { openUrna } from './urna.js';
 import { track, trackVisit } from '../track.js';
+import { createQualityMonitor, QUALITY } from '../quality.js';
 
 const $ = (s) => document.querySelector(s);
 const toast = (text) => { const t = $('#toast'); t.textContent = text; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 6000); };
@@ -18,7 +19,11 @@ const toast = (text) => { const t = $('#toast'); t.textContent = text; t.hidden 
 // ---------- Cena ----------
 const canvas = $('#c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+// Qualidade adaptativa (como na avenida): ?q=0..3 força; se o FPS cair, tira sombras e reduz a resolução.
+const dpr = window.devicePixelRatio || 1;
+const PIXEL_RATIO = [Math.min(dpr, 1.75), Math.min(dpr, 1.25), 1, 0.75];
+const startQuality = (() => { const q = new URLSearchParams(location.search).get('q'); return q !== null && /^[0-3]$/.test(q) ? Number(q) : 0; })();
+renderer.setPixelRatio(PIXEL_RATIO[startQuality]);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 600);
 const resize = () => { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); };
@@ -48,7 +53,11 @@ try {
   throw err;
 }
 loadingScreen.set(92, 'Montando a escola');
-const world = createVotacaoWorld(scene, renderer);
+const world = createVotacaoWorld(scene, renderer, { shadows: startQuality < 2 });
+const quality = createQualityMonitor({
+  level: startQuality,
+  onDrop(level) { renderer.setPixelRatio(PIXEL_RATIO[level]); world.setShadows(level < 2); resize(); toast('Ajustamos os gráficos para rodar mais fluido.'); },
+});
 
 // ---------- Estado ----------
 const me = {
@@ -531,6 +540,7 @@ function updateHud() {
 
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
+  quality.frame(now - last > 0 ? (now - last) / 1000 : 0);
   last = now; elapsed += dt;
   updateMe(dt);
   for (const r of remotes.values()) {
