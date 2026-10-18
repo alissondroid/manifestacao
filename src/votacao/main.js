@@ -33,10 +33,11 @@ resize();
 // ---------- Perfil ----------
 const KEY = 'avenida-online:votacao';
 const profile = (() => {
-  const base = { nick: '', look: { body: 0, age: 0, face: 1, height: 1, skin: 2, hairStyle: 0, hair: 1, beard: 0, shirt: 3, top: 0, pants: 0, flag: 0, sign: '' } };
+  const base = { nick: '', look: { body: 0, age: 0, face: 0, height: 1, skin: 2, hairStyle: 0, hair: 1, beard: 0, shirt: 3, top: 0, pants: 0, flag: 0, sign: '' } };
   try { const s = JSON.parse(localStorage.getItem(KEY)); if (s?.look) return { ...base, ...s, look: { ...base.look, ...s.look } }; } catch { /* sem storage */ }
   return base;
 })();
+if (profile.look.face >= 3) profile.look.face = 0;
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(profile)); } catch { /* ignore */ } };
 const lookOf = (l) => ({ ...l, side: 3, equip: {}, custom: {} });
 trackVisit();
@@ -77,12 +78,12 @@ let camPitch = 0.35;
 let camDist = 5.2;
 let urnaClose = null;
 
-const SIDE_NONE = 3;
+const FACES = 3; // só personagens comuns: sem os rostos de políticos reais do jogo da avenida
 const npcLook = (seed) => {
   const r = (n) => Math.abs(Math.sin(seed * 91.7 + n * 13.1));
-  const body = r(1) < 0.5 ? 0 : 1;
+  const body = r(1) < 0.25 ? 1 : 0; // o corpo masculino comum (rpm) é o mais leve de desenhar
   return lookOf({
-    body, age: r(2) < 0.2 ? 1 : 0, face: Math.floor(r(3) * 3), height: Math.floor(r(4) * 3), skin: Math.floor(r(5) * SKINS.length), hairStyle: 0, hair: Math.floor(r(6) * 4), beard: 0, shirt: Math.floor(r(7) * SHIRTS.length), top: 0, pants: Math.floor(r(8) * 4), flag: 0, sign: '',
+    body, age: r(2) < 0.2 ? 1 : 0, face: body === 1 ? Math.floor(r(3) * 2) : 0, height: Math.floor(r(4) * 3), skin: Math.floor(r(5) * SKINS.length), hairStyle: 0, hair: Math.floor(r(6) * 4), beard: 0, shirt: Math.floor(r(7) * SHIRTS.length), top: 0, pants: Math.floor(r(8) * 4), flag: 0, sign: '',
   });
 };
 function standing(look, x, z, ry) {
@@ -381,7 +382,7 @@ const swatch = (list, key, root) => list.forEach((c, i) => {
 function paint() {
   document.querySelectorAll('#vbodies .segbtn').forEach((n, i) => n.classList.toggle('on', i === profile.look.body));
   const faces = $('#vfaces'); faces.replaceChildren();
-  MODELS[profile.look.body === 1 ? 'female' : 'male'].forEach((_, i) => {
+  MODELS[profile.look.body === 1 ? 'female' : 'male'].slice(0, FACES).forEach((_, i) => {
     const b = document.createElement('button'); b.type = 'button'; b.className = `segbtn${profile.look.face === i ? ' on' : ''}`; b.textContent = `Rosto ${i + 1}`;
     b.onclick = () => { profile.look.face = i; paint(); }; faces.append(b);
   });
@@ -392,7 +393,7 @@ function paint() {
 }
 BODIES.forEach((name, i) => {
   const b = document.createElement('button'); b.type = 'button'; b.className = 'segbtn'; b.textContent = name;
-  b.onclick = () => { profile.look.body = i; if (profile.look.face >= MODELS[i === 1 ? 'female' : 'male'].length) profile.look.face = 0; paint(); };
+  b.onclick = () => { profile.look.body = i; if (profile.look.face >= Math.min(FACES, MODELS[i === 1 ? 'female' : 'male'].length)) profile.look.face = 0; paint(); };
   $('#vbodies').append(b);
 });
 swatch(SHIRTS, 'shirt', $('#vshirts'));
@@ -558,7 +559,11 @@ function frame(now) {
     n.avatar.update(dt, sp > 0.2 ? 'walk' : 'idle', sp);
     if (n.leaving && sp === 0) { scene.remove(n.avatar.group); n.avatar.dispose(); npcs.delete(id); }
   }
-  for (const a of still) a.update(dt, 'idle', 0);
+  for (const a of still) { // figurantes longe da câmera nem desenham nem animam
+    const far = Math.hypot(a.group.position.x - me.x, a.group.position.z - me.z) > 55;
+    a.group.visible = !far;
+    if (!far) a.update(dt, 'idle', 0);
+  }
   world.update(elapsed, me.x, me.z);
   updateCamera(dt);
   if (started) {
