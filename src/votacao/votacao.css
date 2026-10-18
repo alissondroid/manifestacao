@@ -1,0 +1,105 @@
+/* Simulador de votação (somente a tela /votacao). Usa as variáveis e botões do style.css do jogo. */
+body.vota { background: #0f2b1f; }
+body.vota #labels { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+.vbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 30; display: flex; align-items: center; gap: 12px;
+  padding: calc(8px + env(safe-area-inset-top)) 14px 8px; background: linear-gradient(#0b1a13ee, #0b1a1300); color: #fff;
+}
+.vbar a { color: #fff; text-decoration: none; font-weight: 600; font-size: 14px; padding: 6px 10px; border-radius: 999px; background: #ffffff1f; }
+.vtitle { font-size: 15px; letter-spacing: 0.02em; }
+.vtitle small { font-weight: 500; opacity: 0.7; margin-left: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+.von { margin-left: auto; font-size: 13px; opacity: 0.85; }
+.vlobby { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: flex-end; padding: 70px max(16px, 6vw) 24px; pointer-events: none; }
+.vcard {
+  pointer-events: auto; width: min(420px, 100%); max-height: calc(100dvh - 90px); overflow: auto; padding: 22px;
+  background: #0d1f17f2; color: #fff; border: 1px solid #ffffff22; border-radius: 18px; box-shadow: 0 20px 60px #0008; display: grid; gap: 12px;
+}
+.vcard h1 { margin: 0; font-size: 28px; line-height: 1.05; }
+.vlead { margin: 0; opacity: 0.85; font-size: 14px; line-height: 1.45; }
+.vlegal { margin: 0; font-size: 11.5px; opacity: 0.6; line-height: 1.4; }
+.vfield { display: grid; gap: 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+.vfield input { text-transform: none; font-size: 15px; letter-spacing: 0; padding: 11px 12px; border-radius: 10px; border: 1px solid #ffffff2e; background: #ffffff12; color: #fff; }
+#vhud { position: fixed; inset: 0; z-index: 15; pointer-events: none; }
+#vhud > * { pointer-events: auto; }
+.vgoal {
+  position: absolute; top: 62px; left: 12px; width: min(300px, calc(100vw - 24px)); padding: 12px 14px; color: #fff;
+  background: #0d1f17e6; border: 1px solid #ffffff22; border-radius: 14px; font-size: 13px;
+}
+.vgoal h2 { margin: 0 0 4px; font-size: 16px; }
+.vgoal p { margin: 0; line-height: 1.4; opacity: 0.92; }
+.vgoal ol { margin: 10px 0 0; padding: 0; list-style: none; display: flex; gap: 4px; flex-wrap: wrap; }
+.vgoal li { width: 22px; height: 6px; border-radius: 3px; background: #ffffff2e; }
+.vgoal li.done { background: #4ade80; }
+.vgoal li.on { background: #ffd23f; }
+.vdist { margin-top: 8px !important; font-size: 12px; color: #ffd23f; }
+.vqueue {
+  position: absolute; top: 62px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; align-items: center;
+  padding: 10px 16px; border-radius: 999px; background: #0d1f17ee; color: #fff; border: 1px solid #ffd23f66;
+}
+.vqueue span { opacity: 0.85; font-size: 13px; }
+.vact { position: absolute; left: 50%; bottom: calc(110px + env(safe-area-inset-bottom)); transform: translateX(-50%); }
+.vact .primary { font-size: 16px; padding: 14px 22px; box-shadow: 0 8px 30px #0008; }
+.vchat { position: absolute; left: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); width: min(360px, calc(100vw - 24px)); display: grid; gap: 6px; }
+.vlog { display: grid; gap: 2px; font-size: 12.5px; color: #fff; text-shadow: 0 1px 3px #000; max-height: 120px; overflow: hidden; }
+.vchat input { padding: 10px 12px; border-radius: 999px; border: 1px solid #ffffff2e; background: #0d1f17cc; color: #fff; }
+.vcola { position: absolute; right: 12px; top: 62px; }
+.vhelp { position: absolute; right: 12px; bottom: 8px; margin: 0; font-size: 11px; color: #ffffffb0; text-shadow: 0 1px 3px #000; text-align: right; }
+.vjoy { position: absolute; left: 22px; bottom: 90px; width: 110px; height: 110px; border-radius: 50%; background: #ffffff1a; border: 1px solid #ffffff33; display: none; touch-action: none; }
+.vjoy i { position: absolute; left: 35px; top: 35px; width: 40px; height: 40px; border-radius: 50%; background: #ffffff66; }
+@media (pointer: coarse) { .vjoy { display: block; } .vhelp { display: none; } .vchat { bottom: 12px; left: auto; right: 12px; width: 200px; } .vlog { display: none; } }
+.vmodal { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px; background: #000a; }
+.vmodal-body { width: min(440px, 100%); max-height: calc(100dvh - 32px); overflow: auto; background: #10261b; color: #fff; border: 1px solid #ffffff2a; border-radius: 16px; padding: 18px; display: grid; gap: 10px; }
+.vmodal-body h3 { margin: 0; font-size: 18px; }
+.vmodal-body p { margin: 0; font-size: 13.5px; line-height: 1.45; opacity: 0.9; }
+.vitem { display: flex; align-items: center; gap: 10px; text-align: left; padding: 11px 12px; border-radius: 12px; background: #ffffff12; border: 1px solid #ffffff22; color: #fff; font-size: 14px; cursor: pointer; }
+.vitem[aria-pressed='true'] { background: #1c5a38; border-color: #4ade80; }
+.vitem small { opacity: 0.7; display: block; font-size: 11.5px; }
+.vcolinha { display: grid; gap: 8px; font-size: 13px; }
+.vcolinha h4 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.75; }
+.vcolinha ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; }
+.vcolinha b { font-variant-numeric: tabular-nums; color: #ffd23f; }
+.vhold { position: relative; overflow: hidden; }
+.vhold i { position: absolute; inset: 0; width: 0; background: #ffffff33; pointer-events: none; }
+.vcomp { width: 100%; border-radius: 12px; }
+
+/* ---------- Urna ---------- */
+.urna { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 10px; background: #0b0f0dea; gap: 8px; align-content: center; }
+.urna-body { width: min(820px, 100%); display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; background: #cfd2d4; border-radius: 16px; padding: 14px; box-shadow: 0 20px 60px #000a; }
+.urna-screen { background: #e9efe3; color: #111; border: 4px solid #8a8f93; border-radius: 6px; padding: 12px 14px; min-height: 300px; display: grid; align-content: start; gap: 8px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+.urna-screen header { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; border-bottom: 2px solid #111; padding-bottom: 6px; }
+.urna-screen header small { grid-column: 1 / -1; font-size: 11px; }
+.urna-screen header b { font-size: 22px; text-transform: uppercase; }
+.urna-screen header em { font-style: normal; align-self: end; font-size: 12px; }
+.u-digits { display: flex; gap: 6px; }
+.u-digits i { width: 38px; height: 46px; border: 2px solid #111; display: grid; place-items: center; font-style: normal; font-size: 28px; font-weight: 700; background: #fff; }
+.u-digits.off { opacity: 0.35; }
+.u-cand { display: grid; grid-template-columns: 74px 1fr; gap: 12px; align-items: start; }
+.u-foto { width: 74px; height: 88px; border: 2px solid #111; overflow: hidden; background: #fff; }
+.u-foto svg { width: 100%; height: 100%; display: block; }
+.u-cand dl { margin: 0; display: grid; gap: 1px; font-size: 13px; }
+.u-cand dt { font-size: 10px; text-transform: uppercase; opacity: 0.7; margin-top: 4px; }
+.u-cand dd { margin: 0; font-weight: 700; }
+.u-aviso { display: grid; gap: 2px; font-size: 20px; font-weight: 800; }
+.u-aviso span { font-size: 16px; }
+.urna-screen footer { margin-top: auto; border-top: 2px solid #111; padding-top: 6px; display: grid; gap: 1px; font-size: 11.5px; }
+.urna-screen footer b { padding: 0 4px; border-radius: 2px; color: #fff; }
+.urna-screen footer .g { background: #138a36; } .urna-screen footer .o { background: #e07b00; } .urna-screen footer .w { background: #fff; color: #111; border: 1px solid #111; }
+.urna-fim { display: grid; place-items: center; min-height: 260px; gap: 4px; }
+.urna-fim b { font-size: 88px; letter-spacing: 6px; }
+.urna-fim span { font-size: 22px; }
+.urna-keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; align-content: start; background: #2c2f33; padding: 10px; border-radius: 10px; }
+.k { height: 52px; border: 0; border-radius: 6px; background: #3b3f44; color: #fff; font-size: 22px; font-weight: 700; cursor: pointer; box-shadow: 0 3px 0 #1d1f22; }
+.k:active { transform: translateY(2px); box-shadow: 0 1px 0 #1d1f22; }
+.k-empty { height: 52px; }
+.k.big { grid-column: span 1; font-size: 11px; height: 56px; }
+.k.w { background: #f4f4f2; color: #111; } .k.o { background: #e07b00; } .k.g { background: #138a36; }
+.urna-note { margin: 0; font-size: 12px; color: #ffffffaa; text-align: center; }
+@media (max-width: 720px) {
+  .urna { align-content: start; overflow: auto; }
+  .urna-body { grid-template-columns: 1fr; }
+  .urna-screen { min-height: 230px; }
+  .vlobby { justify-content: center; align-items: flex-end; padding: 60px 8px 8px; }
+  .vcard { max-height: 62dvh; }
+  .vqueue { top: auto; bottom: 150px; }
+  .vgoal { width: calc(100vw - 24px); }
+}

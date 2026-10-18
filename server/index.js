@@ -16,6 +16,7 @@ import { filterText } from './moderation.js';
 import { createRace } from './race.js';
 import { PVP, REFERRAL } from '../shared/config.js';
 import { SHOWS, showAt } from './shows.js';
+import { createVotacao } from './votacao.js';
 import { createZones } from './zones.js';
 import { clientIp } from './ip.js';
 import { GOOGLE_CLIENT_ID } from './google.js';
@@ -202,6 +203,11 @@ const wss = new WebSocketServer({
   server, path: '/ws', maxPayload: 2048, verifyClient: ({ req }) => originOk(req),
 });
 const players = new Map();
+// Simulador de votação: sala à parte, no mesmo servidor e na mesma conexão (mensagens `vjoin`, `move`, `act`…).
+const votacao = createVotacao({
+  wss, send: (ws, obj) => send(ws, obj),
+  cleanLook: (look, account) => cleanLook(look, account ? equippedMap(account.id) : {}, account ? designsOf(account.id) : {}),
+});
 const perIp = new Map();
 let nextId = 1;
 
@@ -587,6 +593,7 @@ wss.on('connection', (ws, req) => {
     let m;
     try { m = JSON.parse(raw); } catch { return; }
     if (!m || typeof m.t !== 'string') return;
+    if (m.t === 'vjoin' || ws.voto) return votacao.onMessage(ws, m, ws.user);
 
     // Modo "só assistir": recebe o mundo inteiro, sem avatar e sem chat.
     if (m.t === 'watch') {
@@ -782,6 +789,7 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => {
     perIp.set(ip, Math.max(0, (perIp.get(ip) || 1) - 1));
     if (me && players.get(me.id) === me) removePlayer(me);
+    votacao.onClose(ws);
   });
   ws.on('error', () => {});
 });
@@ -835,6 +843,7 @@ function shutdown(signal) {
   if (stopping) return;
   stopping = true;
   console.log(`[${signal}] encerrando...`);
+  votacao.stop();
   for (const ws of wss.clients) ws.close(1001, 'Servidor reiniciando');
   server.close(() => {
     try { db.close(); } catch { /* já fechado */ }

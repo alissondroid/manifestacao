@@ -126,6 +126,15 @@ Os termos do Mixamo e do Ready Player Me permitem usar esses recursos em projeto
 - **Corrida** (botão 🏁 no HUD): quem entra espera até 15 s por outros corredores, é levado à linha de largada (pórtico em z = −100), conta 3-2-1 e corre até a chegada (z = +100). O servidor marca o tempo pela posição que já valida; resultado da prova e os 10 melhores tempos ficam em `race_times` (SQLite, `GET /api/race/top`). Mensagens `race {action}` do cliente e `race {state, n, startsIn, results, top}` do servidor.
 - **PvP, a tomatada** (botão 🍅, tecla F para arremessar): só entre quem ligou o PvP. O servidor resolve o acerto pela posição e direção de quem arremessa (alcance 18 m, raio 0,9 m, 1 arremesso a cada 1,2 s) e manda `throw` para quem está perto (o cliente anima o tomate) e `hitby` para o atingido. Placar por lado e os 5 maiores acertadores em `pvp {scores, top}`.
 
+## Simulador de votação (`/votacao`)
+
+Segundo modo do site, educativo e **não oficial**: sair de casa com o documento, andar até a Escola Municipal Esperança, enfrentar a fila, achar a seção, passar pelos mesários (documento + biometria) e votar na urna (Deputado Federal 4 dígitos, Senador 3, Governador 2, Presidente 2). Candidatos e partidos são **fictícios**; nenhum voto é enviado ou guardado (a urna roda só no navegador). Detalhes:
+
+- `shared/votacao.js`: mapa, etapas, retângulos por etapa (impedem pular etapas, usados no cliente e no servidor), candidatos fictícios e a máquina da urna.
+- `server/votacao.js`: sala própria na mesma conexão (`vjoin`, `move`, `act`, `chat`); o servidor só guarda a etapa do jogador. A fila é de verdade: NPCs e jogadores, anda a cada `VOTO_QUEUE_MS` (6 s). Variáveis de teste: `VOTO_SPEED`, `VOTO_QUEUE_MS`, `VOTO_MIN_VOTE_MS`, `VOTO_BIOMETRIA_MS`, `VOTO_MAX_PLAYERS`.
+- `src/votacao/`: cenário 3D (`world.js`), figurantes leves, urna na tela (`urna.js`) e o jogo (`main.js`). Página: `votacao/index.html` (build com dois pontos de entrada).
+- Comprovante simulado ("Eu votei!") para baixar ou compartilhar.
+
 ## Convites e shows de fogos
 
 - **Convite com recompensa** (`server/referrals.js`, `REFERRAL` em `shared/config.js`): o botão 📣 gera um link com `?de=apelido`; quem cria a conta (e-mail ou Google) por ele conta para o anfitrião. Cada IP vale uma vez por anfitrião e o IP do cadastro do próprio anfitrião não vale (guardamos só um hash). A cada 3 convidados: 3 fogos, até 5 vezes. O estoque novo chega por `inv` e um aviso por `notice`.
