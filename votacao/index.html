@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f2b1f" />
+    <title>Simulador de Votação · Do portão à urna</title>
+    <meta name="description" content="Simulador educativo e gratuito de votação no Brasil: saia de casa, vá à escola, enfrente a fila, apresente o documento e vote na urna. Candidatos fictícios, direto no navegador." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://avenidaonline.com/votacao" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:url" content="https://avenidaonline.com/votacao" />
+    <meta property="og:title" content="Simulador de Votação · Do portão à urna" />
+    <meta property="og:description" content="Saia de casa, enfrente a fila e vote na urna: um simulador educativo com candidatos fictícios. Grátis, no navegador." />
+    <meta property="og:image" content="https://avenidaonline.com/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body data-mode="play" class="vota">
+    <noscript>
+      <h1>Simulador de Votação</h1>
+      <p>Simulador educativo e gratuito do dia da votação no Brasil: de casa à urna, com candidatos fictícios. Ative o JavaScript para jogar. Projeto independente, sem vínculo com a Justiça Eleitoral, candidatos ou partidos.</p>
+    </noscript>
+    <canvas id="c"></canvas>
+    <div id="loading" class="loading" role="status" aria-live="polite">
+      <div class="load-box">
+        <span class="load-logo" aria-hidden="true"><i></i><i></i><i></i></span>
+        <b class="load-title">SIMULADOR<span>DE VOTAÇÃO</span></b>
+        <div id="loadbar" class="load-bar" role="progressbar" aria-label="Carregando o simulador" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+        <p class="load-row"><span id="loadtext">Iniciando…</span><b id="loadpct">0%</b></p>
+        <p id="loadtip" class="load-tip" hidden></p>
+        <p id="loaderr" class="load-err" hidden></p>
+        <button id="loadretry" class="primary" type="button" hidden>Recarregar a página</button>
+      </div>
+    </div>
+    <div id="labels"></div>
+
+    <header class="vbar">
+      <a class="vback" href="/" title="Voltar ao jogo da Avenida">← Avenida</a>
+      <b class="vtitle">🗳️ Simulador de Votação <small>educativo · não oficial</small></b>
+      <span id="von" class="von" aria-live="polite"></span>
+    </header>
+
+    <!-- Escolha do eleitor -->
+    <section id="vlobby" class="vlobby">
+      <div class="vcard">
+        <p class="eyebrow">Dia da votação</p>
+        <h1>Do portão à urna</h1>
+        <p class="vlead">Saia de casa com o documento, vá à escola, enfrente a fila, apresente-se aos mesários e vote. Tudo com candidatos e partidos <b>fictícios</b>.</p>
+        <label class="vfield"><span>Seu nome</span><input id="vnick" maxlength="16" autocomplete="off" placeholder="Eleitor (em branco: Eleitor + número)" /></label>
+        <div class="vfield"><span>Corpo</span><div id="vbodies" class="seg"></div></div>
+        <div class="vfield"><span>Rosto</span><div id="vfaces" class="seg"></div></div>
+        <div class="vfield"><span>Camiseta</span><div id="vshirts" class="swatches"></div></div>
+        <div class="vfield"><span>Pele</span><div id="vskins" class="swatches"></div></div>
+        <button id="vstart" class="primary" type="button">Sair de casa para votar</button>
+        <p id="verror" class="error" hidden></p>
+        <p class="vlegal">Projeto independente, sem vínculo com a Justiça Eleitoral, candidatos ou partidos. Nada que você digita na urna é guardado.</p>
+      </div>
+    </section>
+
+    <!-- Jogo -->
+    <section id="vhud" hidden>
+      <aside class="vgoal">
+        <h2 id="vstep">Em casa</h2>
+        <p id="vtext">Pegue o documento na mesa e saia pela porta.</p>
+        <ol id="vsteps"></ol>
+        <p id="vdist" class="vdist"></p>
+      </aside>
+      <div id="vqueue" class="vqueue" hidden>
+        <b id="vqpos">Fila</b><span id="vqtime"></span>
+        <button id="vqleave" type="button" class="link">Sair da fila</button>
+      </div>
+      <div class="vact">
+        <button id="vinteract" class="primary" type="button" hidden>Interagir (E)</button>
+      </div>
+      <div class="vchat">
+        <div id="vlog" class="vlog"></div>
+        <form id="vchatform"><input id="vchat" maxlength="140" autocomplete="off" placeholder="Enter para falar…" /></form>
+      </div>
+      <button id="vcola" class="pill vcola" type="button" hidden>📝 Colinha</button>
+      <div id="vjoy" class="vjoy" aria-hidden="true"><i></i></div>
+      <p class="vhelp">WASD ou setas para andar · Shift corre · arraste para girar a câmera · E interage</p>
+    </section>
+
+    <div id="vmodal" class="vmodal" hidden><div id="vmodal-body" class="vmodal-body"></div></div>
+    <div id="urna" class="urna" hidden></div>
+    <div id="toast" class="toast" role="status" hidden></div>
+    <script type="module" src="/src/votacao/main.js"></script>
+  </body>
+</html>

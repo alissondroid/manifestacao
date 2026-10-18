@@ -14,10 +14,12 @@ const BIOMETRIA_MS = process.env.VOTO_BIOMETRIA_MS !== undefined ? Number(proces
 const ADVANCE_MS = Number(process.env.VOTO_QUEUE_MS) || QUEUE.advanceMs;
 const round2 = (v) => Math.round(v * 100) / 100;
 
-/** A fila: posição 0 é a da frente. Cada vaga é um NPC (0) ou o id de um jogador. */
+/** A fila: posição 0 é a da frente. Cada vaga é um NPC (id negativo) ou o id de um jogador. */
 export function createLine(cfg = QUEUE) {
   const entries = [];
-  for (let i = 0; i < cfg.npcStart; i += 1) entries.push(0);
+  let npcId = 0;
+  const npc = () => -(++npcId); // NPCs têm id negativo único: o cliente acompanha cada um andando na fila
+  for (let i = 0; i < cfg.npcStart; i += 1) entries.push(npc());
   return {
     entries,
     full: () => entries.length >= cfg.slots,
@@ -27,11 +29,11 @@ export function createLine(cfg = QUEUE) {
     /** Quem estava na frente sai; chegam novos NPCs para a fila não esvaziar. */
     advance(rand = Math.random) {
       const head = entries.shift();
-      const npcs = entries.filter((e) => e === 0).length;
+      const npcs = entries.filter((e) => e < 0).length;
       let add = 0;
       if (npcs < cfg.minNpc) add = cfg.minNpc - npcs;
       else if (entries.length < cfg.slots - 3 && rand() < 0.55) add = 1;
-      for (let i = 0; i < add && entries.length < cfg.slots; i += 1) entries.push(0);
+      for (let i = 0; i < add && entries.length < cfg.slots; i += 1) entries.push(npc());
       return head; // os NPCs novos entram no fim, atrás de quem já esperava
     },
   };

@@ -9,7 +9,8 @@ export const FATAL_CLOSE = {
 };
 
 export class Net {
-  constructor(handlers) {
+  constructor(handlers, path = '/ws') {
+    this.path = path;
     this.h = handlers; // { open, close, message(msg) }
     this.ws = null;
     this.retry = 0;
@@ -20,7 +21,7 @@ export class Net {
 
   connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    const ws = new WebSocket(`${proto}://${location.host}${this.path}`);
     this.ws = ws;
 
     ws.onopen = () => {

@@ -16,14 +16,15 @@ test('createLine: anda, mantém NPCs e respeita a ordem dos jogadores', () => {
   const l = createLine({ slots: 6, npcStart: 3, minNpc: 2 });
   assert.equal(l.join(7), 3);
   assert.equal(l.join(8), 4);
-  assert.equal(l.advance(() => 1), 0);
+  assert.ok(l.advance(() => 1) < 0, 'sai um NPC da frente');
   assert.equal(l.indexOf(7), 2);
   assert.equal(l.indexOf(8), 3);
   l.leave(7);
   assert.equal(l.indexOf(8), 2);
   let guard = 0;
   while (l.indexOf(8) !== -1 && guard++ < 20) l.advance(() => 1);
-  assert.ok(l.entries.filter((e) => e === 0).length >= 2, 'a fila nunca esvazia de NPCs');
+  assert.ok(l.entries.filter((e) => e < 0).length >= 2, 'a fila nunca esvazia de NPCs');
+  assert.equal(new Set(l.entries).size, l.entries.length, 'cada NPC tem id único');
   const small = createLine({ slots: 3, npcStart: 3, minNpc: 1 });
   assert.equal(small.join(1), -1, 'fila cheia');
 });
