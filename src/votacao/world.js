@@ -5,6 +5,9 @@ import {
 } from '../textures.js';
 import { addTrees } from '../trees.js';
 import {
+  rebocoTex, rodapeTex, tijoloTex, telhaTex, chapiscoTex, pedraPortuguesaTex, folhaPalmeiraTex, uvMeters, boxGeo, telhadoGeo, empenaGeo,
+} from './materiais.js';
+import {
   PLACES, QUEUE, SECOES, PARTIDOS, room, mesaria, cabine, queueSpot,
 } from '../../shared/votacao.js';
 
@@ -25,7 +28,8 @@ const box = (w, h, d, color, x, y, z, parent) => {
 function wall(parent, {
   axis, at, from, to, h = 3, face = 1, color = '#e9e2d0', gaps = [], doorH = 2.3, y0 = 0,
 }) {
-  const mat = std(color, { side: THREE.FrontSide });
+  const mat = new THREE.MeshStandardMaterial({ color, map: rebocoTex(), roughness: 0.92, side: THREE.FrontSide });
+  const sujo = new THREE.MeshStandardMaterial({ color, map: rodapeTex(), roughness: 0.95, side: THREE.FrontSide });
   const cuts = [...gaps].sort((a, b) => a[0] - b[0]);
   const segs = [];
   let cur = from;
@@ -34,12 +38,19 @@ function wall(parent, {
   for (const [a, b] of cuts) if (h > doorH) segs.push([a, b, doorH, h]);
   const rot = axis === 'x' ? (face > 0 ? 0 : Math.PI) : (face > 0 ? Math.PI / 2 : -Math.PI / 2);
   for (const [a, b, ya, yb] of segs) {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(b - a, yb - ya), mat);
+    const m = new THREE.Mesh(uvMeters(new THREE.PlaneGeometry(b - a, yb - ya), b - a, yb - ya), mat);
     const mid = (a + b) / 2;
     m.position.set(axis === 'x' ? mid : at, y0 + (ya + yb) / 2, axis === 'x' ? at : mid);
     m.rotation.y = rot;
     m.receiveShadow = true;
     parent.add(m);
+    if (ya === 0) { // barra suja de poeira e respingo de chuva
+      const r = new THREE.Mesh(new THREE.PlaneGeometry(b - a, 0.5), sujo);
+      const off = 0.01 * face;
+      r.position.set(axis === 'x' ? mid : at + off, y0 + 0.25, axis === 'x' ? at + off : mid);
+      r.rotation.y = rot;
+      parent.add(r);
+    }
   }
 }
 
@@ -123,11 +134,21 @@ function casa(parent, rng, x, z, cidade, dir) {
   const floors = rng() < 0.45 ? 2 : 1;
   const h = floors * 2.9;
   const cor = cidade.casas[Math.floor(rng() * cidade.casas.length)];
-  box(w, h, d, cor, 0, h / 2, 0, g);
-  const laje = rng() < 0.5;
+  const semReboco = floors === 2 && rng() < 0.35; // o andar de cima "ainda vai rebocar"
+  const corpo = new THREE.Mesh(boxGeo(w, floors === 2 && semReboco ? 2.9 : h, d), new THREE.MeshStandardMaterial({ color: cor, map: rebocoTex(), roughness: 0.92 }));
+  corpo.position.y = (floors === 2 && semReboco ? 2.9 : h) / 2; corpo.castShadow = true; corpo.receiveShadow = true; g.add(corpo);
+  if (semReboco) {
+    const cima = new THREE.Mesh(boxGeo(w, 2.9, d, 1.6), new THREE.MeshStandardMaterial({ map: tijoloTex(), roughness: 0.95 }));
+    cima.position.y = 2.9 + 1.45; cima.castShadow = true; g.add(cima);
+    for (const [px, pz] of [[-w / 2, -d / 2], [w / 2, -d / 2], [-w / 2, d / 2], [w / 2, d / 2]]) box(0.25, 3.3, 0.25, '#9a968e', px, 2.9 + 1.65, pz, g); // pilares e ferro de espera
+  }
+  const laje = semReboco || rng() < 0.5;
   if (laje) { box(w + 0.2, 0.2, d + 0.2, '#bdb6aa', 0, h + 0.1, 0, g); caixaDagua(g, -w / 4, h + 0.2, d / 4); } else {
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.max(w, d) * 0.78, 1.8, 4), std(cidade.telhado));
-    roof.position.y = h + 0.9; roof.rotation.y = Math.PI / 4; roof.scale.set(1, 1, d / w); roof.castShadow = true; g.add(roof);
+    const telha = new THREE.MeshStandardMaterial({ color: cidade.telhado, map: telhaTex(), roughness: 0.85, side: THREE.DoubleSide });
+    const roof = new THREE.Mesh(telhadoGeo(d, w, 1.9), telha);
+    roof.rotation.y = Math.PI / 2; roof.position.y = h; roof.castShadow = true; g.add(roof);
+    const emp = new THREE.MeshStandardMaterial({ color: cor, map: rebocoTex(), roughness: 0.92, side: THREE.DoubleSide });
+    for (const s of [-1, 1]) { const e = new THREE.Mesh(empenaGeo(d, 1.9), emp); e.position.set(s * w / 2, h, 0); e.rotation.y = Math.PI / 2; g.add(e); }
   }
   // porta, janelas com grade
   const fx = (dir > 0 ? 1 : -1) * (w / 2 + 0.03);
@@ -139,8 +160,12 @@ function casa(parent, rng, x, z, cidade, dir) {
   }
   // muro e portão de grade na frente do lote
   const mx = (dir > 0 ? 1 : -1) * (w / 2 + 2.2);
-  box(0.2, 1.7, d + 1, cidade.muro, mx, 0.85, -d / 4 - 0.6, g);
-  box(0.2, 1.7, 1.2, cidade.muro, mx, 0.85, d / 2, g);
+  const muro = new THREE.MeshStandardMaterial({ color: cidade.muro, map: rng() < 0.5 ? chapiscoTex() : rebocoTex(), roughness: 0.95 });
+  for (const [mz, md] of [[-d / 4 - 0.6, d + 1], [d / 2, 1.2]]) {
+    const m = new THREE.Mesh(boxGeo(0.2, 1.7, md, 2), muro);
+    m.position.set(mx, 0.85, mz); m.castShadow = true; m.receiveShadow = true; g.add(m);
+    box(0.3, 0.08, md, '#c9c3b6', mx, 1.74, mz, g); // pingadeira
+  }
   for (let b = 0; b < 9; b++) box(0.05, 1.8, 0.05, '#2f3d34', mx, 0.9, d / 4 - 1.1 + b * 0.22, g); // portão
   g.position.set(x, 0, z);
   parent.add(g);
@@ -202,13 +227,27 @@ function moto(parent, x, z, ry, cor) {
   g.position.set(x, 0, z); g.rotation.y = ry; parent.add(g);
 }
 
+/** Carro popular: carroceria com capô e porta-malas mais baixos, cabine com vidros escuros, faróis e rodas com calota. */
 function carro(parent, x, z, ry, cor) {
   const g = new THREE.Group();
-  box(1.7, 0.7, 3.9, cor, 0, 0.55, 0, g);
-  box(1.5, 0.55, 2, '#9fb8c8', 0, 1.15, -0.2, g);
-  for (const [wx, wz] of [[-0.8, 1.2], [0.8, 1.2], [-0.8, -1.2], [0.8, -1.2]]) {
-    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.2, 12).rotateZ(Math.PI / 2), std('#151515'));
-    w.position.set(wx, 0.32, wz); g.add(w);
+  const lata = new THREE.MeshStandardMaterial({ color: cor, roughness: 0.35, metalness: 0.45 });
+  const vidro = new THREE.MeshStandardMaterial({ color: '#1d2a33', roughness: 0.1, metalness: 0.6 });
+  const part = (geo, mat, px, py, pz) => { const m = new THREE.Mesh(geo, mat); m.position.set(px, py, pz); m.castShadow = true; g.add(m); return m; };
+  part(new THREE.BoxGeometry(1.72, 0.55, 3.9), lata, 0, 0.6, 0);
+  part(new THREE.BoxGeometry(1.7, 0.12, 1.05), lata, 0, 0.92, 1.35).rotation.x = -0.08; // capô
+  const cab = part(new THREE.CylinderGeometry(0.72, 0.85, 1.9, 4, 1).rotateY(Math.PI / 4), vidro, 0, 1.15, -0.25);
+  cab.scale.set(1.05, 0.42, 1.0);
+  part(new THREE.BoxGeometry(1.74, 0.05, 1.6), lata, 0, 1.36, -0.3); // teto
+  for (const s of [-1, 1]) {
+    part(new THREE.BoxGeometry(0.32, 0.14, 0.04), std('#fff6d6', { emissive: '#665a33' }), s * 0.6, 0.72, 1.96); // farol
+    part(new THREE.BoxGeometry(0.3, 0.12, 0.04), std('#b3141b'), s * 0.62, 0.74, -1.96); // lanterna
+  }
+  part(new THREE.BoxGeometry(1.76, 0.16, 0.12), std('#2a2a2a'), 0, 0.42, 1.98); // para-choques
+  part(new THREE.BoxGeometry(1.76, 0.16, 0.12), std('#2a2a2a'), 0, 0.42, -1.98);
+  part(new THREE.BoxGeometry(0.5, 0.16, 0.02), std('#f4f4f0'), 0, 0.42, -2.05); // placa
+  for (const [wx, wz] of [[-0.82, 1.25], [0.82, 1.25], [-0.82, -1.25], [0.82, -1.25]]) {
+    part(new THREE.CylinderGeometry(0.31, 0.31, 0.22, 16).rotateZ(Math.PI / 2), std('#151515'), wx, 0.31, wz);
+    part(new THREE.CylinderGeometry(0.18, 0.18, 0.23, 12).rotateZ(Math.PI / 2), std('#b9bec4', { metalness: 0.7, roughness: 0.3 }), wx, 0.31, wz);
   }
   g.position.set(x, 0, z); g.rotation.y = ry; parent.add(g);
 }
@@ -226,6 +265,19 @@ function onibus(parent, x, z, ry, rota) {
   g.position.set(x, 0, z); g.rotation.y = ry; parent.add(g);
 }
 
+let leafMat = null;
+const palmLeafMat = () => (leafMat ||= new THREE.MeshStandardMaterial({ map: folhaPalmeiraTex(), alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.8 }));
+/** Folha arqueada: sai do topo e vai caindo. */
+function palmLeafGeo(s) {
+  const geo = new THREE.PlaneGeometry(1.1 * s, 4 * s, 1, 8);
+  geo.rotateX(-Math.PI / 2); // deitada, comprimento em +z
+  geo.translate(0, 0, 2 * s);
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) { const t = p.getZ(i) / (4 * s); p.setY(i, p.getY(i) + 0.9 * s * t - 2.2 * s * t * t); }
+  geo.computeVertexNormals();
+  return geo;
+}
+
 /** Palmeira imperial ou coqueiro (com cocos). */
 function palmeira(parent, x, z, s, coco) {
   const g = new THREE.Group();
@@ -233,11 +285,12 @@ function palmeira(parent, x, z, s, coco) {
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16 * s, 0.26 * s, h, 8), std(coco ? '#8a7258' : '#b9b2a2'));
   trunk.position.y = h / 2; trunk.rotation.z = coco ? 0.12 : 0; trunk.castShadow = true; g.add(trunk);
   const top = new THREE.Vector3(coco ? Math.sin(0.12) * -h / 2 : 0, h, 0);
-  for (let i = 0; i < 9; i++) {
-    const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.5 * s, 0.04, 3.2 * s).translate(0, 0, 1.6 * s), std(i % 2 ? '#3d7d3a' : '#4f9444'));
+  const folha = palmLeafMat();
+  for (let i = 0; i < 12; i++) {
+    const leaf = new THREE.Mesh(palmLeafGeo(s), folha);
     leaf.position.copy(top);
-    leaf.rotation.y = (i / 9) * Math.PI * 2;
-    leaf.rotation.x = 0.5 + (i % 3) * 0.12;
+    leaf.rotation.y = (i / 12) * Math.PI * 2 + (i % 2) * 0.2;
+    leaf.rotation.x = -0.25 - (i % 3) * 0.18;
     leaf.castShadow = true;
     g.add(leaf);
   }
@@ -410,10 +463,16 @@ function buildCity(root, cidade) {
   ground.rotation.x = -Math.PI / 2; ground.position.set(0, 0, 60); ground.receiveShadow = true;
   root.add(ground);
   floor(root, -P.streetX, P.streetX, P.house.z1 - 0.4, P.gateZ, new THREE.MeshStandardMaterial({ map: asphaltTexture([1.5, 14]), roughness: 0.95 }), 0.02);
-  const calcada = new THREE.MeshStandardMaterial({ map: concreteTexture([1, 22], cidade.fundo === 'morros' ? '#e9e4da' : '#b4b0a7'), roughness: 0.95 });
+  const pedra = ['rj', 'ssa', 'rec'].includes(cidade.id);
+  const calcada = new THREE.MeshStandardMaterial({ map: pedra ? pedraPortuguesaTex(cidade.id === 'rj').clone() : concreteTexture([1, 22], '#b4b0a7'), roughness: 0.95 });
+  if (pedra) { calcada.map.needsUpdate = true; calcada.map.repeat.set(1, 26); }
   floor(root, P.streetX, P.streetX + 2.4, P.house.z1 - 0.4, P.gateZ, calcada, 0.03);
   floor(root, -P.streetX - 2.4, -P.streetX, P.house.z1 - 0.4, P.gateZ, calcada, 0.03);
   for (let z = P.house.z1 + 1; z < P.gateZ - 2; z += 5) box(0.16, 0.01, 2.2, '#f2c20f', 0, 0.035, z, root); // faixa amarela
+  for (const s of [-1, 1]) { // meio-fio
+    const m = new THREE.Mesh(boxGeo(0.22, 0.16, P.gateZ - P.house.z1, 1), new THREE.MeshStandardMaterial({ color: '#c9c6bf', map: chapiscoTex(), roughness: 0.95 }));
+    m.position.set(s * (P.streetX + 0.11), 0.08, (P.gateZ + P.house.z1) / 2); m.receiveShadow = true; root.add(m);
+  }
   floor(root, P.yard.x0, P.yard.x1, P.yard.z0, P.corridor.z1 - 2.2, new THREE.MeshStandardMaterial({ map: concreteTexture([10, 12], '#b5b2aa'), roughness: 0.95 }), 0.02);
   faixaPedestre(root, P.gateZ - 4);
   lombada(root, 22);
