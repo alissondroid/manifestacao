@@ -6,7 +6,7 @@ Manifestação online na Avenida Paulista, direto no navegador. Você escolhe o 
 
 Código aberto sob licença **MIT**. Modelos 3D e outros arquivos de terceiros têm licenças próprias: veja [`ASSETS.md`](ASSETS.md). Contribuições: [`CONTRIBUTING.md`](CONTRIBUTING.md). Segurança: [`SECURITY.md`](SECURITY.md).
 
-**Aviso jurídico:** projeto independente, sem vínculo com candidatos, partidos ou campanhas. Os nomes e números identificam apenas os lados da disputa. Há três personagens prontos com a aparência de políticos reais (Renan Santos, Lula e Bolsonaro), em tom de sátira; isso envolve direito de imagem, e os modelos vieram de terceiros (Tripo e Sketchfab): confira a licença de cada arquivo (o do Sketchfab pode exigir crédito ao autor). Antes de publicar, revise a legislação eleitoral (propaganda, uso de nome de candidato e monetização em período eleitoral) e os termos de uso.
+**Aviso jurídico:** projeto independente, sem vínculo com candidatos, partidos ou campanhas. Os nomes e números identificam apenas os lados da disputa. O projeto não inclui personagens com a aparência de pessoas reais. Antes de publicar uma instância, revise a legislação eleitoral (propaganda, uso de nome de candidato e monetização em período eleitoral) e os termos de uso.
 
 ## Rodar
 
@@ -43,7 +43,7 @@ Variáveis do servidor (arquivo `.env`, veja `.env.example`): `PORT`, `MAX_PLAYE
 | `src/textures.js` | Todas as texturas, desenhadas em canvas: asfalto e mosaico (com normal maps gerados de mapas de altura), fachadas, rostos, bandeiras (Brasil, Petista 13, Bolsonarista 22, anarquista, sem partido), estampas de camisa, cartazes, faixas, placas, lambes e o telão animado com letreiro e contagem de pessoas |
 | `src/aging.js` | Idosos: sem gorro e barba grisalha no homem, pele mais pálida, óculos de leitura, tronco curvado, bengala na mão direita e passo mais lento (não há modelos de idosos; são os mesmos corpos envelhecidos) |
 | `src/crowd.js` | Multidão de 110 figurantes com os mesmos modelos humanos (20% idosos) (cada um com seu esqueleto e animação; quem está a mais de 55 m anima a 1/3 da taxa), agrupada por lado com as cores de camisa de cada um |
-| `src/models.js` | Carrega os modelos humanos glTF (`public/models`), retargeta as animações do Mixamo para os dois corpos e clona personagens com materiais próprios |
+| `src/models.js` | Carrega os modelos humanos glTF (`public/models`), retargeta as animações para o corpo e clona personagens com materiais próprios |
 | `src/avatar.js` | Avatar com modelo humano real animado por `AnimationMixer` (parado, andando, correndo, dançando; aceno por cinemática nos ossos do braço). Os personagens comuns vestem camiseta e bermuda com cores à escolha (o Rosto 1 masculino também troca pele e barba); Lula, Renan e Bolsonaro ficam com a roupa original e não trocam de roupa; todos aceitam a opção Idoso; acessórios da loja, bandeira e cartaz seguem os ossos |
 | `server/db.js` | SQLite embutido do Node (`node:sqlite`): usuários, sessões, pedidos, itens e equipados |
 | `server/auth.js` | Senhas com scrypt, sessões por cookie HttpOnly, limite de tentativas, validações |
@@ -103,27 +103,9 @@ O script instala Node 22 e Caddy (HTTPS automático), faz o build, cria o servi�
 
 ## Modelos 3D e créditos
 
-Os personagens são modelos glTF com esqueleto em `public/models` (cada um com ~4 MB). Nos personagens comuns, a roupa original (terno, agasalho, uniforme, moletom) vira camiseta e bermuda na carga: `src/models.js` marca cada vértice da roupa pelos ossos que o movem (antebraço e canela viram pele, capuz e abas do paletó somem) e um shader pinta cada região com a cor escolhida:
+O único corpo incluído é `public/models/readyplayer.me.glb` (avatar de exemplo do Ready Player Me, do repositório de exemplos do three.js), usado para todos os personagens, que mudam de roupa, pele, cabelo e barba em `src/models.js`. As animações vêm de `ual1.glb`/`ual2.glb` (Quaternius, CC0) e `zsky.glb` (Zsky, CC BY 4.0), todas no esqueleto padrão do Mixamo, com retarget próprio (`directClip`).
 
-| Arquivo | Quem é | Origem |
-|---|---|---|
-| `readyplayer.me.glb` | Homem (Rosto 1): aceita pele e barba | avatar de exemplo do Ready Player Me (repositório de exemplos do three.js) |
-| `ch33.glb` | Homem (Rosto 2) | Mixamo (`character.fbx`) |
-| `ch08.glb` | Homem (Rosto 3) | Mixamo (`character (1).fbx`) |
-| `Michelle.glb` | Não aparece mais no jogo: serve só de fonte da animação de samba e da pose de referência | Mixamo (exemplo do three.js) |
-| `ch16.glb` | Mulher de touca, sem máscara (Rosto 2) | Mixamo (`Ch16_nonPBR.fbx`) |
-| `ch02.glb` | Mulher (Rosto 1) | Mixamo (`Ch02_nonPBR.fbx`) |
-| `renan.glb` | Renan Santos (Homem, Rosto 4) | malha estática do Tripo (`assets-src/renan.glb`) com o esqueleto do ch33 ajustado às proporções dela e pesos copiados do ch33 (`/rig.html?make=renan&save=1`) |
-| `bolsonaro.glb` | Bolsonaro (Homem, Rosto 5) | cabeça do Sketchfab (`assets-src/bolsonaro-head.glb`) presa ao osso da cabeça do ch33, que perde a cabeça e o cabelo (`/rig.html?make=bolsonaro&save=1`) |
-| `lula.glb` | Lula (Homem, Rosto 6) | malha estática do Sketchfab (`assets-src/lula.glb`, em pose "A" e de costas): virada de frente, esqueleto do ch33 com os braços inclinados até a pose dela, pesos copiados do ch33 e suavizados pela malha; fica ligada na pose "A" e traz um clipe `TPose` de referência (`/rig.html?make=lula&save=1`) |
-| `clap.glb` | Só a animação de aplauso (esqueleto sem malha), convertida para todos os corpos | Mixamo "Standing Clap" (`assets-src/clap.fbx`, `/rig.html?make=clap&save=1`) |
-| `Soldier.glb` | só as animações Idle/Walk/Run; o modelo não aparece | Mixamo (exemplo do three.js) |
-
-Os `.glb` do Mixamo foram convertidos dos FBX originais (50 a 87 MB, com texturas 4K) por `src/dev-convert.js`, uma ferramenta de desenvolvimento aberta em `/convert.html?file=<nome>.fbx&mode=export&out=<nome>.glb`: junta as hierarquias de ossos duplicadas que o FBXLoader cria, unifica o esqueleto de todas as malhas (65 ossos), reduz as texturas para 1024 px (JPEG nas opacas, PNG com alfa no cabelo e cílios), indexa a geometria e normaliza o nome dos ossos para `mixamorig…`. Os FBX originais ficam em `assets-src/` (ignorado pelo git e fora do build). Para adicionar um personagem: coloque o FBX em `assets-src/`, converta, registre em `CHARACTERS` (`src/models.js`) e em `MODELS` (`shared/config.js`).
-
-**Animações:** os cinco corpos do Mixamo (Michelle e os quatro convertidos) usam um retarget próprio, `directClip` em `src/models.js`: os eixos locais dos ossos diferem entre o Soldier (fonte de Idle/Walk/Run) e os personagens, então cada rotação é levada pelo referencial do mundo, usando a T-pose de cada arquivo (o clipe `TPose`) como referência e a rotação global entre elas (o Soldier olha para −Z). O quadril recebe a translação: só o balanço vertical em Idle/Walk/Run, e o balanço completo na dança, sempre sem deriva (a média do clipe é descontada). O corpo do Ready Player Me, que não está em T-pose, usa `SkeletonUtils.retargetClip` com a fonte girada 180° em Y, para olhar para +Z. Verificação rápida no console: `window.__AVENIDA__` expõe `Avatar`, e para cada rosto o pé de apoio deve andar para trás em relação ao quadril durante o Walk.
-
-Os termos do Mixamo e do Ready Player Me permitem usar esses recursos em projetos, mas **não** redistribuí-los como arquivos avulsos; como estão na pasta pública, os jogadores conseguem baixá-los. Antes de publicar, confira as licenças atuais de cada um.
+Para adicionar um corpo seu (glTF com esqueleto `mixamorig…`, licença que permita redistribuir): coloque o arquivo em `public/models`, registre em `CHARACTERS` (`src/models.js`) e em `MODELS` (`shared/config.js`). Veja `ASSETS.md`. O repositório não inclui modelos de pessoas reais nem arquivos do Mixamo.
 
 ## Modos extras
 
@@ -157,7 +139,7 @@ Itens "Seu cartaz" (R$ 2) e "Sua bandeira" (R$ 4). Depois de comprar, o botão �
 Layout no espírito do manifestacao.com: barra no topo com logo e online por lado; à esquerda o personagem em 3D com o chamado "Entre na Paulista. Do seu jeito." e as abas de animação (parado, andando, correndo, acenando, dançando; arraste para girar); à direita o menu **"Monte seu personagem"**, em quatro etapas:
 
 1. **Lado**: Petista (13), Bolsonarista (22), Anarquistas ou Sem partido, com o contador de online de cada um.
-2. **Personagem**: seis personagens prontos numa fila (Homem, Mulher, Tiozão do Zap, Renan Santos, Lula e Bolsonaro) com retratos do modelo 3D e o botão 🎲 Sortear. Idosos e demais variações ficam em Visual.
+2. **Personagem**: três personagens prontos numa fila (Homem, Mulher e Tiozão do Zap) com retratos do modelo 3D e o botão 🎲 Sortear. Idosos e demais variações ficam em Visual.
 3. **Visual**: corpo, idade, rosto e altura; pele, barba, camisa e calça só aparecem no rosto que aceita tingir (o texto explica quando não).
 4. **Na mão**: nada, bandeira do Brasil, bandeira do lado, cartaz (frase pronta ou texto próprio via Pix), picanha no espeto ou abóbora. No PvP, quem segura picanha ou abóbora arremessa o próprio item em vez do tomate.
 
@@ -170,7 +152,7 @@ WASD/setas mover · Shift correr · arrastar para girar a câmera (ou Q/E) · En
 ## Próximos passos
 
 - Binário no lugar de JSON no `sync` quando o tráfego pesar.
-- Mais rostos: hoje são 6 modelos (3 homens, 3 mulheres). O domínio `models.readyplayer.me` não resolve mais; novos personagens vêm do Mixamo (veja acima). Falta compressão DRACO/KTX2 e LOD: cada personagem do Mixamo tem ~55 mil triângulos, então só ~18% da multidão os usa; o resto usa os dois corpos leves.
+- Mais rostos: hoje há só 1 corpo (Ready Player Me) para todos; adicione corpos com licença livre (veja "Modelos 3D"). Falta compressão DRACO/KTX2 e LOD: cada personagem do Mixamo tem ~55 mil triângulos, então só ~18% da multidão os usa; o resto usa os dois corpos leves.
 - Reduzir o custo da cena: com os modelos humanos chega a ~1000 draw calls e ~3 milhões de triângulos (75 fps num Mac). A qualidade adaptativa (abaixo) ameniza, mas não resolve em celulares fracos.
 - Voz por proximidade (LiveKit ou WebRTC).
 - Contas: verificação de e-mail, recuperação de senha e login social (Google/Kick).
@@ -279,7 +261,6 @@ Segunda rodada: o anti-teleporte permitia ~25 m/s a quem mandasse muitas mensage
 - **Retarget** (`directClip` em `src/models.js`): a rotação de cada osso é levada pelo espaço do mundo como diferença em relação à T-pose. Como as T-poses não são iguais entre esqueletos (no Mixamo as pernas abrem em "A", no Ready Player Me os braços), `alignedRest` primeiro gira cada osso do alvo para a direção do osso correspondente na T-pose da fonte; essa pose alinhada vira o repouso. O giro global entre esqueletos vem do eixo braço esquerdo → direito, não do osso do quadril (cuja convenção muda entre rigs). Todos os corpos, inclusive o Ready Player Me, usam esse caminho.
 - **Unidades do quadril:** o deslocamento do quadril vem nas unidades locais da fonte (cm no Mixamo, com raiz a 0,01; metros na UAL e no Zsky) e entra nas do alvo. `directClip` converte pela razão das escalas do pai de cada esqueleto (`ps` em `restInfo`); sem isso, o samba dos corpos em metros (Ready Player Me) deslocava o quadril 100× e o boneco "pulava" pelo cenário.
 - **Clipes de uma vez** (`playOnce` em `src/avatar.js`): golpes, reação ao golpe e arremesso tocam por cima do clipe atual e voltam sozinhos.
-- **Aplauso:** quarto emote (👏, tecla 3), também usado por ~22 % dos figurantes parados; as pernas ficam retas (`pin`), porque o clipe do Mixamo vem agachado.
 
 ## Cenário
 
@@ -304,9 +285,7 @@ Segunda rodada: o anti-teleporte permitia ~25 m/s a quem mandasse muitas mensage
 - **Código:** MIT (`LICENSE`). **Arquivos de terceiros:** ver `ASSETS.md`.
 - **Zsky** (`@Zsky_01`): animações de chute, murro e aceno do pacote *Animated Character*, **CC BY 4.0**. Crédito obrigatório: <https://www.patreon.com/Zsky>. Licença original em `assets-src/zsky-LICENSE-CCBY.txt`. O crédito também aparece no jogo, em "Créditos", no rodapé do menu. As animações foram adaptadas (rig refeito e convertido para os esqueletos Mixamo).
 - **Quaternius**: Universal Animation Library 1 e 2, **CC0** (crédito não é obrigatório; licença em `assets-src/ual-LICENSE-CC0.txt`).
-- **Mixamo/Adobe**: personagens e a animação de aplauso (termos do Mixamo; não redistribuir os arquivos originais).
-- **three.js**: Soldier/Michelle de exemplo (MIT).
-- Modelos de pessoas reais: ver o aviso jurídico no topo.
+- **Ready Player Me**: avatar de exemplo do repositório de exemplos do three.js; confira os termos atuais antes de reutilizar.
 
 ## Ranking dos grupos e funções VIP
 

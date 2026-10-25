@@ -83,11 +83,9 @@ export function createCrowd(scene, rng, avoid, count = CROWD.counts[0]) {
 
     const kind = rng() < 0.5 ? 'male' : 'female';
     const elderly = rng() < 0.2;
-    // O modelo do Ready Player Me é leve (16 mil triângulos) e aceita tingir; os do Mixamo têm ~55 mil.
+    // O modelo do Ready Player Me é leve (16 mil triângulos) e aceita tingir.
     // Só alguns figurantes usam os pesados.
-    const heavy = rng() < 0.18;
-    const pool = MODELS.male.filter((m) => m !== 'rpm');
-    const c = createCharacter(kind === 'female' ? pick(MODELS.female) : (heavy ? pick(pool) : 'rpm'));
+    const c = createCharacter(kind === 'female' ? pick(MODELS.female) : 'rpm');
     const group = new THREE.Group();
     group.add(c.root);
     group.position.set(x, 0, z);

@@ -21,7 +21,7 @@ export const SIDE_SLUGS = ['petista', 'bolsonarista', 'anarquia', 'sem-partido']
 export const BODIES = ['Masculino', 'Feminino'];
 export const AGES = ['Adulto', 'Idoso'];
 // Modelos humanos disponíveis por corpo; `look.face` escolhe o índice na lista.
-export const MODELS = { male: ['rpm', 'ch33', 'ch08', 'renan', 'bolsonaro', 'lula'], female: ['ch02', 'ch16'] };
+export const MODELS = { male: ['rpm'], female: ['rpm'] };
 export const HEIGHTS = ['Baixo', 'Médio', 'Alto'];
 // Tons de pele que representam a diversidade brasileira, do mais claro ao mais escuro.
 export const SKINS = ['#f3d2b8', '#e5b48c', '#c98d62', '#a56c43', '#7b4a2d', '#503020'];
@@ -45,7 +45,6 @@ export const ANIMS = ['idle', 'walk', 'wave', 'dance', 'clap', 'drive', 'dance2'
 export const EMOTES = [
   { anim: 2, icon: '👋', name: 'Acenar', key: '1' },
   { anim: 3, icon: '💃', name: 'Dançar', key: '2' },
-  { anim: 4, icon: '👏', name: 'Aplaudir', key: '3' },
   { anim: 6, icon: '🕺', name: 'Dança 2', premium: true },
   { anim: 7, icon: '📣', name: 'Chamar', premium: true },
   { anim: 8, icon: '🙆', name: 'Concordar', premium: true },

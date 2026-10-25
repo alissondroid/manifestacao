@@ -28,7 +28,7 @@ export function ageCharacter(char) {
       mats.beard = beard.material;
     }
   }
-  if (mats.hair?.map) { // cabelo dos personagens do Mixamo: textura em cinza claro, cor branca
+  if (mats.hair?.map) { // cabelo dos personagens: textura em cinza claro, cor branca
     const gm = grayMap(mats.hair.map);
     mats.hair.map = gm;
     mats.hair.color.set('#ece8e2');

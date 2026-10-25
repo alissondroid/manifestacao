@@ -5,9 +5,8 @@ import { MODELS } from '../shared/config.js';
 
 // Modelos humanos com esqueleto (glTF binário em /public/models):
 //  - readyplayer.me.glb: Ready Player Me, roupa em malhas separadas (aceita tingir pele, camisa e calça)
-//  - Michelle.glb: não aparece em cena; só fornece a animação SambaDance e a pose de referência (TPose)
-//  - ch16.glb, ch33.glb, ch08.glb: personagens do Mixamo convertidos de FBX (ver src/dev-convert.js)
-//  - ual1.glb / ual2.glb: Universal Animation Library (Quaternius, CC0) com ossos renomeados; clap.glb: aplauso do Mixamo
+//  - ual1.glb / ual2.glb: Universal Animation Library (Quaternius, CC0) com ossos renomeados
+//  - zsky.glb: chute, murro e aceno (Zsky, CC BY 4.0)
 // Todos usam o esqueleto padrão do Mixamo; o GLTFLoader remove o ":" dos nomes ("mixamorigHips").
 
 // `direct`: o esqueleto é o padrão do Mixamo e a animação é aplicada como diferença de rotação local
@@ -18,34 +17,13 @@ import { MODELS } from '../shared/config.js';
 // `detail`: quanto do relevo da textura original fica na roupa repintada.
 // `drop`: peças soltas da parte de cima que somem, pelo número de vértices de cada uma (no terno do
 // Ready Player Me: gravata-borboleta 220 e 63, flor 99 e 13, botões 41 e fivela 24).
-// Sem `outfit` (Lula, Renan, Bolsonaro), o personagem fica com a roupa original e não troca de roupa.
+// Sem `outfit`, o personagem fica com a roupa original e não troca de roupa.
 export const CHARACTERS = {
   rpm: {
     file: 'readyplayer.me.glb', prefix: '', tintable: true, direct: true, detail: 0.1,
     outfit: { top: ['Wolf3D_Outfit_Top'], bottom: ['Wolf3D_Outfit_Bottom'] },
     drop: [220, 63, 99, 13, 41, 24],
   },
-  michelle: { file: 'Michelle.glb', prefix: 'mixamorig', direct: true },
-  ch16: {
-    file: 'ch16.glb', prefix: 'mixamorig', direct: true, skinFrom: 'Ch16_Body1',
-    outfit: { top: ['Ch16_Shirt'], bottom: ['Ch16_Pants'] },
-  },
-  ch33: {
-    file: 'ch33.glb', prefix: 'mixamorig', direct: true, skinFrom: 'Ch33_Body',
-    outfit: { top: ['Ch33_Suit'], bottom: ['Ch33_Pants', 'Ch33_Belt'], hide: ['Ch33_Shirt', 'Ch33_Tie'] },
-  },
-  ch08: {
-    file: 'ch08.glb', prefix: 'mixamorig', direct: true, skinFrom: 'Ch08_Body',
-    outfit: { top: ['Ch08_Hoodie'], bottom: ['Ch08_Pants'] },
-  },
-  ch02: {
-    file: 'ch02.glb', prefix: 'mixamorig', direct: true, skinFrom: 'Ch02_Body',
-    outfit: { mixed: ['Ch02_Cloth'] },
-  },
-  // montados em src/dev-rig.js sobre o esqueleto do ch33 (ver README)
-  renan: { file: 'renan.glb', prefix: 'mixamorig', direct: true },
-  bolsonaro: { file: 'bolsonaro.glb', prefix: 'mixamorig', direct: true },
-  lula: { file: 'lula.glb', prefix: 'mixamorig', direct: true },
 };
 
 export const models = {
@@ -297,11 +275,6 @@ function findSkinned(root, name) {
 }
 
 /** Remove a escala das faixas (deixa o mixer mais leve). */
-function slim(clip) {
-  clip.tracks = clip.tracks.filter((t) => !t.name.endsWith('.scale'));
-  return clip;
-}
-
 /** Id do modelo para o corpo (0 masculino, 1 feminino) e o rosto escolhido. */
 export function modelId(body, face = 0) {
   const list = MODELS[body === 1 ? 'female' : 'male'];
@@ -314,10 +287,10 @@ export async function loadModels(onStage) {
   const ids = Object.keys(CHARACTERS);
   // ual1/ual2: Universal Animation Library (Quaternius, CC0) com os ossos renomeados para o padrão Mixamo (src/dev-rig.js)
   // zsky.glb: chute, murro e aceno do pacote Animated Character (Zsky, CC BY 4.0), refeitos no padrão Mixamo
-  const files = ['ual1.glb', 'ual2.glb', 'clap.glb', 'zsky.glb', ...ids.map((id) => CHARACTERS[id].file)];
+  const files = ['ual1.glb', 'ual2.glb', 'zsky.glb', ...ids.map((id) => CHARACTERS[id].file)];
   const done = files.map(() => 0); // fração baixada de cada arquivo
   const report = () => onStage?.('download', done.reduce((a, b) => a + b, 0) / files.length);
-  const [ual1, ual2, clapSrc, zsky, ...gltfs] = await Promise.all(files.map((file, i) => load(file, (e) => {
+  const [ual1, ual2, zsky, ...gltfs] = await Promise.all(files.map((file, i) => load(file, (e) => {
     if (e.lengthComputable && e.total) { done[i] = Math.max(done[i], Math.min(0.99, e.loaded / e.total)); report(); }
   }).then((gltf) => { done[i] = 1; report(); return gltf; })));
   onStage?.('prepare');
@@ -358,8 +331,6 @@ export async function loadModels(onStage) {
   for (const sk of [ualSkin1, ualSkin2]) sk.visible = false;
   const u1 = Object.fromEntries(ual1.animations.map((c) => [c.name, c]));
   const u2 = Object.fromEntries(ual2.animations.map((c) => [c.name, c]));
-  const samba = gltfs[ids.indexOf('michelle')].animations.find((c) => c.name === 'SambaDance');
-  const sambaSource = skins.michelle;
 
   // Poses de repouso das fontes e dos alvos diretos, lidas ANTES de qualquer retarget mexer nos ossos:
   // rotação local do osso e rotação (no mundo) do pai dele.
@@ -380,7 +351,7 @@ export async function loadModels(onStage) {
     root.updateMatrixWorld(true);
     const m = new Map();
     root.traverse((o) => {
-      // um GLB só de animação (clap.glb) não tem skin, e os ossos chegam como nós comuns
+      // um GLB só de animação não tem skin, e os ossos chegam como nós comuns
       if (!o.isBone && !/^mixamorig/.test(o.name)) return;
       m.set(o.name, {
         pos: o.position.clone(),
@@ -394,21 +365,16 @@ export async function loadModels(onStage) {
     if (mixer) { mixer.stopAllAction(); mixer.uncacheRoot(root); }
     return m;
   };
-  const michelleGltf = gltfs[ids.indexOf('michelle')];
   const restUal1 = restInfo(ual1.scene, u1.TPose);
   const restUal2 = restInfo(ual2.scene, u2.TPose);
   const restZsky = restInfo(zsky.scene);
   const uz = Object.fromEntries(zsky.animations.map((c) => [c.name, c]));
-  const restMichelle = restInfo(michelleGltf.scene, michelleGltf.animations.find((c) => c.name === 'TPose'));
-  const restClap = restInfo(clapSrc.scene); // aplauso do Mixamo: o repouso do arquivo já é a T-pose
-  const clap = clapSrc.animations.find((c) => c.name === 'Clap');
   const restTargets = {};
   for (const id of ids) {
     if (!CHARACTERS[id].direct) continue;
-    // a Michelle tem o clipe TPose; os outros já vêm em T-pose
-    // quem foi ligado em outra pose (o Lula, em pose "A") traz o clipe TPose como referência
+    // quem foi ligado em outra pose traz o clipe TPose como referência
     const tpose = gltfs[ids.indexOf(id)].animations.find((c) => c.name === 'TPose');
-    restTargets[id] = id === 'michelle' ? restMichelle : restInfo(models.base[id], tpose);
+    restTargets[id] = restInfo(models.base[id], tpose);
   }
 
   // Nome do osso no alvo: o Ready Player Me não tem o prefixo "mixamorig"
@@ -502,7 +468,7 @@ export async function loadModels(onStage) {
       const sum = new THREE.Vector3();
       // unidades: o deslocamento do quadril vem nas unidades locais da fonte (cm no Mixamo, m na UAL) e entra nas do
       // alvo; converte pelo mundo (escala do pai de cada esqueleto)
-      const unit = rs.ps / rt.ps; // sem razão de alturas: o tamanho dos corpos é parecido e a Michelle (fonte do samba) mede diferente
+      const unit = rs.ps / rt.ps; // sem razão de alturas: o tamanho dos corpos é parecido 
       for (let i = 0; i < n; i++) {
         const d = new THREE.Vector3().fromArray(hipsTrack.values, i * 3).sub(rs.pos).multiplyScalar(unit).applyQuaternion(toTarget);
         if (hipsMode === 'vertical') { // só o movimento vertical, no referencial do mundo
@@ -542,7 +508,7 @@ export async function loadModels(onStage) {
   };
 
   // ---- ajustes de naturalidade (só nos corpos do Mixamo) ----
-  // Poses fixas usadas por `relaxHands` (mão relaxada nos clipes do Mixamo) e `pin` (pernas retas no aplauso).
+  // Poses fixas usadas por `relaxHands` (mão relaxada nos clipes).
   const Z = new THREE.Vector3(0, 0, 1);
   const X = new THREE.Vector3(1, 0, 0);
   const rotateWorld = (bone, axis, a) => {
@@ -616,18 +582,7 @@ export async function loadModels(onStage) {
     for (const [name, q] of fingers) clip.tracks.push(new THREE.QuaternionKeyframeTrack(`${name}.quaternion`, [0, clip.duration || 1], [...q.toArray(), ...q.toArray()]));
     return clip;
   };
-  /** Troca as faixas de `names` por uma pose fixa (a relaxada): o aplauso do Mixamo vem agachado, as pernas ficam retas. */
-  const pin = (id, clip, names) => {
-    const { relaxed } = posed[id];
-    clip.tracks = clip.tracks.filter((t) => !names.some((n) => t.name === `mixamorig${n}.quaternion`) || !relaxed.has(t.name.replace(/\.quaternion$/, '')));
-    for (const n of names) {
-      const q = relaxed.get(`mixamorig${n}`);
-      if (q) clip.tracks.push(new THREE.QuaternionKeyframeTrack(`mixamorig${n}.quaternion`, [0, clip.duration || 1], [...q.toArray(), ...q.toArray()]));
-    }
-    return clip;
-  };
   const ARMS = ['LeftArm', 'RightArm', 'LeftForeArm', 'RightForeArm'];
-  const LEGS = ['LeftUpLeg', 'RightUpLeg', 'LeftLeg', 'RightLeg', 'LeftFoot', 'RightFoot'];
 
   for (const id of ids) {
     if (CHARACTERS[id].direct) {
@@ -638,8 +593,7 @@ export async function loadModels(onStage) {
         idle: d1('idle'),
         walk: d1('walk'),
         run: d1('run'),
-        dance: id === 'michelle' ? slim(samba.clone()) : relaxHands(id, directClip(id, samba, restMichelle, 'full')),
-        clap: pin(id, directClip(id, clap, restClap, 'none'), LEGS),
+        dance: relaxHands(id, d1('dance2', 'full')),
         punch: d1('punch'),
         jab: d1('jab'),
         hook: d2('hook'),

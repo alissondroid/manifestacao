@@ -14,8 +14,7 @@ import {
 
 // Avatar com modelo humano de verdade (glTF com esqueleto, ver models.js), animado por
 // AnimationMixer e com acessórios que seguem os ossos. Os personagens comuns vestem camiseta e
-// bermuda com cores escolhidas (o Rosto 1 masculino também troca a pele); Lula, Renan e Bolsonaro
-// ficam com a roupa original.
+// bermuda com cores escolhidas (o Rosto 1 masculino também troca a pele).
 
 const BASE_SKIN = new THREE.Color('#f3d2b8'); // tom mais claro da lista = textura sem alteração
 // Variação de rosto e corpo por escala de ossos: cabeça (largura, altura, profundidade) e quadril (tudo).
@@ -273,7 +272,7 @@ export class Avatar {
       return grp;
     };
     const b = this.char.bones;
-    // topo e largura da cabeça (com cabelo), medidos na malha: mudam entre os corpos (Lula, Bolsonaro, mulheres…)
+    // topo e largura da cabeça (com cabelo), medidos na malha: mudam entre os corpos
     const hs = this.char.bones.hips.scale.x || 1;
     const hd = this.char.head || { top: 0.23, radius: 0.1, cx: 0, cz: 0.01 };
     const headTop = hd.top * hs;
