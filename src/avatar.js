@@ -213,7 +213,7 @@ export class Avatar {
       else if (equip.shirt === 'camisa-custom') shirt = look.custom?.shirt?.bg ?? DESIGN.colors[0];
       c.outfit.top.set(shirt);
       c.outfit.bottom.set((PANTS[look.pants] ?? PANTS[0]).color);
-      if (c.tintable) c.outfit.skin.set(SKINS[look.skin] ?? SKINS[0]);
+      if (c.tintable || c.lookSkin) c.outfit.skin.set(SKINS[look.skin] ?? SKINS[0]);
       else c.outfit.skin.copy(c.skinTone);
     }
 

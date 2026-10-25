@@ -21,7 +21,7 @@ export const SIDE_SLUGS = ['petista', 'bolsonarista', 'anarquia', 'sem-partido']
 export const BODIES = ['Masculino', 'Feminino'];
 export const AGES = ['Adulto', 'Idoso'];
 // Modelos humanos disponíveis por corpo; `look.face` escolhe o índice na lista.
-export const MODELS = { male: ['rpm'], female: ['rpm'] };
+export const MODELS = { male: ['rpm'], female: ['ubcf'] };
 export const HEIGHTS = ['Baixo', 'Médio', 'Alto'];
 // Tons de pele que representam a diversidade brasileira, do mais claro ao mais escuro.
 export const SKINS = ['#f3d2b8', '#e5b48c', '#c98d62', '#a56c43', '#7b4a2d', '#503020'];

@@ -24,6 +24,12 @@ export const CHARACTERS = {
     outfit: { top: ['Wolf3D_Outfit_Top'], bottom: ['Wolf3D_Outfit_Bottom'] },
     drop: [220, 63, 99, 13, 41, 24],
   },
+  // Universal Base Characters (Quaternius, CC0) sem texturas: corpo inteiro numa malha só, pintado por região
+  // (`body`: camiseta, bermuda e pele). Gerado por scripts/converter-ubc.mjs. A pele vem do visual escolhido.
+  ubcf: {
+    file: 'ubc_female.glb', prefix: 'mixamorig', direct: true, lookSkin: true, detail: 0,
+    outfit: { body: ['Body'] },
+  },
 };
 
 export const models = {
@@ -90,6 +96,7 @@ function outfitRegions(mesh, role, drop) {
   const n = g.attributes.position.count;
   const region = new Float32Array(n);
   mesh.updateMatrixWorld(true);
+  const hipY = mesh.skeleton.bones.find((b) => /Hips$/.test(b.name)).getWorldPosition(new THREE.Vector3()).y;
   const hem = mesh.skeleton.bones.find((b) => /Hips$/.test(b.name)).getWorldPosition(new THREE.Vector3()).y - 0.12;
   const p = new THREE.Vector3();
   const part = role === 'top' && drop ? partSizes(g) : null;
@@ -105,6 +112,26 @@ function outfitRegions(mesh, role, drop) {
       if (ARM_SKIN.test(name)) arm += w;
       else if (LEG_SKIN.test(name)) leg += w;
       else if (HEAD.test(name)) head += w;
+    }
+    if (role === 'body') { // corpo inteiro: pele na cabeça, mãos, antebraços e canelas; bermuda até o meio da coxa
+      let neck = 0;
+      let upLeg = 0;
+      let hips = 0;
+      for (let k = 0; k < 4; k++) {
+        const name = names[si.getComponent(i, k)];
+        const w = sw.getComponent(i, k);
+        if (/Neck/.test(name)) neck += w;
+        else if (/UpLeg/.test(name)) upLeg += w;
+        else if (/Hips$/.test(name)) hips += w;
+      }
+      if (head + neck > 0.5 || arm > 0.5 || leg > 0.5) region[i] = 2;
+      else if (upLeg + hips > 0.5) {
+        p.fromBufferAttribute(g.attributes.position, i);
+        mesh.applyBoneTransform(i, p);
+        p.applyMatrix4(mesh.matrixWorld);
+        region[i] = upLeg > hips && p.y < hipY - 0.27 ? 2 : 1;
+      } else region[i] = 0;
+      continue;
     }
     const c = px ? texel(px, uv, i) : null;
     let r = role === 'bottom' ? 1 : 0;
@@ -678,6 +705,7 @@ export function createCharacter(id) {
     id,
     kind: MODELS.female.includes(id) ? 'female' : 'male',
     tintable: !!def.tintable,
+    lookSkin: !!def.lookSkin,
     outfit,
     skinTone: models.skin[id] ?? null,
     root,

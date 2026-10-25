@@ -7,6 +7,7 @@ Os arquivos abaixo têm licenças próprias e **não** são relicenciados pela M
 |---|---|---|
 | `public/models/readyplayer.me.glb` | Ready Player Me (avatar de exemplo do three.js) | Termos do Ready Player Me; confira antes de reutilizar |
 | `public/models/ual1.glb`, `ual2.glb` | Quaternius, Universal Animation Library 1 e 2 | CC0 |
+| `public/models/ubc_female.glb` | Quaternius, Universal Base Characters (*Superhero Female*), sem texturas, ossos renomeados e cabelo simples feitos por `scripts/converter-ubc.mjs` | CC0 |
 | `public/models/zsky.glb` | Zsky, *Animated Character* (<https://www.patreon.com/Zsky>) | CC BY 4.0 (crédito obrigatório; obra adaptada) |
 
 Este repositório não inclui modelos do Mixamo/Adobe nem de pessoas reais.

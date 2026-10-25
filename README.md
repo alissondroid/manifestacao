@@ -33,7 +33,7 @@ Configuração em `.env` (copie de `.env.example`; use só chaves de teste de pa
 ## Fork
 
 - Troque `avenidaonline.com` pelo seu domínio (`grep -rl avenidaonline.com index.html votacao public server src deploy docs`) e preencha `public/termos` e `public/privacidade` (campos `[PREENCHER]`).
-- O jogo traz um único corpo (Ready Player Me). Adicione corpos com licença livre: veja "Modelos 3D" na documentação.
+- O jogo traz dois corpos (masculino Ready Player Me, feminino Quaternius CC0). Adicione corpos com licença livre: veja "Modelos 3D" na documentação.
 
 ## Aviso
 

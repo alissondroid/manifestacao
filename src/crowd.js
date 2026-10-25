@@ -101,7 +101,7 @@ export function createCrowd(scene, rng, avoid, count = CROWD.counts[0]) {
       c.outfit.skin.copy(skin);
       if (c.meshes.Wolf3D_Beard) c.meshes.Wolf3D_Beard.visible = rng() < 0.5;
       for (const name of HIDE_FAR) if (c.meshes[name]) c.meshes[name].visible = false;
-    }
+    } else if (c.lookSkin) c.outfit.skin.set(pick(SKINS));
     if (c.outfit) { // camiseta nas cores do lado e bermuda
       c.outfit.top.set(rng() < 0.85 ? pick(SHIRT_BY_SIDE[side]) : pick(SHIRT_BY_SIDE[3]));
       c.outfit.bottom.set(pick(PANTS_COLORS));
@@ -174,7 +174,7 @@ export function createCrowd(scene, rng, avoid, count = CROWD.counts[0]) {
       c.outfit.skin.copy(skin);
       if (c.meshes.Wolf3D_Beard) c.meshes.Wolf3D_Beard.visible = !female && rng() < 0.4;
       for (const name of HIDE_FAR) if (c.meshes[name]) c.meshes[name].visible = false;
-    }
+    } else if (c.lookSkin) c.outfit.skin.set(pick(SKINS));
     if (c.outfit) {
       c.outfit.top.set(pick(def.top));
       c.outfit.bottom.set(pick(def.bottom));

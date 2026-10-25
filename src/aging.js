@@ -28,6 +28,7 @@ export function ageCharacter(char) {
       mats.beard = beard.material;
     }
   }
+  if (mats.hair && !mats.hair.map) mats.hair.color.copy(GRAY_HAIR); // cabelo sem textura
   if (mats.hair?.map) { // cabelo dos personagens: textura em cinza claro, cor branca
     const gm = grayMap(mats.hair.map);
     mats.hair.map = gm;
@@ -37,7 +38,7 @@ export function ageCharacter(char) {
     const m = mats[key];
     if (m) m.color.lerp(new THREE.Color('#d8d2cc'), 0.25); // pele mais pálida
   }
-  if (char.tintable && char.outfit) char.outfit.skin.lerp(new THREE.Color('#d8d2cc'), 0.25); // braços e canelas também
+  if ((char.tintable || char.lookSkin) && char.outfit) char.outfit.skin.lerp(new THREE.Color('#d8d2cc'), 0.25); // braços e canelas também
 }
 
 /** Óculos de leitura finos (grupo a ser preso ao osso da cabeça). */

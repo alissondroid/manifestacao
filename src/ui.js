@@ -336,7 +336,7 @@ export function initLobby({
     $('#tint-group').hidden = !def.outfit;
     $('#visual-note').hidden = !!def.outfit;
     syncMore();
-    $('#skin-field').hidden = !def.tintable;
+    $('#skin-field').hidden = !(def.tintable || def.lookSkin);
     $('#beard-field').hidden = !def.tintable;
 
     const side = SIDES[profile.side];

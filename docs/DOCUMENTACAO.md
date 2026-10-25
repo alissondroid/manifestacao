@@ -103,7 +103,7 @@ O script instala Node 22 e Caddy (HTTPS automático), faz o build, cria o servi�
 
 ## Modelos 3D e créditos
 
-O único corpo incluído é `public/models/readyplayer.me.glb` (avatar de exemplo do Ready Player Me, do repositório de exemplos do three.js), usado para todos os personagens, que mudam de roupa, pele, cabelo e barba em `src/models.js`. As animações vêm de `ual1.glb`/`ual2.glb` (Quaternius, CC0) e `zsky.glb` (Zsky, CC BY 4.0), todas no esqueleto padrão do Mixamo, com retarget próprio (`directClip`).
+Os corpos incluídos são `public/models/readyplayer.me.glb` (masculino; avatar de exemplo do Ready Player Me, do repositório de exemplos do three.js) e `public/models/ubc_female.glb` (feminino; Quaternius, CC0, gerado de um FBX por `node scripts/converter-ubc.mjs assets-src/ubc-female.fbx public/models/ubc_female.glb`, com a roupa pintada por região de ossos). Os personagens mudam de roupa, pele, cabelo e barba em `src/models.js`. As animações vêm de `ual1.glb`/`ual2.glb` (Quaternius, CC0) e `zsky.glb` (Zsky, CC BY 4.0), todas no esqueleto padrão do Mixamo, com retarget próprio (`directClip`).
 
 Para adicionar um corpo seu (glTF com esqueleto `mixamorig…`, licença que permita redistribuir): coloque o arquivo em `public/models`, registre em `CHARACTERS` (`src/models.js`) e em `MODELS` (`shared/config.js`). Veja `ASSETS.md`. O repositório não inclui modelos de pessoas reais nem arquivos do Mixamo.
 

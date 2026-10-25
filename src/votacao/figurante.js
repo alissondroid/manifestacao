@@ -22,7 +22,7 @@ export function createFigurante({
     c.mats.skinBody.color.copy(tint);
     c.outfit.skin.copy(skin);
     for (const name of ['Wolf3D_Teeth', 'EyeLeft', 'EyeRight']) if (c.meshes[name]) c.meshes[name].visible = false;
-  }
+  } else if (c.lookSkin) c.outfit.skin.set(SKINS[seed % SKINS.length]);
   if (c.outfit) { c.outfit.top.set(shirt); c.outfit.bottom.set(pants); }
   c.bones.hips.scale.setScalar(HEIGHT_SCALE[seed % HEIGHT_SCALE.length]);
   c.root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
