@@ -55,7 +55,7 @@ Variáveis do servidor (arquivo `.env`, veja `.env.example`): `PORT`, `MAX_PLAYE
 | `src/net.js` | Cliente WebSocket com reconexão (reenvia `join` ou `watch`) |
 | `src/audio.js` | Som ambiente sintetizado (multidão, buzinas distantes, pop de chat), sem arquivos |
 | `src/ui.js` | Lobby, HUD, chat, joystick de toque e rótulos flutuantes |
-| `src/portraits.js` | Personagens prontos (Homem, Mulher, Tiozão do Zap, Tia da família, Jovem, Seu Zé, Moça, Rapaz) e os retratos deles, renderizados do modelo 3D num render target |
+| `src/portraits.js` | Personagens prontos (Homem e Mulher) e os retratos deles, renderizados do modelo 3D num render target |
 | `src/main.js` | Loop do jogo, câmera, controles, interpolação dos outros jogadores |
 
 ## Protocolo (JSON sobre WebSocket, `/ws`)
@@ -139,7 +139,7 @@ Itens "Seu cartaz" (R$ 2) e "Sua bandeira" (R$ 4). Depois de comprar, o botão �
 Layout no espírito do manifestacao.com: barra no topo com logo e online por lado; à esquerda o personagem em 3D com o chamado "Entre na Paulista. Do seu jeito." e as abas de animação (parado, andando, correndo, acenando, dançando; arraste para girar); à direita o menu **"Monte seu personagem"**, em quatro etapas:
 
 1. **Lado**: Petista (13), Bolsonarista (22), Anarquistas ou Sem partido, com o contador de online de cada um.
-2. **Personagem**: três personagens prontos numa fila (Homem, Mulher e Tiozão do Zap) com retratos do modelo 3D e o botão 🎲 Sortear. Idosos e demais variações ficam em Visual.
+2. **Personagem**: dois personagens prontos numa fila (Homem e Mulher) com retratos do modelo 3D e o botão 🎲 Sortear. Idosos e demais variações ficam em Visual.
 3. **Visual**: corpo, idade, rosto e altura; pele, barba, camisa e calça só aparecem no rosto que aceita tingir (o texto explica quando não).
 4. **Na mão**: nada, bandeira do Brasil, bandeira do lado, cartaz (frase pronta ou texto próprio via Pix), picanha no espeto ou abóbora. No PvP, quem segura picanha ou abóbora arremessa o próprio item em vez do tomate.
 

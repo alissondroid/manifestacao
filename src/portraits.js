@@ -5,7 +5,6 @@ import { Avatar } from './avatar.js';
 export const PRESETS = [
   { id: 'homem', name: 'Homem', look: { body: 0, age: 0, face: 0, skin: 2, hairStyle: 0, hair: 1, beard: 0, shirt: 0, top: 0, pants: 0 } },
   { id: 'mulher', name: 'Mulher', look: { body: 1, age: 0, face: 0, skin: 1, hairStyle: 4, hair: 1, beard: 0, shirt: 6, top: 0, pants: 3 } },
-  { id: 'tiozao', name: 'Tiozão do Zap', look: { body: 0, age: 0, face: 0, skin: 1, hairStyle: 2, hair: 5, beard: 1, shirt: 2, top: 0, pants: 1 } },
 ];
 
 /**
