@@ -8,10 +8,10 @@
   "author": "Alisson R.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/alissondroid/avenida-online.git"
+    "url": "git+https://github.com/alissondroid/manifestacao.git"
   },
   "bugs": {
-    "url": "https://github.com/alissondroid/avenida-online/issues"
+    "url": "https://github.com/alissondroid/manifestacao/issues"
   },
   "keywords": [
     "threejs",

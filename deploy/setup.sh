@@ -10,7 +10,7 @@ set -euo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "Rode como root."; exit 1; }
 
 APP_DIR="${APP_DIR:-/opt/avenida}"
-REPO_URL="${REPO_URL:-https://github.com/alissondroid/avenida-online.git}"
+REPO_URL="${REPO_URL:-https://github.com/alissondroid/manifestacao.git}"
 BRANCH="${BRANCH:-main}"
 DOMAIN="${DOMAIN:-}"
 APP_USER=avenida

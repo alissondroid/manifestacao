@@ -1,6 +1,6 @@
 # Avenida Online
 
-[![CI](https://github.com/alissondroid/avenida-online/actions/workflows/ci.yml/badge.svg)](https://github.com/alissondroid/avenida-online/actions/workflows/ci.yml) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Node >=22](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
+[![CI](https://github.com/alissondroid/manifestacao/actions/workflows/ci.yml/badge.svg)](https://github.com/alissondroid/manifestacao/actions/workflows/ci.yml) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Node >=22](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
 
 Mundo 3D multiplayer no navegador, ambientado na Avenida Paulista. Escolha um lado, monte seu personagem, converse, corra, dispute trechos da avenida e curta shows de fogos com outras pessoas em tempo real. Sem instalar nada: abre em qualquer navegador moderno, no computador ou no celular.
 
@@ -29,8 +29,8 @@ Mundo 3D multiplayer no navegador, ambientado na Avenida Paulista. Escolha um la
 Requer **Node 22+**.
 
 ```bash
-git clone https://github.com/alissondroid/avenida-online.git
-cd avenida-online
+git clone https://github.com/alissondroid/manifestacao.git
+cd manifestacao
 npm install
 npm run dev      # servidor WebSocket (8787) + Vite em http://localhost:5180
 ```

@@ -2,7 +2,7 @@
 
 Manifestação online na Avenida Paulista, direto no navegador. Você escolhe o lado (**Petista** (13), **Bolsonarista** (22), **Anarquistas** ou **Sem partido**), monta um personagem brasileiro, leva bandeira ou cartaz e conversa com os outros jogadores em tempo real. MVP inspirado na arquitetura do manifestacao.com, com arte própria.
 
-[![CI](https://github.com/alissondroid/avenida-online/actions/workflows/ci.yml/badge.svg)](https://github.com/alissondroid/avenida-online/actions/workflows/ci.yml) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Node >=22](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
+[![CI](https://github.com/alissondroid/manifestacao/actions/workflows/ci.yml/badge.svg)](https://github.com/alissondroid/manifestacao/actions/workflows/ci.yml) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Node >=22](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
 
 Código aberto sob licença **MIT**. Modelos 3D e outros arquivos de terceiros têm licenças próprias: veja [`ASSETS.md`](../ASSETS.md). Contribuições: [`CONTRIBUTING.md`](../CONTRIBUTING.md). Segurança: [`SECURITY.md`](../SECURITY.md).
 
@@ -75,7 +75,7 @@ Precisa de um processo Node 22+ sempre ligado, com WebSocket e disco (não serve
 
 ```bash
 apt-get update && apt-get install -y git
-git clone -b main https://github.com/alissondroid/avenida-online.git /opt/avenida   # repositório privado: use um token na URL
+git clone -b main https://github.com/alissondroid/manifestacao.git /opt/avenida   # repositório privado: use um token na URL
 DOMAIN=seu-dominio.com BRANCH=main bash /opt/avenida/deploy/setup.sh               # sem DOMAIN: HTTP no IP, só para testar
 ```
 
