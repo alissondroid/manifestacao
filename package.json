@@ -4,6 +4,26 @@
   "private": true,
   "type": "module",
   "description": "Mundo 3D multiplayer no navegador: avenida, avatares, chat e presença em tempo real.",
+  "license": "MIT",
+  "author": "Alisson R.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alissondroid/avenida-online.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alissondroid/avenida-online/issues"
+  },
+  "keywords": [
+    "threejs",
+    "multiplayer",
+    "websocket",
+    "game",
+    "browser",
+    "3d"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "concurrently -k -n server,client -c blue,green \"node --watch --env-file-if-exists=.env server/index.js\" \"vite\"",
     "build": "vite build && node scripts/precompress.mjs",

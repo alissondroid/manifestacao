@@ -2,6 +2,10 @@
 
 Manifestação online na Avenida Paulista, direto no navegador. Você escolhe o lado (**Petista** (13), **Bolsonarista** (22), **Anarquistas** ou **Sem partido**), monta um personagem brasileiro, leva bandeira ou cartaz e conversa com os outros jogadores em tempo real. MVP inspirado na arquitetura do manifestacao.com, com arte própria.
 
+[![CI](https://github.com/alissondroid/avenida-online/actions/workflows/ci.yml/badge.svg)](https://github.com/alissondroid/avenida-online/actions/workflows/ci.yml) ![License: MIT](https://img.shields.io/badge/license-MIT-green) ![Node >=22](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
+
+Código aberto sob licença **MIT**. Modelos 3D e outros arquivos de terceiros têm licenças próprias: veja [`ASSETS.md`](ASSETS.md). Contribuições: [`CONTRIBUTING.md`](CONTRIBUTING.md). Segurança: [`SECURITY.md`](SECURITY.md).
+
 **Aviso jurídico:** projeto independente, sem vínculo com candidatos, partidos ou campanhas. Os nomes e números identificam apenas os lados da disputa. Há três personagens prontos com a aparência de políticos reais (Renan Santos, Lula e Bolsonaro), em tom de sátira; isso envolve direito de imagem, e os modelos vieram de terceiros (Tripo e Sketchfab): confira a licença de cada arquivo (o do Sketchfab pode exigir crédito ao autor). Antes de publicar, revise a legislação eleitoral (propaganda, uso de nome de candidato e monetização em período eleitoral) e os termos de uso.
 
 ## Rodar
@@ -297,6 +301,7 @@ Segunda rodada: o anti-teleporte permitia ~25 m/s a quem mandasse muitas mensage
 
 ## Créditos e licenças
 
+- **Código:** MIT (`LICENSE`). **Arquivos de terceiros:** ver `ASSETS.md`.
 - **Zsky** (`@Zsky_01`): animações de chute, murro e aceno do pacote *Animated Character*, **CC BY 4.0**. Crédito obrigatório: <https://www.patreon.com/Zsky>. Licença original em `assets-src/zsky-LICENSE-CCBY.txt`. O crédito também aparece no jogo, em "Créditos", no rodapé do menu. As animações foram adaptadas (rig refeito e convertido para os esqueletos Mixamo).
 - **Quaternius**: Universal Animation Library 1 e 2, **CC0** (crédito não é obrigatório; licença em `assets-src/ual-LICENSE-CC0.txt`).
 - **Mixamo/Adobe**: personagens e a animação de aplauso (termos do Mixamo; não redistribuir os arquivos originais).
