@@ -493,7 +493,7 @@ export function initHud({
       $('#chatform').hidden = watching;
       $('.hint').textContent = watching
         ? 'Modo assistir · WASD/setas mover a câmera · Shift mais rápido · arraste para girar'
-        : 'WASD/setas mover · Shift correr · 1-3 gestos · 4-6 golpes · C carro · arraste para girar a câmera · Enter chat';
+        : 'WASD/setas mover · Shift correr · 1-2 gestos · 4-6 golpes · C carro · arraste para girar a câmera · Enter chat';
       $('#drivebtn').hidden = watching;
     },
     isTyping: () => document.activeElement === input,
@@ -536,7 +536,7 @@ export function initHud({
       $('.emotes').classList.toggle('disabled', on);
       $('.hint').textContent = on
         ? 'W/S acelerar e frear · A/D virar · C sair do carro · arraste para girar a câmera'
-        : 'WASD/setas mover · Shift correr · 1-3 gestos · 4-6 golpes · C carro · arraste para girar a câmera · Enter chat';
+        : 'WASD/setas mover · Shift correr · 1-2 gestos · 4-6 golpes · C carro · arraste para girar a câmera · Enter chat';
     },
     addChat(nick, text, color, id = 0, past = false) {
       const row = document.createElement('div');

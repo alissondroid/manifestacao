@@ -30,7 +30,7 @@ npm run build
 npm start        # http://localhost:8787
 ```
 
-Variáveis do servidor (arquivo `.env`, veja `.env.example`): `PORT`, `MAX_PLAYERS` (300), `MAX_PER_IP` (5), `AOI` (raio de interesse em metros, 70), `BLOCKED_WORDS` (lista separada por vírgula para mascarar no chat), `DB_PATH` (padrão `data/avenida.db`), `PUBLIC_URL` (URL pública, usada nos retornos do pagamento; defina em produção) e as de pagamento abaixo.
+Variáveis do servidor (arquivo `.env`, veja `.env.example`): `PORT`, `MAX_PLAYERS` (300), `MAX_PER_IP` (5), `AOI` (raio de interesse em metros, 70), `BLOCKED_WORDS` (lista separada por vírgula para mascarar no chat), `DB_PATH` (padrão `data/avenida.db`), `PUBLIC_URL` (URL pública, usada para validar a origem do WebSocket; defina em produção), `GOOGLE_CLIENT_ID` (login com Google, opcional), `TRUST_PROXY`, `ADMIN_TOKEN`, `SHOW_TIMES`.
 
 ## Estrutura
 
