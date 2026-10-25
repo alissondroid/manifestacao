@@ -7,6 +7,7 @@
 ```bash
 npm install
 npm run dev
+npm run lint  # ESLint, sem erros
 npm test      # deve passar antes do PR
 npm run build
 ```

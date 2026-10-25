@@ -218,7 +218,6 @@ export function initAccount({ onChange, getSide }) {
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   const NICK_RE = /^[\p{L}\p{N}_.\- ]+$/u;
-  const NICK_HELP = `${ACCOUNT.nickMin} a ${ACCOUNT.nickMax} caracteres: letras, números, espaço, _ . -`;
   const emailError = (v) => (EMAIL_RE.test(v) && v.length <= 120 ? '' : 'Digite um e-mail válido, como voce@exemplo.com.');
   const nickError = (v) => {
     if (v.length < ACCOUNT.nickMin) return `O apelido precisa ter pelo menos ${ACCOUNT.nickMin} caracteres.`;

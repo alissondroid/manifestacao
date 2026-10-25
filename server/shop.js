@@ -108,6 +108,7 @@ export function designsOf(userId) {
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
+// eslint-disable-next-line no-control-regex
 const cleanDesignText = (s, max) => String(s ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, max);
 
 /** Valida e salva um desenho. Devolve o desenho limpo ou null se inválido. */

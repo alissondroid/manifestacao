@@ -56,7 +56,6 @@ const MIME = {
   '.txt': 'text/plain; charset=utf-8',
   '.xml': 'application/xml; charset=utf-8',
   '.webmanifest': 'application/manifest+json',
-  '.glb': 'model/gltf-binary',
 };
 
 // Cabeçalhos de segurança das páginas e arquivos estáticos. A CSP só vale para HTML.

@@ -81,17 +81,6 @@ function labelPlane(parent, text, w, h, x, y, z, ry = 0) {
   return m;
 }
 
-function tree(parent, x, z, s = 1) {
-  const g = new THREE.Group();
-  box(0.3 * s, 2 * s, 0.3 * s, '#6b4a2b', 0, 1 * s, 0, g);
-  const crown = new THREE.Mesh(new THREE.SphereGeometry(1.4 * s, 10, 8), std('#3f8a3c'));
-  crown.position.y = 3 * s; crown.castShadow = true;
-  g.add(crown);
-  g.position.set(x, 0, z);
-  parent.add(g);
-}
-
-
 
 // ---------- peças de rua brasileiras ----------
 

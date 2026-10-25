@@ -144,11 +144,10 @@ export function addScenery(scene, rng, { ROAD, WALK }, avoid) {
     const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 46, 20, 1, true), beamMat);
     beam.position.y = 23;
     const stripeMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.25, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 });
-    const stripes = [-1, 1].map((sd) => {
+    [-1, 1].forEach((sd) => {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(ROAD * 2, 0.6).rotateX(-Math.PI / 2), stripeMat);
       m.position.set(0, 0.04, sd * ZONE.radius);
       g.add(m);
-      return m;
     });
     const label = labelSprite(zn.name);
     label.position.set(0, 17, 0);

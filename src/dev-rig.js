@@ -36,22 +36,6 @@ renderer.setAnimationLoop(() => {
 Object.assign(window, { __scene: scene, THREE });
 
 const v3 = () => new THREE.Vector3();
-const fmt = (v) => v.toArray().map((x) => x.toFixed(3)).join(',');
-
-function jpegTexture(tex, max = 1024) {
-  const img = tex.image;
-  const k = Math.min(1, max / Math.max(img.width, img.height));
-  const c = document.createElement('canvas');
-  c.width = Math.round(img.width * k);
-  c.height = Math.round(img.height * k);
-  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.flipY = false; // mesma orientação das texturas lidas do GLB
-  t.userData.mimeType = 'image/jpeg';
-  return t;
-}
-
 async function exportGlb(root, outName) {
   root.updateMatrixWorld(true);
   const glb = await new Promise((resolve, reject) => {
@@ -176,7 +160,6 @@ async function makeZsky() {
   const node = (n) => src.getObjectByName(n);
   const wq = (n) => node(n).getWorldQuaternion(new THREE.Quaternion());
   const wp = (n) => node(n).getWorldPosition(v3());
-  const rest = {};
   for (const [, , posN, oriN] of ZSKY_BONES) {
     if (posN.startsWith('@')) continue;
     if (!node(posN)) say('FALTA osso', posN);
@@ -197,7 +180,6 @@ async function makeZsky() {
   // escala: a distância quadril→cabeça vira a do esqueleto da UAL (já em padrão Mixamo, em metros)
   const ual = await loadSrc('ual1.glb');
   ual.scene.updateMatrixWorld(true);
-  const dU = ual.scene.getObjectByName('DEF-hips') ? null : null; // (os nomes ainda são os do Rigify no arquivo de origem)
   const uHips = ual.scene.getObjectByName(PropertyBinding.sanitizeNodeName('DEF-hips'));
   const uHead = ual.scene.getObjectByName(PropertyBinding.sanitizeNodeName('DEF-head'));
   const dUal = uHead.getWorldPosition(v3()).y - uHips.getWorldPosition(v3()).y;
@@ -236,7 +218,6 @@ async function makeZsky() {
   const fps = 30;
   const mixer = new THREE.AnimationMixer(src);
   const clips = [];
-  const tmpQ = new THREE.Quaternion();
   for (const c of g.animations) {
     const to = ZSKY_CLIPS[c.name];
     if (!to) continue;

@@ -3,6 +3,7 @@ import { SPEED_SLACK } from '../shared/config.js';
 // Regras puras do servidor de jogo (sem rede nem banco), para ficarem testáveis.
 
 export const cleanText = (s, max) => String(s ?? '')
+  // eslint-disable-next-line no-control-regex
   .replace(/[\u0000-\u001f\u007f<>]/g, '')
   .replace(/\s+/g, ' ')
   .trim()

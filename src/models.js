@@ -609,7 +609,6 @@ export async function loadModels(onStage) {
     for (const [name, q] of fingers) clip.tracks.push(new THREE.QuaternionKeyframeTrack(`${name}.quaternion`, [0, clip.duration || 1], [...q.toArray(), ...q.toArray()]));
     return clip;
   };
-  const ARMS = ['LeftArm', 'RightArm', 'LeftForeArm', 'RightForeArm'];
 
   for (const id of ids) {
     if (CHARACTERS[id].direct) {
@@ -642,7 +641,6 @@ export async function loadModels(onStage) {
       continue;
     }
     throw new Error(`corpo sem conversão direta: ${id}`);
-    for (const [name, clip] of Object.entries(models.clips[id])) clip.name = `${id}-${name}`;
   }
   for (const [bone, pos, quat, scl] of rest) {
     bone.position.copy(pos);

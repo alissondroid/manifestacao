@@ -13,7 +13,7 @@ import { createVotacaoWorld } from './world.js';
 import { openUrna } from './urna.js';
 import { createFigurante } from './figurante.js';
 import { track, trackVisit } from '../track.js';
-import { createQualityMonitor, QUALITY } from '../quality.js';
+import { createQualityMonitor } from '../quality.js';
 
 const $ = (s) => document.querySelector(s);
 const toast = (text) => { const t = $('#toast'); t.textContent = text; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 6000); };

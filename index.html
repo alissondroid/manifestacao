@@ -194,7 +194,7 @@
           <label class="nickbox">
             <span class="sr-only">Seu apelido</span>
             <div class="nickrow">
-              <input id="nick" maxlength="16" autocomplete="off" placeholder="Seu apelido (em branco: Visitante)" />
+              <input id="nick" aria-label="Apelido" maxlength="16" autocomplete="off" placeholder="Seu apelido (em branco: Visitante)" />
               <small id="nickcount">0/16</small>
             </div>
             <small id="nickhint" class="nickhint" hidden>Este é o apelido da sua conta.</small>
@@ -226,12 +226,12 @@
         <button id="pvpbtn" class="pill mode" type="button">🍅 PvP</button>
         <button id="throwbtn" class="pill mode throw" type="button" hidden>Arremessar (F)</button>
         <button id="drivebtn" class="pill mode" type="button">🚗 Carro (C)</button>
-        <button id="rankbtn" class="pill mode" type="button" title="Ranking de apoio entre os grupos">🏆 Ranking</button>
-        <button id="editbtn" class="pill mode" type="button" title="Mudar o visual sem sair da avenida">🎨 Personagem</button>
-        <button id="photobtn" class="pill mode" type="button" title="Modo foto (VIP)">📸 Foto ⭐</button>
+        <button id="rankbtn" class="pill mode" type="button" title="Ranking de apoio entre os grupos" aria-label="Ranking de apoio entre os grupos">🏆 Ranking</button>
+        <button id="editbtn" class="pill mode" type="button" title="Mudar o visual sem sair da avenida" aria-label="Mudar o visual sem sair da avenida">🎨 Personagem</button>
+        <button id="photobtn" class="pill mode" type="button" title="Modo foto (VIP)" aria-label="Modo foto (VIP)">📸 Foto ⭐</button>
 <button id="fogosbtn" class="pill mode" type="button" hidden>🎆 Fogos</button>
         <button id="telaobtn" class="pill mode" type="button" hidden>📺 Telão</button>
-        <button id="whobtn" class="pill mode" type="button" title="Quem está na avenida (Tab)">👥 Jogadores</button>
+        <button id="whobtn" class="pill mode" type="button" title="Quem está na avenida (Tab)" aria-label="Quem está na avenida (Tab)">👥 Jogadores</button>
       </div>
       <div id="radar">
         <canvas id="radarmap"></canvas>
@@ -243,15 +243,15 @@
       <div id="pvppanel" class="panel pvp" hidden></div>
 
       <div class="emotes">
-        <button data-emote="2" title="Acenar (1)">👋</button>
-        <button data-emote="3" title="Dançar (2)">💃</button>
-<button id="jumpbtn" title="Pular (Espaço)">⤴️</button>
-        <button id="emotebtn" title="Mais gestos">🎭</button>
-        <button id="reactbtn" title="Reações (7 a 0)">😀</button>
+        <button data-emote="2" title="Acenar (1)" aria-label="Acenar (1)">👋</button>
+        <button data-emote="3" title="Dançar (2)" aria-label="Dançar (2)">💃</button>
+<button id="jumpbtn" title="Pular (Espaço)" aria-label="Pular (Espaço)">⤴️</button>
+        <button id="emotebtn" title="Mais gestos" aria-label="Mais gestos">🎭</button>
+        <button id="reactbtn" title="Reações (7 a 0)" aria-label="Reações (7 a 0)">😀</button>
         <span class="sep" aria-hidden="true"></span>
-        <button data-attack="punch" title="Murro (4)">👊</button>
-        <button data-attack="kick" title="Chute (5)">🦵</button>
-        <button data-attack="baton" title="Cassetete (6)">🏏</button>
+        <button data-attack="punch" title="Murro (4)" aria-label="Murro (4)">👊</button>
+        <button data-attack="kick" title="Chute (5)" aria-label="Chute (5)">🦵</button>
+        <button data-attack="baton" title="Cassetete (6)" aria-label="Cassetete (6)">🏏</button>
       </div>
 
       <div id="emotemenu" class="popmenu" hidden></div>
@@ -269,7 +269,7 @@
       <div id="chat">
         <div id="chatlog"></div>
         <form id="chatform" autocomplete="off">
-          <input id="chatinput" maxlength="140" placeholder="Enter para falar…" />
+          <input id="chatinput" aria-label="Mensagem do chat" maxlength="140" placeholder="Enter para falar…" />
         </form>
       </div>
 

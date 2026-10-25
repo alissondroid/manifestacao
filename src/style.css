@@ -983,3 +983,6 @@ body[data-mode='lobby'] #topbar { padding-inline: max(16px, calc((100vw - 1360px
 #lobby[data-editing] #tab-lado { display: none !important; }
 #lobby[data-editing] .steps { grid-template-columns: repeat(3, 1fr); }
 #sign-custom { margin-top: 8px; text-align: left; }
+
+/* foco visível para teclado em qualquer controle sem regra própria */
+:where(button, a, summary, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

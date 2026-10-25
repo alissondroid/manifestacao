@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { WORLD } from '../shared/config.js';
 import { createSky, SUN_DIR } from './sky.js';
@@ -693,7 +692,6 @@ export function createWorld(scene, renderer, { crowd: crowdCount } = {}) {
   addVehicle(soundTruckMesh('#0e6a30', truckBanner(1)), -5.2, 44, Math.PI, 3.1, 8);
 
   // ---------- mobiliário urbano ----------
-  const steel = new THREE.MeshStandardMaterial({ color: '#8b9096', metalness: 0.7, roughness: 0.35 });
 
   // grades de contenção ao redor dos carros de som
   const panelGeo = mergeColored([

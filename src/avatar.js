@@ -187,7 +187,6 @@ export class Avatar {
 
   setLook(look) {
     this.look = look;
-    const kind = look.body === 1 ? 'female' : 'male';
     const elderly = look.age === 1;
     const id = modelId(look.body, look.face);
     if (!this.char || this.char.id !== id || this.elderly !== elderly) this.buildBody(id);
