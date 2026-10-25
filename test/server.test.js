@@ -108,8 +108,14 @@ async function duel({ attackerPvp, victimPvp, facing = 0 }) {
   if (facing !== 0) { a.send({ t: 'move', x, z, ry: facing, a: 0 }); await sleep(150); }
   await sleep(300);
   a.send({ t: 'attack', kind: 'punch' });
-  await sleep(500);
-  const out = { notices: a.msgs.filter((m) => m.t === 'notice').map((m) => m.text), hit: v.msgs.some((m) => m.t === 'hitby') };
+  const outcome = () => ({ notices: a.msgs.filter((m) => m.t === 'notice').map((m) => m.text), hit: v.msgs.some((m) => m.t === 'hitby') });
+  for (let i = 0; i < 40; i += 1) { // espera o resultado em vez de um tempo fixo (a CI sob carga atrasa)
+    await sleep(50);
+    const o = outcome();
+    if (o.hit || o.notices.length) break;
+  }
+  await sleep(100);
+  const out = outcome();
   a.close(); v.close();
   return out;
 }

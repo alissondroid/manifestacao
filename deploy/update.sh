@@ -13,7 +13,8 @@ if [ -d .git ]; then
   STASHED=0
   if ! git diff --quiet HEAD --; then git stash push -q -m "avenida-update" && STASHED=1; fi
   git checkout "$BRANCH"
-  git pull --ff-only origin "$BRANCH"
+  # histórico reescrito (força-push) não avança em fast-forward: nesse caso alinha com a origem
+  git merge --ff-only FETCH_HEAD 2>/dev/null || git reset --hard FETCH_HEAD
   if [ "$STASHED" = 1 ]; then
     git stash pop -q || { echo "Conflito ao devolver as edições locais (git stash list). Resolva e rode de novo."; exit 1; }
   fi
