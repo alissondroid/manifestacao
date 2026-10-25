@@ -3,69 +3,15 @@ import assert from 'node:assert/strict';
 
 process.env.DB_PATH = ':memory:';
 const { db } = await import('../server/db.js');
-const shop = await import('../server/shop.js');
+const shop = await import('../server/items.js');
 const auth = await import('../server/auth.js');
-const { SHOP_BY_ID } = await import('../shared/config.js');
 
 const newUser = (nick) => Number(db.prepare('INSERT INTO users (email, nick, pass_hash, created_at) VALUES (?, ?, ?, ?)')
   .run(`${nick}@teste.com`, nick, 'x', Date.now()).lastInsertRowid);
-const buy = (userId, itemId) => shop.createOrder(userId, SHOP_BY_ID[itemId], 'simulated').id;
 
-test('fulfill é idempotente: entregar duas vezes não duplica o item', () => {
-  const u = newUser('ana');
-  const order = buy(u, 'camisa-brasil');
-  assert.equal(shop.fulfill(order), true);
-  assert.equal(shop.fulfill(order), true); // webhook e retorno chegando juntos
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM owned WHERE user_id = ?').get(u).n, 1);
-  assert.ok(shop.owns(u, 'camisa-brasil'));
-});
-
-test('consumível soma uma vez só e spend desconta de forma atômica', () => {
-  const u = newUser('bia');
-  const order = buy(u, 'fogos-5');
-  shop.fulfill(order);
-  shop.fulfill(order);
-  assert.equal(shop.inventoryOf(u).fogos, 5);
-  for (let i = 0; i < 5; i += 1) assert.equal(shop.spend(u, 'fogos'), true);
-  assert.equal(shop.spend(u, 'fogos'), false);
-  assert.equal(shop.inventoryOf(u).fogos ?? 0, 0);
-});
-
-test('VIP renovado soma os dias ao fim do VIP atual', () => {
-  const u = newUser('caio');
-  shop.fulfill(buy(u, 'vip-30'));
-  const first = shop.vipUntil(u);
-  assert.ok(shop.isVip(u));
-  shop.fulfill(buy(u, 'vip-30'));
-  const added = shop.vipUntil(u) - first;
-  assert.equal(added, 30 * 86_400_000);
-});
-
-test('pagamento confirmado vale mesmo se o pedido foi marcado como falho', () => {
-  const u = newUser('duda');
-  const order = buy(u, 'bone');
-  shop.setOrderStatus(order, 'failed');
-  assert.equal(shop.fulfill(order), true);
-  assert.ok(shop.owns(u, 'bone'));
-});
-
-test('canBuy: item único só uma vez, consumível sempre, pacote só enquanto faltar item', () => {
-  const u = newUser('edu');
-  assert.equal(shop.canBuy(u, SHOP_BY_ID['bone']), true);
-  shop.fulfill(buy(u, 'bone'));
-  assert.equal(shop.canBuy(u, SHOP_BY_ID['bone']), false);
-  shop.fulfill(buy(u, 'fogos-5'));
-  assert.equal(shop.canBuy(u, SHOP_BY_ID['fogos-5']), true);
-  const kit = SHOP_BY_ID['kit-manifestante'];
-  assert.equal(shop.canBuy(u, kit), true);
-  shop.fulfill(buy(u, 'kit-manifestante'));
-  assert.equal(shop.canBuy(u, kit), false);
-});
-
-test('equip só aceita item comprado e no slot certo', () => {
+test('equip só aceita item do catálogo e no slot certo', () => {
   const u = newUser('fabi');
-  assert.equal(shop.equip(u, 'head', 'bone'), false); // não comprou
-  shop.fulfill(buy(u, 'bone'));
+  assert.equal(shop.equip(u, 'head', 'item-inexistente'), false);
   assert.equal(shop.equip(u, 'shirt', 'bone'), false); // slot errado
   assert.equal(shop.equip(u, 'head', 'bone'), true);
   assert.equal(shop.equippedMap(u).head, 'bone');
@@ -147,14 +93,12 @@ test('sessão: cria, resolve o usuário e destrói', () => {
   assert.equal(auth.userFromToken(token), null);
 });
 
-test('deleteAccount anonimiza e apaga itens e sessões, mantendo o pedido', () => {
+test('deleteAccount apaga a conta, os itens equipados e as sessões', () => {
   const u = newUser('ivo');
-  const order = buy(u, 'bone');
-  shop.fulfill(order);
+  shop.equip(u, 'head', 'bone');
   const token = auth.createSession(u);
   auth.deleteAccount(u);
   assert.equal(auth.userFromToken(token), null);
-  assert.equal(shop.owns(u, 'bone'), false);
-  assert.ok(shop.getOrder(order));
-  assert.match(db.prepare('SELECT nick FROM users WHERE id = ?').get(u).nick, /^Excluído/);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM equipped WHERE user_id = ?').get(u).n, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM users WHERE id = ?').get(u).n, 0);
 });

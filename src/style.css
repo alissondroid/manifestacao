@@ -685,16 +685,8 @@ body[data-mode='play'] .lobby-only { display: none !important; }
 /* ---------- Gestos, telão pago, VIP ---------- */
 .popmenu { position: absolute; right: 70px; bottom: 150px; display: flex; flex-wrap: wrap; gap: 6px; width: 190px; justify-content: flex-end; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 8px; }
 .popmenu button { width: 38px; height: 38px; border-radius: 50%; background: transparent; border: 1px solid var(--line); font-size: 19px; cursor: pointer; position: relative; }
-.popmenu button.locked { opacity: 0.55; }
-.popmenu button.locked::after { content: '🔒'; position: absolute; right: -4px; bottom: -4px; font-size: 11px; }
-#banner { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); max-width: min(560px, 92vw); background: linear-gradient(90deg, #fcd34d, #f59e0b); color: #1c1917; font-weight: 700; padding: 8px 16px; border-radius: 999px; text-align: center; box-shadow: 0 4px 18px rgba(0,0,0,0.4); pointer-events: none !important; animation: bannerin 0.4s ease-out; }
-#banner b { color: #7c2d12 !important; }
-@keyframes bannerin { from { transform: translate(-50%, -30px); opacity: 0; } }
-.label .name.vip { background: linear-gradient(90deg, #7a5a07, #3a2a02); color: #ffe27a; box-shadow: 0 0 0 1px #f5c518 inset; }
 
-.shoptabs { flex-wrap: wrap; }
 .shopitem .desc { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; }
-.shopitem.vip { grid-column: 1 / -1; border-color: #f5c518; background: linear-gradient(135deg, rgba(245,197,24,0.14), transparent); }
 .slotrow { flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 
 .terms { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--muted); }
@@ -856,48 +848,6 @@ body[data-mode='lobby'] #topbar { padding-inline: max(14px, calc((100vw - 1360px
 }
 @media (prefers-reduced-motion: reduce) { .authform.shake, .spin { animation: none; } }
 
-/* ---------- Pix ---------- */
-.pix { gap: 12px; text-align: center; }
-.pixqr { justify-self: center; width: min(240px, 64vw); background: #fff; border-radius: 14px; padding: 10px; }
-.pixqr img { display: block; width: 100%; image-rendering: pixelated; }
-.pixcode { width: 100%; resize: none; background: rgba(2, 6, 23, 0.6); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: 12px/1.35 ui-monospace, monospace; }
-.pixactions { display: grid; gap: 8px; }
-.pixstatus { margin: 0; font-size: 14px; color: var(--muted); }
-.pixstatus[data-kind='bad'] { color: #fca5a5; }
-.pix .link { justify-self: center; font-size: 12.5px; }
-@media (max-width: 640px) { .pixcode { font-size: 16px; } }
-
-/* ---------- Ranking dos grupos ---------- */
-.rank { gap: 12px; }
-.note.center { text-align: center; }
-.rkrows { display: grid; gap: 8px; }
-.rkrow {
-  display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; grid-template-areas: 'pos name total' 'pos bar total'; align-items: center; column-gap: 10px; row-gap: 5px;
-  text-align: left; padding: 10px 12px; border-radius: 12px; font: inherit; color: var(--text); cursor: pointer;
-  background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); border-left: 4px solid var(--c, var(--line));
-}
-.rkrow:hover { background: rgba(255, 255, 255, 0.08); }
-.rkrow.sel { border-color: var(--c); box-shadow: 0 0 0 1px var(--c) inset; }
-.rkrow.mine .rkname { font-weight: 800; }
-.rkpos { grid-area: pos; font-size: 20px; text-align: center; }
-.rkname { grid-area: name; font-weight: 600; }
-.rkname em { font-style: normal; font-weight: 500; color: var(--muted); font-size: 12.5px; }
-.rkbar { grid-area: bar; display: block; height: 8px; border-radius: 99px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
-.rkbar i { display: block; height: 100%; border-radius: inherit; background: var(--c); transition: width 0.5s ease-out; }
-.rktotal { grid-area: total; text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
-.rktotal small { display: block; font-weight: 500; font-size: 11px; color: var(--muted); }
-.rkh { margin: 4px 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-.rktop { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; counter-reset: rk; }
-.rktop li { counter-increment: rk; display: flex; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); }
-.rktop li::before { content: counter(rk) 'º'; color: var(--muted); width: 26px; }
-.rktop li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rknote { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; }
-
-/* ---------- Funções premium (VIP) ---------- */
-#reacts button.locked { position: relative; opacity: 0.55; }
-#reacts button.locked::after { content: '🔒'; position: absolute; right: -2px; bottom: -2px; font-size: 11px; }
-#photobtn.locked { opacity: 0.7; }
-.lockvip { border-style: dashed; color: var(--accent); }
 
 /* ---------- Header (topo): marca, contador ao vivo e ações ---------- */
 #topbar {
@@ -942,7 +892,6 @@ body[data-mode='lobby'] #topbar { padding-inline: max(16px, calc((100vw - 1360px
 .userchip:hover, .userchip[aria-expanded='true'] { background: rgba(255, 255, 255, 0.13); }
 .userchip .avatar { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink, #1c1917); font-weight: 800; font-size: 13px; }
 .userchip .nick { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.userchip .vipstar { font-size: 12px; }
 .userchip .caret { font-size: 10px; opacity: 0.7; transition: transform 0.15s; }
 .userchip[aria-expanded='true'] .caret { transform: rotate(180deg); }
 .umenu {

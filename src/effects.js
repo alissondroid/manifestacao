@@ -3,7 +3,7 @@ import {
   BURST_STYLE, burstShape, pickShow, particleBrightness, particleTint,
 } from './fireworks-math.js';
 
-// Efeitos de partículas: fogos de artifício (item da loja) e confete.
+// Efeitos de partículas: fogos de artifício e confete.
 
 const GRAVITY = 7;
 

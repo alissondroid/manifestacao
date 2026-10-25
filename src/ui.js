@@ -1,5 +1,5 @@
 import {
-  SIDES, SHIRTS, SKINS, BODIES, AGES, MODELS, HEIGHTS, BEARDS, PANTS, SHOP_BY_ID, EMOTES, PREMIUM, SIGN_PRESETS,
+  SIDES, SHIRTS, SKINS, BODIES, AGES, MODELS, HEIGHTS, BEARDS, PANTS, SHOP_BY_ID, EMOTES, SIGN_PRESETS,
 } from '../shared/config.js';
 import { CHARACTERS, modelId } from './models.js';
 
@@ -108,7 +108,7 @@ const FLAG_OPTIONS = [
   { icon: '✋', title: 'Nada', text: 'Mãos livres para acenar e dançar' },
   { icon: '🇧🇷', title: 'Bandeira do Brasil', text: 'Verde e amarela, para todo mundo' },
   { icon: '🚩', title: 'Bandeira do lado', text: '' }, // texto muda com o lado escolhido
-  { icon: '🪧', title: 'Cartaz', text: 'Escolha uma frase ou escreva a sua (Pix)' },
+  { icon: '🪧', title: 'Cartaz', text: 'Escolha uma frase ou escreva a sua' },
   { icon: '🥩', title: 'Picanha no espeto', text: 'Direto da churrasqueira da calçada' },
   { icon: '🎃', title: 'Abóbora', text: 'Moranga fresquinha da feira' },
 ];
@@ -380,7 +380,7 @@ export function initLobby({
 
 /** HUD: chat, emotes e joystick virtual. */
 export function initHud({
-  onChat, onEmote, onAttack, onReact, onLockedReact, onWho, onFireworks, onBillboard, onRanking, onPhoto, onEdit, onLeave, onSound, soundOn,
+  onChat, onEmote, onAttack, onReact, onWho, onFireworks, onPhoto, onEdit, onLeave, onSound, soundOn,
 }) {
   const hud = $('#hud');
   const log = $('#chatlog');
@@ -411,16 +411,14 @@ export function initHud({
   });
   $('#leave').onclick = onLeave;
 
-  // menu de gestos (os premium aparecem com 🔒 para quem não tem)
+  // menu de gestos
   const menu = $('#emotemenu');
-  let premium = false;
   const paintMenu = () => {
     menu.replaceChildren(...EMOTES.map((e) => {
       const b = document.createElement('button');
       b.dataset.emote = e.anim;
-      b.title = `${e.name}${e.key ? ` (${e.key})` : ''}${e.premium && !premium ? ' · premium' : ''}`;
+      b.title = `${e.name}${e.key ? ` (${e.key})` : ''}`;
       b.textContent = e.icon;
-      if (e.premium && !premium) b.classList.add('locked');
       b.addEventListener('click', () => { menu.hidden = true; onEmote(e.anim); });
       return b;
     }));
@@ -429,26 +427,15 @@ export function initHud({
   $('#emotebtn').onclick = () => { menu.hidden = !menu.hidden; $('#reacts').hidden = true; };
   $('#jumpbtn').onclick = () => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
   $('#fogosbtn').onclick = onFireworks;
-  $('#telaobtn').onclick = onBillboard;
-  $('#rankbtn').onclick = onRanking;
   $('#photobtn').onclick = onPhoto;
   $('#editbtn').onclick = onEdit;
 
   // reações flutuantes (7 a 0 no teclado)
   const reacts = $('#reacts');
   $('#reactbtn').onclick = () => { reacts.hidden = !reacts.hidden; menu.hidden = true; };
-  let isVip = false;
-  const paintReactLocks = () => {
-    document.querySelectorAll('[data-react]').forEach((b) => {
-      const locked = PREMIUM.reactions.includes(Number(b.dataset.react)) && !isVip;
-      b.classList.toggle('locked', locked);
-      b.title = locked ? 'Reação exclusiva para Apoiadores VIP ⭐' : '';
-    });
-  };
-  paintReactLocks();
   document.querySelectorAll('[data-react]').forEach((b) => {
     b.addEventListener('click', () => {
-      if (b.classList.contains('locked')) onLockedReact(); else onReact(Number(b.dataset.react));
+      onReact(Number(b.dataset.react));
       reacts.hidden = true;
     });
   });
@@ -511,31 +498,6 @@ export function initHud({
     },
     isTyping: () => document.activeElement === input,
     toggleWho,
-    prefillChat(text) { input.value = text; input.focus(); },
-    /** Itens da loja no HUD: só aparecem para quem tem unidades. */
-    setInventory(inv, canUsePremium, vip = false) {
-      if (isVip !== vip) { isVip = vip; paintReactLocks(); }
-      $('#photobtn').classList.toggle('locked', !vip);
-      const f = inv.fogos || 0;
-      const t = inv.telao || 0;
-      $('#fogosbtn').hidden = !f;
-      $('#fogosbtn').textContent = `🎆 Fogos (${f})`;
-      $('#telaobtn').hidden = !t;
-      $('#telaobtn').textContent = `📺 Telão (${t})`;
-      if (premium !== canUsePremium) { premium = canUsePremium; paintMenu(); }
-    },
-    /** Mensagem paga no topo da tela de todo mundo. */
-    showBanner(nick, side, text) {
-      const el = $('#banner');
-      el.replaceChildren();
-      const who = document.createElement('b');
-      who.style.color = SIDES[side]?.color ?? '#fff';
-      who.textContent = `📺 ${nick}`;
-      el.append(who, document.createTextNode(` ${text}`));
-      el.hidden = false;
-      clearTimeout(el.timer);
-      el.timer = setTimeout(() => { el.hidden = true; }, 9000);
-    },
     setWho(list, total) {
       const rows = list.map(([nick, side, hits, kos, id]) => `<div class="row"${id && id !== myId ? ` data-id="${id}" data-nick="${esc(nick)}"` : ''}><i style="background:${SIDES[side]?.color}"></i><span>${esc(nick)}</span><small>👊 ${hits} · ☠️ ${kos}</small></div>`).join('');
       who.innerHTML = `<h4>Na avenida: ${total}</h4>${rows}`;
@@ -661,7 +623,6 @@ export function createLabel(nick, color, equip = {}) {
   const style = (eq = {}) => {
     const icon = SHOP_BY_ID[eq.badge]?.icon ?? '';
     badge.textContent = icon ? `${icon} ` : '';
-    name.classList.toggle('vip', !!eq.vip);
   };
   style(equip);
   const bubble = document.createElement('div');

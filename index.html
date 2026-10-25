@@ -52,7 +52,7 @@
             "@id": "https://avenidaonline.com/#game",
             "name": "Avenida Online",
             "url": "https://avenidaonline.com/",
-            "description": "Jogo multiplayer 3D no navegador ambientado na Avenida Paulista: personagem personalizável, chat, corrida, disputa de trechos e loja de itens cosméticos.",
+            "description": "Jogo multiplayer 3D no navegador ambientado na Avenida Paulista: personagem personalizável, chat, corrida, disputa de trechos e itens de visual grátis.",
             "image": "https://avenidaonline.com/og-image.png",
             "inLanguage": "pt-BR",
             "genre": ["Multiplayer", "Social", "Simulação"],
@@ -71,7 +71,7 @@
   <body data-mode="lobby">
     <noscript>
       <h1>Avenida Online</h1>
-      <p>Jogo multiplayer grátis na Avenida Paulista, direto no navegador: monte seu personagem, converse, dispute trechos, corra e use itens da loja. Ative o JavaScript para jogar. Projeto independente, sem vínculo com candidatos, partidos ou campanhas.</p>
+      <p>Jogo multiplayer grátis na Avenida Paulista, direto no navegador: monte seu personagem, converse, dispute trechos, corra e use itens de visual. Ative o JavaScript para jogar. Projeto independente, sem vínculo com candidatos, partidos ou campanhas.</p>
     </noscript>
     <canvas id="c"></canvas>
     <div id="loading" class="loading" role="status" aria-live="polite">
@@ -98,7 +98,7 @@
       <div class="topright">
         <div id="acctbar" class="acctbar lobby-only"></div>
         <button id="invitebtn" class="tbtn" type="button" title="Convidar amigos para o seu lado" aria-label="Convidar amigos"><span class="ic" aria-hidden="true">📣</span><span class="tx">Convidar</span></button>
-        <button id="shopbtn" class="tbtn play-only" type="button" title="Loja" aria-label="Loja"><span class="ic" aria-hidden="true">🛍️</span><span class="tx">Loja</span></button>
+        <button id="shopbtn" class="tbtn play-only" type="button" title="Meu visual" aria-label="Meu visual"><span class="ic" aria-hidden="true">👕</span><span class="tx">Visual</span></button>
         <button id="sound" class="tbtn icon play-only" type="button" title="Som" aria-label="Ligar ou desligar o som" aria-pressed="true">🔊</button>
         <button id="leave" class="tbtn play-only" type="button" title="Voltar ao menu" aria-label="Sair do jogo e voltar ao menu"><span class="ic" aria-hidden="true">⎋</span><span class="tx">Sair</span></button>
       </div>
@@ -179,9 +179,9 @@
             <div class="field" id="sign-field" hidden>
               <span>Frase do cartaz</span>
               <div id="sign-presets" class="seg wrap"></div>
-              <button id="sign-custom" class="link" type="button">✏️ Escrever o meu próprio texto · Pix na Loja</button>
+              <button id="sign-custom" class="link" type="button">✏️ Escrever o meu próprio texto</button>
             </div>
-            <p class="note-line">Texto próprio no cartaz, bandeira e camisa personalizados ficam na Loja (Pix), depois de entrar na sua conta.</p>
+            <p class="note-line">Texto próprio no cartaz, bandeira e camisa personalizados ficam em Visual, depois de entrar na sua conta.</p>
           </section>
         </div>
 
@@ -226,11 +226,9 @@
         <button id="pvpbtn" class="pill mode" type="button">🍅 PvP</button>
         <button id="throwbtn" class="pill mode throw" type="button" hidden>Arremessar (F)</button>
         <button id="drivebtn" class="pill mode" type="button">🚗 Carro (C)</button>
-        <button id="rankbtn" class="pill mode" type="button" title="Ranking de apoio entre os grupos" aria-label="Ranking de apoio entre os grupos">🏆 Ranking</button>
         <button id="editbtn" class="pill mode" type="button" title="Mudar o visual sem sair da avenida" aria-label="Mudar o visual sem sair da avenida">🎨 Personagem</button>
-        <button id="photobtn" class="pill mode" type="button" title="Modo foto (VIP)" aria-label="Modo foto (VIP)">📸 Foto ⭐</button>
-<button id="fogosbtn" class="pill mode" type="button" hidden>🎆 Fogos</button>
-        <button id="telaobtn" class="pill mode" type="button" hidden>📺 Telão</button>
+        <button id="photobtn" class="pill mode" type="button" title="Modo foto" aria-label="Modo foto">📸 Foto</button>
+        <button id="fogosbtn" class="pill mode" type="button">🎆 Fogos</button>
         <button id="whobtn" class="pill mode" type="button" title="Quem está na avenida (Tab)" aria-label="Quem está na avenida (Tab)">👥 Jogadores</button>
       </div>
       <div id="radar">
@@ -255,7 +253,6 @@
       </div>
 
       <div id="emotemenu" class="popmenu" hidden></div>
-      <div id="banner" hidden></div>
       <div id="reacts" hidden>
         <button data-react="0">👍</button><button data-react="1">😂</button><button data-react="2">🔥</button><button data-react="3">❤️</button>
         <button data-react="4">😡</button><button data-react="5">🇧🇷</button><button data-react="6">✊</button><button data-react="7">🎉</button>

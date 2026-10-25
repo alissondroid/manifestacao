@@ -21,9 +21,6 @@ echo "== Configuração do jogo (.env) =="
 [ "$(env_get TRUST_PROXY)" = 1 ] && good "TRUST_PROXY=1 (IP real vem do Caddy)" || bad "TRUST_PROXY não é 1: todos os jogadores parecem ter o mesmo IP"
 case "$(env_get PUBLIC_URL)" in https://*) good "PUBLIC_URL usa https";; *) bad "PUBLIC_URL não é https://… (WebSocket e HSTS dependem dele)";; esac
 [ -n "$(env_get ADMIN_TOKEN)" ] && { [ "$(env_get ADMIN_TOKEN | wc -c)" -gt 24 ] && good "ADMIN_TOKEN definido e longo" || bad "ADMIN_TOKEN curto (use openssl rand -hex 24)"; } || good "API de administração desligada (sem ADMIN_TOKEN)"
-[ "$(env_get ALLOW_SIMULATED)" = 1 ] && bad "ALLOW_SIMULATED=1: a loja entrega itens SEM cobrar. Remova em produção." || good "loja simulada desligada"
-[ -n "$(env_get ABACATEPAY_API_KEY)" ] && good "chave da AbacatePay definida" || bad "sem ABACATEPAY_API_KEY: a loja fica desligada"
-[ -n "$(env_get ABACATEPAY_API_KEY)" ] && { [ -n "$(env_get ABACATEPAY_WEBHOOK_SECRET)" ] && good "segredo do webhook definido" || bad "sem ABACATEPAY_WEBHOOK_SECRET: o item só libera com a consulta de leitura da chave"; }
 
 echo "== Serviço =="
 systemctl is-active --quiet avenida && good "serviço avenida rodando" || bad "serviço avenida parado"

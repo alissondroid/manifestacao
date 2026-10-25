@@ -18,7 +18,7 @@ npm run dev      # servidor WebSocket (8787) + Vite (http://localhost:5180)
 Testes (`node --test`, sem dependências extras; o servidor de teste usa banco em memória):
 
 ```bash
-npm test         # regras do jogo, loja/conta e servidor real via WebSocket
+npm test         # regras do jogo, conta/itens e servidor real via WebSocket
 ```
 
 `GET /healthz` responde `{ok, players, uptime}` (para monitoramento). O servidor trata `SIGTERM`/`SIGINT` fechando as conexões e o banco.
@@ -44,13 +44,12 @@ Variáveis do servidor (arquivo `.env`, veja `.env.example`): `PORT`, `MAX_PLAYE
 | `src/aging.js` | Idosos: sem gorro e barba grisalha no homem, pele mais pálida, óculos de leitura, tronco curvado, bengala na mão direita e passo mais lento (não há modelos de idosos; são os mesmos corpos envelhecidos) |
 | `src/crowd.js` | Multidão de 110 figurantes com os mesmos modelos humanos (20% idosos) (cada um com seu esqueleto e animação; quem está a mais de 55 m anima a 1/3 da taxa), agrupada por lado com as cores de camisa de cada um |
 | `src/models.js` | Carrega os modelos humanos glTF (`public/models`), retargeta as animações para o corpo e clona personagens com materiais próprios |
-| `src/avatar.js` | Avatar com modelo humano real animado por `AnimationMixer` (parado, andando, correndo, dançando; aceno por cinemática nos ossos do braço). Os personagens comuns vestem camiseta e bermuda com cores à escolha (o Rosto 1 masculino também troca pele e barba); Lula, Renan e Bolsonaro ficam com a roupa original e não trocam de roupa; todos aceitam a opção Idoso; acessórios da loja, bandeira e cartaz seguem os ossos |
-| `server/db.js` | SQLite embutido do Node (`node:sqlite`): usuários, sessões, pedidos, itens e equipados |
+| `src/avatar.js` | Avatar com modelo humano real animado por `AnimationMixer` (parado, andando, correndo, dançando; aceno por cinemática nos ossos do braço). Os personagens comuns vestem camiseta e bermuda com cores à escolha (o Rosto 1 masculino também troca pele e barba); Lula, Renan e Bolsonaro ficam com a roupa original e não trocam de roupa; todos aceitam a opção Idoso; acessórios, bandeira e cartaz seguem os ossos |
+| `server/db.js` | SQLite embutido do Node (`node:sqlite`): usuários, sessões, itens equipados e desenhos |
 | `server/auth.js` | Senhas com scrypt, sessões por cookie HttpOnly, limite de tentativas, validações |
-| `server/api.js` | Rotas HTTP: conta, loja, checkout, retorno do pagamento, webhook e checkout simulado |
-| `server/payments.js` | Pix pela AbacatePay (REST), Stripe Checkout (REST, só chave de teste, opcional) e verificação da assinatura do webhook do Stripe |
-| `server/shop.js` | Entrega idempotente de itens e regras de equipar |
-| `src/account.js` | Login/cadastro, loja e retorno do checkout (modais) |
+| `server/api.js` | Rotas HTTP: conta, itens equipados e desenhos, administração |
+| `server/items.js` | Itens equipados e desenhos personalizados (todo item do catálogo é grátis) |
+| `src/account.js` | Login/cadastro e tela "Meu visual" (modais) |
 | `src/api.js` | Cliente da API HTTP |
 | `src/net.js` | Cliente WebSocket com reconexão (reenvia `join` ou `watch`) |
 | `src/audio.js` | Som ambiente sintetizado (multidão, buzinas distantes, pop de chat), sem arquivos |
@@ -80,7 +79,7 @@ git clone -b main https://github.com/alissondroid/avenida-online.git /opt/avenid
 DOMAIN=seu-dominio.com BRANCH=main bash /opt/avenida/deploy/setup.sh               # sem DOMAIN: HTTP no IP, só para testar
 ```
 
-O script instala Node 22 e Caddy (HTTPS automático), faz o build, cria o serviço `systemd` `avenida` (usuário sem login, reinício automático), o `.env`, o firewall (22, 80 e 443) e um backup diário do SQLite em `/var/backups/avenida` (14 dias). Depois edite `/opt/avenida/.env` (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) e rode `systemctl restart avenida`. Para atualizar: `bash /opt/avenida/deploy/update.sh`. **Deploy automático:** `.github/workflows/deploy.yml` roda os testes e o build a cada push na `main` e, se passarem, entra na VPS por SSH e roda o `update.sh`. Configure em Settings → Secrets and variables → Actions: `VPS_HOST` (IP ou domínio), `VPS_SSH_KEY` (chave privada; a pública vai em `~/.ssh/authorized_keys` da VPS), e opcionalmente `VPS_USER` (padrão `root`) e `VPS_PORT` (padrão 22). Também dá para disparar à mão em Actions → Deploy → Run workflow. Logs: `journalctl -u avenida -f`. Em produção sem chave Stripe a loja fica desligada de propósito.
+O script instala Node 22 e Caddy (HTTPS automático), faz o build, cria o serviço `systemd` `avenida` (usuário sem login, reinício automático), o `.env`, o firewall (22, 80 e 443) e um backup diário do SQLite em `/var/backups/avenida` (14 dias). Depois edite `/opt/avenida/.env` (por exemplo `GOOGLE_CLIENT_ID`) e rode `systemctl restart avenida`. Para atualizar: `bash /opt/avenida/deploy/update.sh`. **Deploy automático:** `.github/workflows/deploy.yml` roda os testes e o build a cada push na `main` e, se passarem, entra na VPS por SSH e roda o `update.sh`. Configure em Settings → Secrets and variables → Actions: `VPS_HOST` (IP ou domínio), `VPS_SSH_KEY` (chave privada; a pública vai em `~/.ssh/authorized_keys` da VPS), e opcionalmente `VPS_USER` (padrão `root`) e `VPS_PORT` (padrão 22). Também dá para disparar à mão em Actions → Deploy → Run workflow. Logs: `journalctl -u avenida -f`.
 
 ## Termos, privacidade e LGPD
 
@@ -90,16 +89,10 @@ O script instala Node 22 e Caddy (HTTPS automático), faz o build, cria o servi�
 
 `index.html` traz título, descrição, canonical (`https://avenidaonline.com/`), Open Graph e Twitter Card (`public/og-image.png`, 1200×630), JSON-LD (`WebSite` e `VideoGame`) e um `<noscript>` com texto. Em `public/`: `favicon.svg`, `favicon.ico`, `favicon-32.png`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `site.webmanifest` (instalável como app), `robots.txt` (bloqueia `/api/` e `/pagar/`) e `sitemap.xml` (inclui `/termos` e `/privacidade`). O servidor responde 404 de verdade para caminhos inexistentes e define cache (HTML sem cache, `assets/` imutáveis). Se o domínio mudar, troque `avenidaonline.com` em `index.html`, `robots.txt` e `sitemap.xml`. Depois de publicar, cadastre o site no Google Search Console e envie o `sitemap.xml`.
 
-## Contas e loja (modo de teste)
+## Contas e itens de visual
 
 - **Conta:** e-mail, apelido único e senha (mín. 8). A sessão fica num cookie `HttpOnly; SameSite=Lax` (30 dias), no banco só o hash do token. Quem tem conta joga com o apelido dela; convidados continuam sem cadastro, mas não podem usar o apelido de uma conta.
-- **Itens:** camisa amarela, camisa do lado (número, círculo-A ou "sem partido" no peito e nas costas), camisa simples (cor à escolha) e "sua camisa" (cor, símbolo e texto no peito e nas costas); as camisas não valem para Lula, Renan e Bolsonaro, boné do time, chapéu de palha, óculos escuros e bandeira gigante (catálogo em `shared/config.js`, preços em centavos de BRL). O que está equipado vem do banco, nunca do cliente, e muda ao vivo para quem está vendo (mensagem `look`).
-- **Pix pela AbacatePay (provedor principal):** preencha `ABACATEPAY_API_KEY` (painel da AbacatePay > Integrações; `abc_dev_…` é teste, `abc_prod_…` cobra de verdade). Com ela a loja vende **somente por Pix** e o Stripe é ignorado. O servidor cria a cobrança (`POST /v1/pixQrCode/create`, valor em centavos, validade de 30 min) e devolve o QR Code e o copia e cola, que o jogo mostra num **modal** (sem sair da página) consultando `/api/shop/confirm` a cada 3 s; o servidor confirma na API (`GET /v1/pixQrCode/check`) e só então entrega o item. **Webhook (opcional, entrega mesmo com o jogador fora do jogo):** cadastre no painel `https://SEU-DOMINIO/api/abacatepay/webhook?webhookSecret=SEGREDO` e ponha o mesmo `SEGREDO` em `ABACATEPAY_WEBHOOK_SECRET`; o corpo do webhook nunca é confiado, ele só indica qual cobrança consultar. **Chave sem permissão de leitura** (`401 Insufficient permissions` ao consultar o pagamento): o ideal é dar a permissão de leitura de cobranças à chave no painel; enquanto isso, o webhook autenticado pelo segredo libera o item se disser `PAID` para a cobrança no valor exato do pedido. Um pedido já pago e não liberado se libera à mão: `runuser -u avenida -- node --env-file=.env deploy/liberar-pedido.mjs` lista os pendentes e, com o ID no fim, libera (confira o pagamento no painel antes). Com chave de teste o modal mostra "Simular pagamento (teste)". A AbacatePay tem duas versões de API e a chave só vale numa delas (erro `API key version mismatch`): o servidor começa pela **v2** (`/v2/transparents/…`), troca sozinho para a v1 (`/v1/pixQrCode/…`) se a chave for da outra e registra isso no log; `ABACATEPAY_API_VERSION=1` força a v1. Os endpoints foram escritos a partir de resumos da documentação (o ambiente de desenvolvimento não alcança a AbacatePay): teste uma compra com a chave `abc_dev_` antes de usar a de produção.
-- **Pagamento sem chave:** provedor **simulado**, uma página local marcada como teste com "Simular Pix pago", "Simular cartão aprovado" e "Cancelar". Nada é cobrado.
-- **Pagamento Stripe (teste):** copie `.env.example` para `.env` e preencha `STRIPE_SECRET_KEY` com uma chave `sk_test_…`. O servidor cria uma sessão do Stripe Checkout em BRL sem fixar o método, então aparecem os ativos no Dashboard (ative o **Pix** em Configurações > Métodos de pagamento). Chaves `sk_live_` são recusadas, a menos que `ALLOW_LIVE_PAYMENTS=1`.
-- **Entrega do item:** pelo webhook `POST /api/stripe/webhook` (eventos `checkout.session.completed` com pagamento confirmado e `checkout.session.async_payment_succeeded`, este é o do Pix), com assinatura verificada por `STRIPE_WEBHOOK_SECRET`. Ao voltar do checkout o cliente também consulta o pedido, então funciona mesmo antes do webhook chegar. A entrega é idempotente.
-- **Webhook local:** `stripe listen --forward-to localhost:8787/api/stripe/webhook` mostra o `whsec_…` a colocar no `.env`.
-- **Testar Pix no Stripe:** no checkout escolha Pix, use o CPF de teste `000.000.000-00` e clique em "Simular scan".
+- **Itens:** o catálogo (`SHOP` em `shared/config.js`) é grátis: camisas, bonés e chapéus, óculos, mochila, capa, asas, auras, selos, carros e os itens personalizáveis (cartaz, bandeira e camisa). Quem tem conta equipa um item por slot em "Meu visual" (`POST /api/items/equip`, validado no servidor). O jogo não tem compras nem pagamentos. Nada aqui dá vantagem no PvP.
 
 ## Modelos 3D e créditos
 
@@ -121,10 +114,11 @@ Segundo modo do site, educativo e **não oficial**: sair de casa com o documento
 - `src/votacao/`: cenário 3D (`world.js`), figurantes leves, urna na tela (`urna.js`) e o jogo (`main.js`). Página: `votacao/index.html` (build com dois pontos de entrada).
 - Comprovante simulado ("Eu votei!") para baixar ou compartilhar.
 
-## Convites e shows de fogos
+## Convites e fogos
 
-- **Convite com recompensa** (`server/referrals.js`, `REFERRAL` em `shared/config.js`): o botão 📣 gera um link com `?de=apelido`; quem cria a conta (e-mail ou Google) por ele conta para o anfitrião. Cada IP vale uma vez por anfitrião e o IP do cadastro do próprio anfitrião não vale (guardamos só um hash). A cada 3 convidados: 3 fogos, até 5 vezes. O estoque novo chega por `inv` e um aviso por `notice`.
+- **Convite:** o botão 📣 gera um link com o seu lado (`?lado=…&src=convite`) para compartilhar. Não há recompensa nem contagem de convites.
 - **Shows de fogos** (`server/shows.js`): 12:00 e 20:00 de Brasília (`SHOW_TIMES` muda ou, vazio, desliga), com aviso 5 e 1 minuto antes. `POST /api/admin/show` (token de admin) dispara um na hora.
+- **Fogos do jogador:** botão 🎆 ou `/fogos` (grátis, a cada 10 s).
 
 ## Editar personagem em jogo
 
@@ -132,7 +126,7 @@ O botão 🎨 Personagem (HUD) abre o mesmo menu do lobby como editor, sem sair 
 
 ## Cartaz e bandeira personalizados
 
-Itens "Seu cartaz" (R$ 2) e "Sua bandeira" (R$ 4). Depois de comprar, o botão ✏️ Editar na loja abre o editor: texto (40 ou 16 caracteres), cor de fundo e do texto (paleta fixa) e um símbolo. O desenho é validado e salvo no servidor (`POST /api/shop/design`, tabela `designs`), passa pelo filtro de palavras e viaja para os outros jogadores dentro de `look.custom`. O cartaz grátis só aceita frases prontas (`SIGN_PRESETS` em `shared/config.js`, validadas no servidor): texto livre exige o item pago. O cartaz personalizado substitui o cartaz grátis quando "Cartaz" está na mão; a bandeira personalizada substitui a do lado quando "Bandeira do candidato" está na mão.
+Itens "Seu cartaz", "Sua bandeira" e "Sua camisa": o botão ✏️ Editar em "Meu visual" abre o editor: texto (40 ou 16 caracteres), cor de fundo e do texto (paleta fixa) e um símbolo. O desenho é validado e salvo no servidor (`POST /api/shop/design`, tabela `designs`), passa pelo filtro de palavras e viaja para os outros jogadores dentro de `look.custom`. O cartaz grátis só aceita frases prontas (`SIGN_PRESETS` em `shared/config.js`, validadas no servidor): texto livre exige o item pago. O cartaz personalizado substitui o cartaz grátis quando "Cartaz" está na mão; a bandeira personalizada substitui a do lado quando "Bandeira do candidato" está na mão.
 
 ## Lobby
 
@@ -141,7 +135,7 @@ Layout no espírito do manifestacao.com: barra no topo com logo e online por lad
 1. **Lado**: Petista (13), Bolsonarista (22), Anarquistas ou Sem partido, com o contador de online de cada um.
 2. **Personagem**: dois personagens prontos numa fila (Homem e Mulher) com retratos do modelo 3D e o botão 🎲 Sortear. Idosos e demais variações ficam em Visual.
 3. **Visual**: corpo, idade, rosto e altura; pele, barba, camisa e calça só aparecem no rosto que aceita tingir (o texto explica quando não).
-4. **Na mão**: nada, bandeira do Brasil, bandeira do lado, cartaz (frase pronta ou texto próprio via Pix), picanha no espeto ou abóbora. No PvP, quem segura picanha ou abóbora arremessa o próprio item em vez do tomate.
+4. **Na mão**: nada, bandeira do Brasil, bandeira do lado, cartaz (frase pronta ou texto próprio), picanha no espeto ou abóbora. No PvP, quem segura picanha ou abóbora arremessa o próprio item em vez do tomate.
 
 O rodapé é fixo e fica sempre visível: resumo da escolha, apelido com contador (em branco entra como Visitante; com conta, mostra o apelido dela), **Entrar na manifestação** e **Só quero assistir**. As etapas funcionam por teclado (setas esquerda e direita) e em celular o menu vira uma folha na parte de baixo, com o personagem visível acima.
 
@@ -156,7 +150,6 @@ WASD/setas mover · Shift correr · arrastar para girar a câmera (ou Q/E) · En
 - Reduzir o custo da cena: com os modelos humanos chega a ~1000 draw calls e ~3 milhões de triângulos (75 fps num Mac). A qualidade adaptativa (abaixo) ameniza, mas não resolve em celulares fracos.
 - Voz por proximidade (LiveKit ou WebRTC).
 - Contas: verificação de e-mail, recuperação de senha e login social (Google/Kick).
-- Pagamento: recibos/nota fiscal, reembolsos e painel de pedidos; revisar impostos e termos antes de cobrar de verdade.
 - Moderação: painel para ver denúncias, banimento por conta/IP e filtro de chat mais completo.
 - Áudio real (gravações de multidão, jingles e carros de som) e telão com vídeo.
 - Grade espacial no servidor: o laço de interesse é O(n²) por ciclo, suficiente para ~300 jogadores.
@@ -187,25 +180,13 @@ Quem apanha reage conforme o golpe (`staggerNow(kind, hp)` em `src/avatar.js`): 
 
 **Figurantes da multidão.** A multidão é local (não existe no servidor), então um golpe ou tomate que não pegou em jogador (o servidor manda `attack`/`throw` com `hit: null`, inclusive com o PvP desligado) atinge o figurante mais próximo à frente de quem bateu, com o mesmo alcance e arco de `MELEE` (`hitCrowd` em `src/main.js`, `hit` em `src/crowd.js`): ele toca o clipe de reação (soco `hitHead`, chute `hit` e às vezes cai, cassetete `knockback`, tomate `hitHead` rápido), vira para quem bateu, leva um empurrão curto e volta ao que fazia. A reação só aparece para quem vê o golpe e não vale pontos nem dano.
 
-## Monetização e loja
+## Fogos de artifício
 
-Tudo é cosmético ou de diversão; **nada dá vantagem no PvP** (catálogo em `SHOP`, `shared/config.js`; entrega em `server/shop.js`). Compra só com conta.
-
-| Tipo | Exemplos | Como funciona |
-|---|---|---|
-| **VIP** (`vip`) | Apoiador VIP 30 dias, R$ 9,90 | `users.vip_until` (renova somando 30 dias). Nome dourado, selo ⭐, gestos premium e 3 fogos de brinde |
-
-**Fogos de artifício** (`src/effects.js`, `src/fireworks-math.js`, `Ambience.launch/explode` em `src/audio.js`): cada foguete sobe com cabeça brilhante e rastro de faíscas e estoura num de quatro tipos (peônia, anel inclinado, salgueiro dourado ou palmeira), com clarão, rastro das últimas posições, cintilar e partículas que esfriam do branco quente à brasa laranja. A cena é de dia, então as partículas usam mistura normal com alfa (a aditiva some no céu claro). O som é sintetizado, sem arquivos: assobio na subida, estalo seco, corpo de ruído que escurece, trovão grave com eco dos prédios e crepitar; volume, atraso, abafamento e lado (estéreo) vêm da distância e da posição do estouro em relação à câmera, e o efeito avisa o áudio por `onLaunch`/`onBurst`, então os dois ficam sincronizados. O número de partículas cai com o nível de qualidade adaptativa. O botão 🎆 só aparece dentro do jogo e só para quem tem fogos na conta (compra de 5 fogos ou VIP, que dá 3 por assinatura).
-| **Pacotes** | Pacote de gestos (`unlock`), Kit manifestante e Kit festa (`bundle`, 30–35% de desconto) | Liberam gestos ou vários itens de uma vez |
-| **Visual** | Cartola, capacete, faixa, coroa, óculos aviador, máscara, mochila, capa, asas, aura do lado/dourada, selos 🔥🥩💎, carro dourado e carro de som, além de camisas, boné, bandeira e cartaz personalizados | Slots `head face shirt back flag sign fx badge car`; aparecem para todos |
-| **Consumíveis** | 5 fogos (R$ 3), 3 mensagens no telão (R$ 4) | Tabela `inventory`. Fogos: botão 🎆 ou `/fogos`, explodem sobre o jogador para quem está perto. Telão: `/telao texto` no chat, passa no telão 3D e no topo da tela de todos (1 a cada 12 s, passa pelo filtro de palavras) |
-| **Apoio** | R$ 5, 10 ou 25 | Dão o selo 💛 |
-
-Repetíveis (`vip`, `consumable`, `donation`) podem ser comprados de novo; os demais só uma vez. Um pedido pendente do mesmo item volta ao mesmo checkout (evita cobrança dupla). O webhook do Stripe confere sessão, valor e moeda, e a entrega vale mesmo se o pedido tinha sido marcado como falho. **Em produção sem chave Stripe a loja fica desligada** (o checkout simulado só funciona em desenvolvimento ou com `ALLOW_SIMULATED=1`). Antes de cobrar de verdade: revisar a legislação eleitoral, impostos, termos e nota fiscal.
+**Fogos de artifício** (`src/effects.js`, `src/fireworks-math.js`, `Ambience.launch/explode` em `src/audio.js`): cada foguete sobe com cabeça brilhante e rastro de faíscas e estoura num de quatro tipos (peônia, anel inclinado, salgueiro dourado ou palmeira), com clarão, rastro das últimas posições, cintilar e partículas que esfriam do branco quente à brasa laranja. A cena é de dia, então as partículas usam mistura normal com alfa (a aditiva some no céu claro). O som é sintetizado, sem arquivos: assobio na subida, estalo seco, corpo de ruído que escurece, trovão grave com eco dos prédios e crepitar; volume, atraso, abafamento e lado (estéreo) vêm da distância e da posição do estouro em relação à câmera, e o efeito avisa o áudio por `onLaunch`/`onBurst`, então os dois ficam sincronizados. O número de partículas cai com o nível de qualidade adaptativa. O botão 🎆 só aparece dentro do jogo.
 
 ## Gestos, pulo e cenário
 
-- **Gestos** (menu 🎭): acenar, dançar e aplaudir são grátis; Dança 2, chamar, concordar e negar são premium (o servidor descarta o gesto de quem não tem direito). **Pulo** com Espaço ou ⤴️ (visível para os outros). O avatar gesticula (`talk`) quando fala no chat; nocauteados ficam deitados.
+- **Gestos** (menu 🎭): acenar, dançar, Dança 2, chamar, concordar e negar, todos grátis (teclas 1 e 2 para acenar e dançar).
 - **Cenário** (`src/scenery.js`): faixas e bandeirinhas atravessando a pista, balões que balançam nas calçadas e, em cada trecho do Domínio, coluna de luz, listras no chão e nome flutuando, na cor do lado que domina. Fogos e confete (captura de trecho) em `src/effects.js`.
 
 ## Moderação (silenciar e denunciar)
@@ -241,7 +222,7 @@ Quem entra na avenida recebe as últimas mensagens (até 12, dos últimos 10 min
 
 ## Cabeçalhos de segurança
 
-As páginas servidas pelo Node levam `Content-Security-Policy` (scripts só do próprio site; `connect-src` com `ws:`/`wss:` para o jogo; `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy` e, com `PUBLIC_URL` https em produção, `Strict-Transport-Security`. A página de pagamento simulado e as respostas da API não recebem CSP. Ao adicionar scripts ou estilos de outro domínio, atualize a lista em `server/index.js`.
+As páginas servidas pelo Node levam `Content-Security-Policy` (scripts só do próprio site; `connect-src` com `ws:`/`wss:` para o jogo; `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy` e, com `PUBLIC_URL` https em produção, `Strict-Transport-Security`. As respostas da API não recebem CSP. Ao adicionar scripts ou estilos de outro domínio, atualize a lista em `server/index.js`.
 
 ## Qualidade adaptativa
 
@@ -287,22 +268,20 @@ Segunda rodada: o anti-teleporte permitia ~25 m/s a quem mandasse muitas mensage
 - **Quaternius**: Universal Animation Library 1 e 2, **CC0** (crédito não é obrigatório; licença em `assets-src/ual-LICENSE-CC0.txt`).
 - **Ready Player Me**: avatar de exemplo do repositório de exemplos do three.js; confira os termos atuais antes de reutilizar.
 
-## Ranking dos grupos e funções VIP
+## Qualidade do catálogo
 
-- **Ranking de apoio entre os grupos** (`server/ranking.js`, `GET /api/ranking?period=week|all`, janela 🏆 no jogo): cada compra paga é creditada ao grupo (lado) que o jogador tinha escolhido no menu na hora do checkout (`orders.side`); o ranking soma por grupo, mostra medalhas, barras, número de apoiadores e os 5 maiores apoiadores de cada grupo (quem excluiu a conta some da lista, mas o valor continua no grupo). A aba **Esta semana** vai de segunda 00:00 a segunda 00:00 em Brasília e zera sozinha; **Geral** soma tudo. Toda compra paga avisa a avenida inteira (`purchase`: quem, grupo, item) e, quando o jogo vira, anuncia o novo líder da semana.
-- **Funções premium (VIP ativo)**, definidas em `PREMIUM` e nos itens com `vip: true` de `shared/config.js`, todas conferidas no servidor: reações exclusivas (🔥 ❤️ 🎉), gestos premium, **vaga garantida** com a avenida cheia (`PREMIUM.reserved` vagas extras), **modo foto** 📸 (PNG com marca d'água, só no cliente), nome dourado com selo ⭐, 3 fogos por mês e itens exclusivos (asas, aura dourada, capa, selo 💎 e kit festa), que só podem ser comprados com o VIP ativo e, depois de comprados, ficam na conta mesmo se o VIP vencer. Nada disso dá vantagem no PvP.
-- **Auditoria do catálogo** (`test/catalog.test.js`): todo item à venda tem preço, ícone e slot válidos, é entregue ao ser pago (VIP, consumível, pacote, apoio e cosmético), todo cosmético pode ser equipado e o desconto que a descrição de cada pacote promete confere com o real.
+- **Auditoria do catálogo** (`test/catalog.test.js`): todo item tem ícone, nome e slot válidos, os desenhos apontam para itens que existem e todo item pode ser equipado.
 
 ## Segurança
 
-- **Checagem da VPS** (só leitura): `bash /opt/avenida/deploy/seguranca-check.sh` confere permissões do `.env`, dono do código, backups, variáveis perigosas (`ALLOW_SIMULATED`, `TRUST_PROXY`, `ADMIN_TOKEN`), nota de sandbox do systemd, SSH só com chave, firewall, fail2ban e atualizações pendentes.
+- **Checagem da VPS** (só leitura): `bash /opt/avenida/deploy/seguranca-check.sh` confere permissões do `.env`, dono do código, backups, variáveis perigosas (`TRUST_PROXY`, `ADMIN_TOKEN`), nota de sandbox do systemd, SSH só com chave, firewall, fail2ban e atualizações pendentes.
 - **Serviço em sandbox** (`deploy/avenida.service`, instalado pelo `update.sh`): sem privilégios novos, sistema de arquivos somente leitura exceto `data/`, sem capacidades, famílias de rede limitadas. O código fica do `root` e só `data/` é do usuário `avenida`; o `.env` é `root:avenida 640`. Se o site não responder em `/healthz` depois de uma troca de unidade, o `update.sh` volta a unidade anterior e falha o deploy.
 - **Deploy automático** com token mínimo (`permissions: contents: read`), sem executar scripts de instalação das dependências (`npm ci --ignore-scripts`) e, se existir o secret `VPS_KNOWN_HOSTS` (saída de `ssh-keyscan -t ed25519 SEU_IP`), com a chave do servidor fixada. **Restrinja a chave de deploy** no `~/.ssh/authorized_keys` da VPS para ela só poder rodar o deploy: `command="cd /opt/avenida && BRANCH=main bash deploy/update.sh",restrict ssh-ed25519 AAAA… deploy`.
 - **Senhas** em scrypt (N=2¹⁵, r=8, p=3, 32 MiB) com parâmetros dentro do hash; hashes antigos são regravados no próximo login.
 - **Apelidos reservados**: contas e convidados não podem usar nomes de equipe ou do sistema (`Admin`, `Suporte`, `Moderador`…), nem variações com acento, números no lugar de letras ou letras parecidas de outros alfabetos, nem `Excluído…` (que o servidor usa nas contas apagadas). Contas antigas com esses nomes: `runuser -u avenida -- node --env-file=.env deploy/apelidos-reservados.mjs` lista e, com `--renomear`, troca por `Jogador<id>`.
 - `X-Forwarded-Host` e `X-Forwarded-Proto` só valem com `TRUST_PROXY=1` em produção; corpo de requisição grande recebe 413 e a conexão é encerrada.
-- Testes de segurança em `test/security.test.js` (caminhos fora do site, cabeçalhos, cookie, CSRF, força bruta, WebSocket, loja, pagamento duplicado, apelidos).
+- Testes de segurança em `test/security.test.js` (caminhos fora do site, cabeçalhos, cookie, CSRF, força bruta, WebSocket, itens, apelidos).
 
 ## Header (topo)
 
-Uma linha só em qualquer tela (52 px no celular, 56 px no desktop), conferida de 320 a 1280 px: marca, **contador ao vivo** (total online com ponto pulsante e, em cápsula única, quantos há em cada grupo; nome do grupo só em telas largas, `title`/`aria-label` sempre) e ações com o mesmo estilo de botão (`.tbtn`: ícone + rótulo, só o ícone em telas estreitas). No menu inicial: visitante vê **Ranking** e **Entrar**; quem tem conta vê **Loja**, **Ranking** e o **menu da conta** (avatar com a inicial, apelido, ⭐ se for VIP), que guarda Loja, Ranking, **Sair da conta** e, separada e em vermelho, **Excluir conta…** (antes ficava sempre à vista). O menu abre por clique ou teclado, setas movem o foco, `Esc` e clique fora fecham e devolvem o foco. No jogo: **Loja**, **Som** (com `aria-pressed`) e **Sair**.
+Uma linha só em qualquer tela (52 px no celular, 56 px no desktop), conferida de 320 a 1280 px: marca, **contador ao vivo** (total online com ponto pulsante e, em cápsula única, quantos há em cada grupo; nome do grupo só em telas largas, `title`/`aria-label` sempre) e ações com o mesmo estilo de botão (`.tbtn`: ícone + rótulo, só o ícone em telas estreitas). No menu inicial: visitante vê **Entrar**; quem tem conta vê **Visual** e o **menu da conta** (avatar com a inicial, apelido), que guarda Meu visual, **Sair da conta** e, separada e em vermelho, **Excluir conta…** (antes ficava sempre à vista). O menu abre por clique ou teclado, setas movem o foco, `Esc` e clique fora fecham e devolvem o foco. No jogo: **Visual**, **Som** (com `aria-pressed`) e **Sair**.

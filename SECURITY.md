@@ -4,4 +4,4 @@ Não abra issue pública para vulnerabilidades. Use **Security → Report a vuln
 
 Inclua passos para reproduzir e o impacto. Respondemos em até 7 dias.
 
-Em instâncias próprias: use só chaves de teste de pagamento até validar tudo, defina `PUBLIC_URL`, `TRUST_PROXY` atrás de proxy e `ADMIN_TOKEN` forte. Veja a seção "Segurança" do README.
+Em instâncias próprias: defina `PUBLIC_URL`, `TRUST_PROXY` atrás de proxy e `ADMIN_TOKEN` forte. Veja a seção "Segurança" do README.

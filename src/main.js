@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  WORLD, SIDES, SIDE_SLUGS, CROWD, ANIMS, WALK_SPEED, RUN_SPEED, RACE, MELEE, VEHICLE, REACTIONS, PREMIUM, STAMINA, EMOTES, JUMP, ZONES, COMBAT,
+  WORLD, SIDES, SIDE_SLUGS, CROWD, ANIMS, WALK_SPEED, RUN_SPEED, RACE, MELEE, VEHICLE, REACTIONS, STAMINA, JUMP, ZONES, COMBAT,
 } from '../shared/config.js';
 import { createWorld, carMesh } from './world.js';
 import { Avatar } from './avatar.js';
@@ -251,15 +251,9 @@ canvas.addEventListener('pointercancel', endDrag);
 
 const knockedOut = () => performance.now() < vit.koUntil;
 let lastReact = 0;
-function lockedReact() {
-  toast('Essa reação é exclusiva para Apoiadores VIP ⭐. Veja o VIP na loja 🛍️.');
-  accountApi?.openShop('vip');
-}
-
 function react(i) {
   const now = performance.now();
   if (mode !== 'play' || watching || knockedOut() || now - lastReact < 800) return;
-  if (PREMIUM.reactions.includes(i) && !acct.vip) return lockedReact();
   lastReact = now;
   net.send({ t: 'react', e: i });
 }
@@ -272,11 +266,6 @@ function jump() {
 
 function toggleEmote(anim) {
   if (drive.on || knockedOut()) return;
-  const em = EMOTES.find((e) => e.anim === anim);
-  if (em?.premium && !acct.premium) {
-    toast(acct.user ? 'Gesto premium: libere com o Pacote de gestos ou o VIP na loja 🛍️' : 'Gestos premium: entre numa conta e compre o Pacote de gestos ou o VIP.');
-    return;
-  }
   me.manual = me.manual === anim ? 0 : anim;
   hud.setEmote(me.manual);
 }
@@ -479,31 +468,11 @@ const net = new Net({
         who?.label?.react(REACTIONS[m.e] ?? '👍');
         break;
       }
-      case 'inv':
-        acct.inventory = m.inv;
-        acct.premium = m.premium;
-        acct.vip = !!m.vip;
-        hud.setInventory(m.inv, m.premium, !!m.vip);
-        break;
       case 'notice':
         toast(m.text);
         break;
       case 'fx':
         effects.fireworks(m.x, m.z, SIDES[m.side]?.color ?? '#ffffff');
-        break;
-      case 'purchase': {
-        if (muted.has(String(m.nick).toLowerCase())) break;
-        const side = SIDES[m.side];
-        if (!side) break;
-        toast(`${m.icon} ${m.nick} apoiou o grupo ${side.name} com ${m.item}.${m.newLeader && SIDES[m.leader] ? ` 🏆 ${SIDES[m.leader].name} assume a liderança da semana!` : ''}`);
-        sound.pop();
-        break;
-      }
-      case 'billboard':
-        if (muted.has(String(m.nick).toLowerCase())) break;
-        world.ticker.show(m.nick, m.text);
-        hud.showBanner(m.nick, m.side, m.text);
-        sound.pop();
         break;
       case 'who':
         hud.setWho(m.list, m.total);
@@ -564,7 +533,7 @@ const net = new Net({
         break;
       }
       case 'look': {
-        // itens equipados mudaram (loja)
+        // itens equipados mudaram
         if (m.id === myId) {
           me.avatar.setLook({ ...m.look, side: profile.side });
           me.label?.setStyle(m.look.equip);
@@ -720,11 +689,9 @@ function updateProjectiles(dt) {
 
 const radar = initRadar();
 
-let accountApi = null; // preenchido por initAccount (loja, ranking)
+let accountApi = null; // preenchido por initAccount
 const hud = initHud({
   onChat: (text) => net.send({ t: 'chat', text }),
-  onLockedReact: lockedReact,
-  onRanking: () => accountApi?.openRanking(),
   onPhoto: () => takePhoto(),
   onEdit: () => startEdit(),
   onEmote: toggleEmote,
@@ -732,7 +699,6 @@ const hud = initHud({
   onReact: react,
   onWho: () => net.send({ t: 'who' }),
   onFireworks: () => net.send({ t: 'use', item: 'fogos' }),
-  onBillboard: () => hud.prefillChat('/telao '),
   onLeave: () => window.location.reload(),
   onSound: (on) => sound.setEnabled(on),
   soundOn: sound.enabled,
@@ -753,7 +719,7 @@ const lobby = initLobby({
   profile,
   presets: PRESETS,
   onAnim: (a) => { lobbyAnim = a; },
-  onShop: () => accountApi.openShop(),
+  onShop: () => accountApi.openItems(),
   onChange() {
     saveProfile();
     me.avatar.setLook(lookOf(profile.look, profile.side));
@@ -802,15 +768,13 @@ renderPortraits(renderer, profile.side);
 
 /** Convite: link com o lado de quem convida, pelo compartilhamento do aparelho ou copiado. */
 async function invite() {
-  const url = `${location.origin}/?lado=${SIDE_SLUGS[profile.side]}&src=convite${acct.user ? `&de=${encodeURIComponent(acct.user.nick)}` : ''}`;
+  const url = `${location.origin}/?lado=${SIDE_SLUGS[profile.side]}&src=convite`;
   const text = `Vem pra Paulista! Entra no lado ${SIDES[profile.side].name} no Avenida Online:`;
   track('share');
-  const r = acct.referrals;
-  const hint = r ? `A cada ${r.every} amigos que criarem conta pelo link, você ganha ${Object.values(r.reward)[0]} fogos 🎆 (${r.count % r.every}/${r.every}).` : 'Entre na conta para ganhar fogos quando seus amigos criarem conta pelo link.';
   if (navigator.share) {
-    try { await navigator.share({ title: 'Avenida Online', text, url }); toast(hint); return; } catch (e) { if (e?.name === 'AbortError') return; }
+    try { await navigator.share({ title: 'Avenida Online', text, url }); return; } catch (e) { if (e?.name === 'AbortError') return; }
   }
-  try { await navigator.clipboard.writeText(`${text} ${url}`); toast(`Link de convite copiado! Cole no WhatsApp. ${hint}`); } catch { toast(url); }
+  try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Link de convite copiado! Cole no WhatsApp.'); } catch { toast(url); }
 }
 $('#invitebtn').onclick = invite;
 
@@ -876,15 +840,13 @@ function leavePlay(reason) {
   showError(reason || '');
 }
 
-// Conta e loja. Trocar de conta exige uma nova conexão: o servidor identifica o
+// Conta e visual. Trocar de conta exige uma nova conexão: o servidor identifica o
 // jogador pelo cookie de sessão no momento em que o WebSocket abre.
 const nickInput = $('#nick');
 let lastUserNick = null;
 accountApi = initAccount({
-  getSide: () => profile.side,
   onChange(account, reason) {
     acct = account;
-    hud.setInventory(account.inventory || {}, !!account.premium, !!account.vip);
     me.label?.setStyle(account.equipped);
     const nick = account.user?.nick ?? null;
     nickInput.disabled = !!nick;
@@ -896,14 +858,9 @@ accountApi = initAccount({
   },
 });
 
-// ---------- Modo foto (VIP) ----------
+// ---------- Modo foto ----------
 
 function takePhoto() {
-  if (!acct.vip) {
-    toast('O modo foto é exclusivo para Apoiadores VIP ⭐. Veja o VIP na loja 🛍️.');
-    accountApi?.openShop('vip');
-    return;
-  }
   renderer.render(scene, camera); // desenha e copia no mesmo instante (o buffer ainda não foi apresentado)
   const src = renderer.domElement;
   const out = document.createElement('canvas');

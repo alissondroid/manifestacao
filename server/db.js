@@ -28,25 +28,6 @@ db.exec(`
     expires_at INTEGER NOT NULL
   );
 
-  CREATE TABLE IF NOT EXISTS orders (
-    id           TEXT PRIMARY KEY,
-    user_id      INTEGER NOT NULL REFERENCES users(id),
-    item_id      TEXT NOT NULL,
-    amount_cents INTEGER NOT NULL,
-    provider     TEXT NOT NULL,
-    provider_ref TEXT,
-    status       TEXT NOT NULL DEFAULT 'pending',
-    created_at   INTEGER NOT NULL,
-    paid_at      INTEGER
-  );
-
-  CREATE TABLE IF NOT EXISTS owned (
-    user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    item_id  TEXT NOT NULL,
-    order_id TEXT,
-    PRIMARY KEY (user_id, item_id)
-  );
-
   CREATE TABLE IF NOT EXISTS designs (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     kind    TEXT NOT NULL,
@@ -89,14 +70,6 @@ db.exec(`
     PRIMARY KEY (user_id, slot)
   );
 
-  CREATE TABLE IF NOT EXISTS referrals (
-    referred_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    referrer_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    ip_hash     TEXT NOT NULL,
-    at          INTEGER NOT NULL,
-    UNIQUE (referrer_id, ip_hash)
-  );
-
   CREATE TABLE IF NOT EXISTS stats (
     day   TEXT NOT NULL,
     event TEXT NOT NULL,
@@ -104,23 +77,7 @@ db.exec(`
     n     INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (day, event, src)
   );
-
-  CREATE TABLE IF NOT EXISTS inventory (
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    item_id TEXT NOT NULL,
-    qty     INTEGER NOT NULL DEFAULT 0 CHECK (qty >= 0),
-    PRIMARY KEY (user_id, item_id)
-  );
 `);
-
-// Migração: assinatura VIP (vip_until em ms; 0 = nunca teve).
-if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'vip_until')) {
-  db.exec('ALTER TABLE users ADD COLUMN vip_until INTEGER NOT NULL DEFAULT 0');
-}
-
-if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'reg_ip_hash')) {
-  db.exec('ALTER TABLE users ADD COLUMN reg_ip_hash TEXT'); // hash do IP do cadastro (só para o convite não valer em conta do mesmo IP)
-}
 
 if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'terms_at')) {
   db.exec('ALTER TABLE users ADD COLUMN terms_at INTEGER'); // quando aceitou os Termos e a Política (LGPD: prova do consentimento)
@@ -129,15 +86,6 @@ if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'google
   db.exec('ALTER TABLE users ADD COLUMN google_sub TEXT'); // identificador da conta Google (login sem senha)
 }
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL');
-if (!db.prepare('PRAGMA table_info(orders)').all().some((c) => c.name === 'side')) {
-  db.exec('ALTER TABLE orders ADD COLUMN side INTEGER'); // grupo (lado) a que a compra é creditada no ranking
-}
-if (!db.prepare('PRAGMA table_info(orders)').all().some((c) => c.name === 'pay_data')) {
-  db.exec('ALTER TABLE orders ADD COLUMN pay_data TEXT'); // dados do Pix (QR e copia e cola) em JSON
-}
-if (!db.prepare('PRAGMA table_info(orders)').all().some((c) => c.name === 'pay_url')) {
-  db.exec('ALTER TABLE orders ADD COLUMN pay_url TEXT');
-}
 
 // Item retirado do catálogo (bandeira nas costas): tira de quem estava com ele equipado.
 db.prepare("DELETE FROM equipped WHERE item_id = 'capa-brasil'").run();

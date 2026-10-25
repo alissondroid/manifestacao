@@ -4,8 +4,7 @@
 #   DOMAIN=seu-dominio.com bash deploy/setup.sh      # com HTTPS automático (o DNS já deve apontar para esta VPS)
 #   bash deploy/setup.sh                              # sem domínio: HTTP no IP (só para testar)
 #
-# Variáveis opcionais: BRANCH (padrão: main), REPO_URL (HTTPS ou git@github.com:... com chave de deploy), APP_DIR (padrão: /opt/avenida),
-# ALLOW_SIMULATED=1 (loja de mentira, entrega itens SEM cobrar: só para testar).
+# Variáveis opcionais: BRANCH (padrão: main), REPO_URL (HTTPS ou git@github.com:... com chave de deploy), APP_DIR (padrão: /opt/avenida).
 set -euo pipefail
 
 [ "$(id -u)" -eq 0 ] || { echo "Rode como root."; exit 1; }
@@ -66,7 +65,6 @@ if [ ! -f .env ]; then
   {
     echo "TRUST_PROXY=1"
     echo "MAX_PLAYERS=300"
-    if [ "${ALLOW_SIMULATED:-}" = "1" ]; then echo "ALLOW_SIMULATED=1"; fi
   } >> .env
 fi
 chmod 640 .env

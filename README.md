@@ -22,11 +22,11 @@ Produção (um processo serve o build e o WebSocket):
 npm run build && npm start   # http://localhost:8787
 ```
 
-Configuração em `.env` (copie de `.env.example`; use só chaves de teste de pagamento).
+Configuração em `.env` (copie de `.env.example`).
 
 ## Documentação
 
-- [Documentação completa](docs/DOCUMENTACAO.md): arquitetura, protocolo, deploy em VPS, loja, moderação, segurança
+- [Documentação completa](docs/DOCUMENTACAO.md): arquitetura, protocolo, deploy em VPS, itens, moderação, segurança
 - [Contribuir](CONTRIBUTING.md) · [Segurança](SECURITY.md) · [Código de conduta](CODE_OF_CONDUCT.md)
 - [Licenças de terceiros](ASSETS.md) · [Changelog](CHANGELOG.md)
 

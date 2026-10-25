@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import { WebSocket } from 'ws';
-import { SHOP } from '../shared/config.js';
 import { startServer, connect, sleep } from './helpers.js';
 
 const PROD = { NODE_ENV: 'production', PUBLIC_URL: 'https://jogo.example', TRUST_PROXY: '1' };
@@ -171,37 +170,19 @@ test('WebSocket: mensagem gigante ou lixo não derruba o servidor', async () => 
   } finally { await srv.stop(); }
 });
 
-test('loja: o preço vem do servidor (campo "price" do cliente é ignorado) e outro usuário não mexe no seu pedido', async () => {
+test('itens: equipar exige login e slot certo; item inexistente é recusado', async () => {
   const srv = await startServer();
   try {
+    const post = (path, body, cookie) => fetch(`${srv.url}${path}`, { method: 'POST', headers: { ...json({}).headers, ...(cookie ? { cookie } : {}) }, body: JSON.stringify(body) });
+    assert.equal((await post('/api/items/equip', { slot: 'head', item: 'bone' })).status, 401);
     const a = await register(srv.url, 6);
-    const b = await register(srv.url, 7);
-    const item = SHOP.find((i) => i.id === 'bone');
-    const co = await (await fetch(`${srv.url}/api/shop/checkout`, { method: 'POST', headers: { ...json({}).headers, cookie: a.cookie }, body: JSON.stringify({ item: 'bone', side: 0, price: 1, amount: 1, amount_cents: 1 }) })).json();
-    assert.ok(co.order);
-    // B tenta confirmar, simular e abrir o pedido de A
-    for (const [path, body] of [['/api/shop/simulate', { order: co.order, result: 'paid' }]]) {
-      const r = await fetch(`${srv.url}${path}`, { method: 'POST', headers: { ...json({}).headers, cookie: b.cookie }, body: JSON.stringify(body) });
-      assert.equal(r.status, 404, `${path}: B mexeu no pedido de A`);
-    }
-    assert.equal((await fetch(`${srv.url}/api/shop/confirm?order=${co.order}`, { headers: { cookie: b.cookie } })).status, 404);
-    await fetch(`${srv.url}/api/shop/simulate`, { method: 'POST', headers: { ...json({}).headers, cookie: a.cookie }, body: JSON.stringify({ order: co.order, result: 'paid' }) });
-    const rank = await (await fetch(`${srv.url}/api/ranking?period=all`)).json();
-    assert.equal(rank.sides[0].total, item.price, 'o valor creditado precisa ser o preço do catálogo');
-  } finally { await srv.stop(); }
-});
-
-test('pagamento duplicado: entregas simultâneas do mesmo pedido liberam o VIP uma vez só', async () => {
-  const srv = await startServer();
-  try {
-    const a = await register(srv.url, 8);
-    const vip = SHOP.find((i) => i.kind === 'vip');
-    const co = await (await fetch(`${srv.url}/api/shop/checkout`, { method: 'POST', headers: { ...json({}).headers, cookie: a.cookie }, body: JSON.stringify({ item: vip.id, side: 0 }) })).json();
-    const pay = () => fetch(`${srv.url}/api/shop/simulate`, { method: 'POST', headers: { ...json({}).headers, cookie: a.cookie }, body: JSON.stringify({ order: co.order, result: 'paid' }) });
-    await Promise.all([pay(), pay(), pay(), pay(), pay()]);
+    assert.equal((await post('/api/items/equip', { slot: 'head', item: 'bone' }, a.cookie)).status, 200);
+    assert.equal((await post('/api/items/equip', { slot: 'shirt', item: 'bone' }, a.cookie)).status, 403, 'slot errado');
+    assert.equal((await post('/api/items/equip', { slot: 'head', item: 'vip-30' }, a.cookie)).status, 403, 'item fora do catálogo');
+    assert.equal((await post('/api/items/equip', { slot: 'inexistente', item: null }, a.cookie)).status, 400);
     const me = await (await fetch(`${srv.url}/api/me`, { headers: { cookie: a.cookie } })).json();
-    assert.ok(me.vipUntil < Date.now() + (vip.days + 1) * 86_400_000, 'VIP somado mais de uma vez');
-    assert.ok(me.inventory.fogos <= 3, `fogos duplicados: ${me.inventory.fogos}`);
+    assert.equal(me.equipped.head, 'bone');
+    assert.equal(me.vip, undefined);
   } finally { await srv.stop(); }
 });
 
@@ -228,16 +209,15 @@ test('administração: sem token configurado não existe; com token, só o certo
   } finally { await on.stop(); }
 });
 
-test('webhooks sem credencial são recusados e a simulação de pagamento não existe em produção', async () => {
+test('não existem rotas de pagamento nem de loja', async () => {
   const srv = await startServer(PROD);
   try {
-    assert.ok([400, 503].includes((await fetch(`${srv.url}/api/stripe/webhook`, { method: 'POST', ...json({ type: 'checkout.session.completed' }) })).status));
-    assert.ok([401, 503].includes((await fetch(`${srv.url}/api/abacatepay/webhook`, { method: 'POST', ...json({ event: 'billing.paid' }) })).status));
     const { cookie } = await register(srv.url, 9);
-    const sim = await fetch(`${srv.url}/api/shop/simulate`, { method: 'POST', headers: { ...json({}).headers, cookie, 'x-forwarded-host': 'jogo.example', origin: 'https://jogo.example' }, body: JSON.stringify({ order: '00000000-0000-0000-0000-000000000000', result: 'paid' }) });
-    assert.ok([404, 503].includes(sim.status));
-    const co = await fetch(`${srv.url}/api/shop/checkout`, { method: 'POST', headers: { ...json({}).headers, cookie, 'x-forwarded-host': 'jogo.example', origin: 'https://jogo.example' }, body: JSON.stringify({ item: 'bone', side: 0 }) });
-    assert.equal(co.status, 503, 'em produção sem chave de pagamento a loja precisa ficar desligada (nada de item grátis)');
+    const headers = { ...json({}).headers, cookie, 'x-forwarded-host': 'jogo.example', origin: 'https://jogo.example' };
+    for (const path of ['/api/shop/checkout', '/api/shop/simulate', '/api/stripe/webhook', '/api/abacatepay/webhook', '/api/ranking']) {
+      const r = await fetch(`${srv.url}${path}`, { method: 'POST', headers, body: '{}' });
+      assert.equal(r.status, 404, `${path} ainda existe`);
+    }
   } finally { await srv.stop(); }
 });
 

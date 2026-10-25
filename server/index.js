@@ -4,17 +4,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import {
-  PREMIUM, SHOP_BY_ID, WORLD, SIDES, SHIRTS, SKINS, HAIRS, HAIR_STYLES, BODIES, AGES, MODELS, HEIGHTS, BEARDS, TOPS, PANTS, FLAGS, ANIMS, MAX_SPEED, LIMITS, SIGN_PRESETS, MELEE, VEHICLE, COMBAT, REACTIONS, PREMIUM_ANIMS, BILLBOARD,
+  WORLD, SIDES, SHIRTS, SKINS, HAIRS, HAIR_STYLES, BODIES, AGES, MODELS, HEIGHTS, BEARDS, TOPS, PANTS, FLAGS, ANIMS, MAX_SPEED, LIMITS, SIGN_PRESETS, MELEE, VEHICLE, COMBAT, REACTIONS,
 } from '../shared/config.js';
 import { handleApi } from './api.js';
 import { userFromRequest, nickTaken } from './auth.js';
-import {
-  equippedMap, designsOf, hasPremiumEmotes, inventoryOf, isVip, spend,
-} from './shop.js';
-import { rankingFor } from './ranking.js';
+import { equippedMap, designsOf } from './items.js';
 import { filterText } from './moderation.js';
 import { createRace } from './race.js';
-import { PVP, REFERRAL } from '../shared/config.js';
+import { PVP } from '../shared/config.js';
 import { SHOWS, showAt } from './shows.js';
 import { createVotacao } from './votacao.js';
 import { createZones } from './zones.js';
@@ -117,7 +114,7 @@ async function handle(req, res) {
     return res.end(JSON.stringify({ ok: true, players: players.size, uptime: Math.round(process.uptime()) }));
   }
   if (await handleApi(req, res, {
-    onEquip: refreshLook, onDelete: kickUser, onBan: kickBanned, onPaid, onShow: runShow, onReferral,
+    onEquip: refreshLook, onDelete: kickUser, onBan: kickBanned, onShow: runShow,
   })) return;
   if (!fs.existsSync(DIST)) {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
@@ -258,33 +255,6 @@ function kickBanned(key) {
   }
 }
 
-// Líder da semana no ranking entre os grupos: muda quando uma compra paga vira o jogo.
-let lastLeader = rankingFor('week').leader;
-/** Compra paga: avisa a avenida inteira com o grupo e, se mudou, quem assumiu a liderança da semana. */
-function onPaid(order) {
-  const item = SHOP_BY_ID[order.item_id];
-  const nick = db.prepare('SELECT nick FROM users WHERE id = ?').get(order.user_id)?.nick;
-  if (!item || !nick || order.side == null) return;
-  const { leader } = rankingFor('week');
-  const newLeader = leader !== null && leader !== lastLeader;
-  lastLeader = leader;
-  broadcast({
-    t: 'purchase', nick, side: order.side, item: item.name, icon: item.icon, leader, newLeader,
-  }, undefined, true);
-}
-
-/** Convite que contou: avisa o anfitrião se ele estiver online e atualiza o estoque de fogos. */
-function onReferral(r) {
-  if (!r) return;
-  for (const p of players.values()) {
-    if (p.userId !== r.referrerId) continue;
-    notice(p, r.rewarded
-      ? `🎉 ${r.count} amigos entraram pelo seu convite! Você ganhou ${Object.values(REFERRAL.reward)[0]} fogos 🎆.`
-      : `Mais um amigo entrou pelo seu convite (${r.count % REFERRAL.every}/${REFERRAL.every} para o próximo prêmio).`);
-    stock(p);
-  }
-}
-
 // Shows de fogos em horários fixos para todo mundo na avenida.
 let showRunning = false;
 function runShow() {
@@ -312,13 +282,11 @@ const showTimer = setInterval(() => {
 }, 15_000);
 showTimer.unref?.();
 
-/** Itens equipados mudaram na loja: atualiza o avatar de quem está online e avisa quem o vê. */
+/** Itens equipados mudaram: atualiza o avatar de quem está online e avisa quem o vê. */
 function refreshLook(userId) {
   for (const p of players.values()) {
     if (p.userId !== userId) continue;
     p.look = { ...p.look, equip: equippedMap(userId), custom: designsOf(userId) };
-    p.premium = hasPremiumEmotes(userId);
-    send(p.ws, { t: 'inv', inv: inventoryOf(userId), premium: p.premium, vip: isVip(userId) });
     const msg = JSON.stringify({ t: 'look', id: p.id, look: p.look });
     for (const ws of wss.clients) {
       if (ws.readyState === ws.OPEN && ws.joined && (ws.player === p || ws.known.has(p.id))) ws.send(msg);
@@ -516,37 +484,19 @@ function attack(me, kind) {
   }
 }
 
-// ---------- Itens consumíveis (comprados na loja) ----------
+// ---------- Fogos de artifício ----------
 
 const notice = (p, text) => send(p.ws, { t: 'notice', text });
 /** Identifica a pessoa (conta ou IP) para contar denunciantes diferentes. */
 const playerKey = (p) => (p.userId ? `u${p.userId}` : `ip:${p.ip}`);
-const stock = (p) => send(p.ws, { t: 'inv', inv: inventoryOf(p.userId), premium: p.premium, vip: p.userId ? isVip(p.userId) : false });
 
-/** Fogos de artifício sobre o jogador, visíveis a quem está por perto. Consome 1 unidade. */
+/** Fogos de artifício sobre o jogador, visíveis a quem está por perto. */
 function useFireworks(me) {
   const now = Date.now();
-  if (!me.userId) return notice(me, 'Entre numa conta para usar itens da loja.');
   if (me.koUntil > now) return;
-  if (now - me.lastUse < 4000) return notice(me, 'Espere um pouco para soltar outro.');
-  if (!spend(me.userId, 'fogos')) return notice(me, 'Você não tem fogos. Compre na loja 🛍️.');
+  if (now - me.lastUse < 10_000) return notice(me, 'Espere um pouco para soltar outro.');
   me.lastUse = now;
   sendNear(me, { t: 'fx', k: 'fogos', x: round2(me.x), z: round2(me.z), side: me.side });
-  stock(me);
-}
-
-let lastBillboard = 0;
-/** Mensagem no telão: aparece no telão da avenida e no topo da tela de todos. Consome 1 unidade só se for ao ar. */
-function billboard(me, raw) {
-  const now = Date.now();
-  if (!me.userId) return notice(me, 'Entre numa conta para usar o telão.');
-  const text = cleanText(raw, BILLBOARD.max);
-  if (!text) return notice(me, 'Escreva depois do comando: /telao seu texto');
-  if (now - lastBillboard < BILLBOARD.cooldownMs) return notice(me, 'O telão está ocupado. Tente em instantes.');
-  if (!spend(me.userId, 'telao')) return notice(me, 'Você não tem mensagens de telão. Compre na loja 🛍️.');
-  lastBillboard = now;
-  broadcast({ t: 'billboard', nick: me.nick, side: me.side, text });
-  stock(me);
 }
 
 /** Tira o jogador do jogo (quem o conhecia recebe `del` no próximo ciclo de sincronização). */
@@ -609,9 +559,7 @@ wss.on('connection', (ws, req) => {
 
     if (m.t === 'join') {
       if (ws.joined) return;
-      // Avenida cheia: Apoiadores VIP têm vagas extras reservadas.
-      const cap = MAX_PLAYERS + (ws.user && isVip(ws.user.id) ? PREMIUM.reserved : 0);
-      if (players.size >= cap) return send(ws, { t: 'denied', reason: 'A avenida está cheia agora. Tente de novo em instantes. Apoiadores VIP ⭐ têm vaga garantida.' });
+      if (players.size >= MAX_PLAYERS) return send(ws, { t: 'denied', reason: 'A avenida está cheia agora. Tente de novo em instantes.' });
       const id = nextId++;
       const account = ws.user; // definido no upgrade pelo cookie de sessão
       let nick = account ? account.nick : filterText(cleanText(m.nick, LIMITS.nick));
@@ -662,7 +610,6 @@ wss.on('connection', (ws, req) => {
         lastHint: 0,
         ip,
         lastUse: 0,
-        premium: account ? hasPremiumEmotes(account.id) : false,
       };
       [me.x, me.z] = spawnPoint();
       players.set(id, me);
@@ -676,7 +623,6 @@ wss.on('connection', (ws, req) => {
       send(ws, zones.snapshot());
       const recent = chatLog.filter((c) => Date.now() - c.at < HISTORY_MS).slice(-12);
       if (recent.length) send(ws, { t: 'history', list: recent.map((c) => [c.nick, c.side, c.text]) });
-      if (me.userId) stock(me);
       broadcast({ t: 'online', counts: onlineCounts() }, null, true);
       return;
     }
@@ -695,7 +641,6 @@ wss.on('connection', (ws, req) => {
       const nx = clamp(x, -WORLD.halfWidth, WORLD.halfWidth);
       const nz = clamp(z, -WORLD.halfLength, WORLD.halfLength);
       let a = int(m.a, ANIMS.length - 1);
-      if (PREMIUM_ANIMS.includes(a) && !me.premium) a = 0; // gesto premium sem direito: fica parado
       const limit = a === DRIVE ? VEHICLE.maxSpeed : MAX_SPEED;
       if (!spendMoveBudget(me, now, limit, Math.hypot(nx - me.x, nz - me.z))) {
         // movimento impossível (acima da velocidade permitida): devolve a posição aceita
@@ -724,9 +669,8 @@ wss.on('connection', (ws, req) => {
       if (!text) return;
       me.lastChat = now;
       if (me.mutedUntil > now) return notice(me, `Você está silenciado por mais ${Math.ceil((me.mutedUntil - now) / 60000)} min após denúncias de outros jogadores.`);
-      if (/^\/telao(\s|$)/i.test(text)) return billboard(me, text.replace(/^\/telao\s*/i, ''));
       if (/^\/fogos\b/i.test(text)) return useFireworks(me);
-      if (/^\/ajuda\b/i.test(text)) return notice(me, 'Comandos: /telao <texto> (gasta 1 mensagem de telão), /fogos (gasta 1 fogos) e /ajuda. Toque no nome de alguém para silenciar ou denunciar.');
+      if (/^\/ajuda\b/i.test(text)) return notice(me, 'Comandos: /fogos e /ajuda. Toque no nome de alguém para silenciar ou denunciar.');
       recordChat(playerKey(me), me.nick, text, now);
       chatLog.push({ nick: me.nick, side: me.side, text, at: now });
       if (chatLog.length > 30) chatLog.shift();
@@ -768,7 +712,6 @@ wss.on('connection', (ws, req) => {
       const e = Math.trunc(Number(m.e));
       const now = Date.now();
       if (!(e >= 0 && e < REACTIONS.length) || now - me.lastReact < 800) return;
-      if (PREMIUM.reactions.includes(e) && !(me.userId && isVip(me.userId))) return notice(me, 'Essa reação é exclusiva para Apoiadores VIP ⭐. Veja na loja 🛍️.');
       me.lastReact = now;
       sendNear(me, { t: 'react', id: me.id, e });
     } else if (m.t === 'who') {
