@@ -1,9 +1,10 @@
+# Testes a cada push na main (pull requests e outras branches rodam em ci.yml).
+# O deploy numa VPS é opcional: só roda se o secret VPS_HOST existir (veja "Hospedagem" na documentação).
 name: Deploy
 
 on:
   push:
     branches: [main]
-  pull_request:
   workflow_dispatch:
 
 # Menor permissão possível para o token do GitHub: só ler o código.
@@ -27,19 +28,21 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: npm run lint
       - run: npm run build # antes dos testes: os de segurança conferem os cabeçalhos das páginas do site
       - run: npm test
 
   deploy:
     needs: test
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      HOST: ${{ secrets.VPS_HOST }}
     steps:
       - name: Atualiza a VPS
+        if: ${{ env.HOST != '' }}
         env:
           SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          HOST: ${{ secrets.VPS_HOST }}
           USER_: ${{ secrets.VPS_USER }}
           PORT: ${{ secrets.VPS_PORT }}
           KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
@@ -56,3 +59,6 @@ jobs:
           fi
           ssh -i ~/.ssh/id_deploy -p "${PORT:-22}" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking="$STRICT" \
             "${USER_:-root}@$HOST" 'cd /opt/avenida && BRANCH=main bash deploy/update.sh'
+      - name: Deploy desligado
+        if: ${{ env.HOST == '' }}
+        run: echo 'Sem o secret VPS_HOST, o deploy foi ignorado (só os testes rodaram).'
